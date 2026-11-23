@@ -30,4 +30,10 @@ describe("line materials", () => {
     expect(wire.hills.userData.glow).toBe(1);
     expect(wire.polonez.clone().userData.glow).toBe(LAYERS.polonez.glow); // fade-in copies
   });
+
+  it("carry the layer's wirePolygons", () => {
+    const { wire } = materials();
+    expect(wire.palm.userData.wirePolygons).toEqual(LAYERS.palm.wirePolygons);
+    expect(wire.hills.userData.wirePolygons).toBeUndefined();
+  });
 });

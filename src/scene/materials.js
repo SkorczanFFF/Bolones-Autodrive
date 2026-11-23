@@ -75,6 +75,7 @@ export function createMaterials(textures, anisotropy) {
       lines.lineUniforms.fade.value = layer.lineFade ?? WIRE.fade;
       lines.lineUniforms.min.value = layer.lineMin ?? WIRE.min;
       lines.userData.glow = layer.glow ?? WIRE.glow; // core/bloom.js; clones (fade-in) copy userData
+      lines.userData.wirePolygons = layer.wirePolygons; // scene/wire.js
       wire[key] = lines;
     }
 

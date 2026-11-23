@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { BLOOM, WIRE } from "../config.js";
-import { isLineMaterial, lineGeometry, memoByGeometry } from "./lines.js";
+import { isLineMaterial, lineGeometry, memoByGeometry, polygonLineGeometry } from "./lines.js";
 
 /**
  * Replaces every mesh material under root (disposing the loader's defaults) and sets up shadows.
@@ -25,9 +25,10 @@ const edgesOf = memoByGeometry((geometry) => new THREE.EdgesGeometry(geometry, W
 
 /**
  * Adds a line twin as a child of every mesh under root: outlines (LineSegments over the
- * mesh's creases) for line materials, shader-drawn triangle lines for the materials of
- * scene/lines.js (they need the `wireEdge` attribute), the plain geometry otherwise. The twin
- * inherits the transform and animation of its parent, so nothing has to be kept in sync.
+ * mesh's creases) for line materials, shader-drawn lines for the materials of scene/lines.js
+ * (triangle edges, or polygon outlines per the material's userData.wirePolygons), the plain
+ * geometry otherwise. The twin inherits the transform and animation of its parent, so nothing
+ * has to be kept in sync.
  *
  * @param {THREE.Object3D} root
  * @param {THREE.Material} material
@@ -45,7 +46,7 @@ export function addWireframe(root, material, shadows = true) {
       material instanceof THREE.LineBasicMaterial
         ? new THREE.LineSegments(edgesOf(mesh.geometry), material)
         : new THREE.Mesh(
-            isLineMaterial(material) ? lineGeometry(mesh.geometry) : mesh.geometry,
+            isLineMaterial(material) ? linesFor(mesh.geometry, material) : mesh.geometry,
             material,
           );
     wire.userData.isWire = true;
@@ -54,6 +55,16 @@ export function addWireframe(root, material, shadows = true) {
     wire.receiveShadow = shadows;
     mesh.add(wire);
   }
+}
+
+/**
+ * @param {THREE.BufferGeometry} geometry
+ * @param {import("./lines.js").LineMaterial} material
+ */
+function linesFor(geometry, material) {
+  /** @type {import("./lines.js").WirePolygons | undefined} */
+  const polygons = material.userData.wirePolygons;
+  return polygons ? polygonLineGeometry(geometry, polygons) : lineGeometry(geometry);
 }
 
 /**

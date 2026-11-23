@@ -82,6 +82,10 @@ Everything after the 2.0 parity rebuild.
 
 ### Changed
 
+- The Polonez with its wheels, the rocks and the palm trunks show their lines as quads, the way
+  they were modelled (read from the FBX files: 3ds Max edge visibility, Blender quads), instead
+  of every triangle; the palm leaves keep their triangles. Lines fade by the size of the whole
+  polygon, so long thin panels no longer lose their outline early.
 - Side panel: the color swatches open the app's own color picker instead of the browser's (a
   different system dialog on every OS): a saturation / brightness square, a hue strip, the hex
   code, the palette's colors, and the old color beside the new one (tap it to bring it back);

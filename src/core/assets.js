@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
+import { FanFBXLoader } from "./fbx.js";
 
 /**
  * @typedef {object} Manifest
@@ -20,31 +20,6 @@ export async function loadAssets(manifest, manager = new THREE.LoadingManager())
     loadAll(new THREE.TextureLoader(manager), manifest.textures),
   ]);
   return { models, textures };
-}
-
-/**
- * FBXLoader that splits n-gons into triangle fans (0, i - 1, i), like the loader the models were
- * made with (three r116). Since r15x FBXLoader flattens each n-gon and runs earcut on it, which
- * drops and flips triangles of non-planar quads (the v1 hills lost 37 of their 252), leaving
- * holes with back faces and wire edges showing through. GeometryParser is not exported, so the
- * triangulation is swapped for the duration of the (synchronous) parse.
- */
-class FanFBXLoader extends FBXLoader {
-  /** @type {FBXLoader["parse"]} */
-  parse(buffer, path) {
-    const earcut = THREE.ShapeUtils.triangulateShape;
-    THREE.ShapeUtils.triangulateShape = fan;
-    try {
-      return super.parse(buffer, path);
-    } finally {
-      THREE.ShapeUtils.triangulateShape = earcut;
-    }
-  }
-}
-
-/** @param {THREE.Vector2[]} contour */
-function fan(contour) {
-  return Array.from({ length: contour.length - 2 }, (_, i) => [0, i + 1, i + 2]);
 }
 
 /**

@@ -10,9 +10,9 @@ import { createTweens } from "../src/core/tween.js";
  */
 const WIDTH_OFFSET = 0.06;
 
-function setup() {
-  const mesh = () => new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshBasicMaterial());
-  const bolones = new THREE.Group().add(mesh());
+/** @param {THREE.BufferGeometry} [shape] the Bolones' body */
+function setup(shape = new THREE.BoxGeometry(2, 1, 4)) {
+  const bolones = new THREE.Group().add(new THREE.Mesh(shape, new THREE.MeshBasicMaterial()));
   const tire = new THREE.CylinderGeometry(0.55, 0.55, 0.47, 7).rotateZ(Math.PI / 2); // axle on x
   const wheelMesh = new THREE.Mesh(tire, new THREE.MeshBasicMaterial());
   wheelMesh.position.x = WIDTH_OFFSET;
@@ -321,5 +321,27 @@ describe("car wheels", () => {
       if (!hasMesh) groupsWithoutMesh++;
     });
     expect(groupsWithoutMesh).toBe(0);
+  });
+});
+
+describe("fuel cap", () => {
+  it("sits on the right rear wing, facing out, outlined, a part of the body's mesh", () => {
+    // as big as the Bolones' body, where it is in the car
+    const shape = new THREE.BoxGeometry(3.1, 2.07, 7.64).translate(0.013, 1.485 - 0.56, -0.09);
+    const car = setup(shape);
+    const meshes = /** @type {THREE.Mesh[]} */ (car.wreck.getObjectsByProperty("isMesh", true));
+    const body = /** @type {THREE.Mesh} */ (meshes.find(({ geometry }) => geometry === shape));
+    const cap = /** @type {THREE.Mesh} */ (body.children.find((child) => !child.userData.isWire));
+    expect(cap).toBeDefined();
+    const at = cap.getWorldPosition(new THREE.Vector3()).sub(car.group.position);
+    const [z, y] = CAR.fuelCap.at;
+    expect(at.x).toBeGreaterThan(1.5); // the right side, on its face
+    expect(at.y).toBeCloseTo(y, 5);
+    expect(at.z).toBeCloseTo(z, 5);
+    const facing = new THREE.Vector3(0, 0, 1).applyQuaternion(
+      cap.getWorldQuaternion(new THREE.Quaternion()),
+    );
+    expect(facing.x).toBeCloseTo(1, 5); // out to the right
+    expect(cap.children.some(({ userData }) => userData.isWire)).toBe(true);
   });
 });

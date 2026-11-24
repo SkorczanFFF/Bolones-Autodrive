@@ -3,6 +3,7 @@ import { CAR, SPEED, WORLD } from "../config.js";
 import { easeInOutCubic } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
 import { mountWheel, wheelsOf } from "./rig.js";
+import { withPolygons } from "./traffic.js";
 import { dress } from "./wire.js";
 
 /** @typedef {-1 | 0 | 1} SteerInput left, none, right */
@@ -10,6 +11,40 @@ import { dress } from "./wire.js";
 const UP = new THREE.Vector3(0, 1, 0);
 const ORIGIN = new THREE.Vector3();
 const UPRIGHT = new THREE.Quaternion();
+const PROUD = 0.01; // units the fuel cap stands off the wing
+
+/**
+ * The fuel cap (CAR.fuelCap): a round lid where a ray from the right meets the body, a little
+ * proud of it, outlined. A part of the body's mesh, so it dents with it.
+ *
+ * @param {THREE.Object3D} car its world matrices up to date
+ * @param {THREE.Object3D} body
+ * @param {THREE.Material} solid
+ * @param {THREE.Material} wire
+ */
+function addFuelCap(car, body, solid, wire) {
+  const { at, radius } = CAR.fuelCap;
+  /** @type {THREE.Mesh[]} */
+  const meshes = [];
+  body.traverse((o) => o instanceof THREE.Mesh && !o.userData.isWire && meshes.push(o));
+  const from = car.localToWorld(new THREE.Vector3(10, at[1], at[0]));
+  const left = new THREE.Vector3(-1, 0, 0).transformDirection(car.matrixWorld);
+  const [hit] = new THREE.Raycaster(from, left).intersectObjects(meshes, false);
+  if (!hit?.face) {
+    console.warn("CAR.fuelCap is off the body: no fuel cap");
+    return;
+  }
+  const mesh = hit.object;
+  const normal = hit.face.normal.clone();
+  if (normal.clone().transformDirection(mesh.matrixWorld).dot(left) > 0) normal.negate();
+  const scale = mesh.getWorldScale(new THREE.Vector3()).x;
+  const segments = 20;
+  const disc = new THREE.CircleGeometry(radius / scale, segments).toNonIndexed();
+  const cap = new THREE.Mesh(withPolygons([{ geometry: disc, polygon: Array(segments).fill(0) }]));
+  cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+  cap.position.copy(mesh.worldToLocal(hit.point.clone())).addScaledVector(normal, PROUD / scale);
+  mesh.add(dress(cap, solid, wire));
+}
 
 /**
  * The share of the way to a target covered in dt when approaching it exponentially with time
@@ -27,7 +62,7 @@ const settle = (tau, dt) => 1 - Math.exp(-dt / tau);
  *   group          lateral position (x) + yaw: the nose turns towards the lane change; CAR.lift (y)
  *   └ wreck        where a crash threw the car (game/crash.js), at rest otherwise
  *     ├ chassis    body roll around the axle line (CAR.rollCenterY)
- *     │ └ body
+ *     │ └ body     with the fuel cap on its mesh
  *     └ 4× wheel   on its rig (scene/rig.js): the mount on the axle, mid-width; front ones steer
  *       └ … spin → mirror → wheel model, offset so its axle and mid-width sit on the mount
  *
@@ -82,6 +117,7 @@ export function createCar({ scene, models, materials }) {
   group.position.y = CAR.lift;
   scene.add(group);
   group.updateMatrixWorld(true);
+  addFuelCap(group, body, solid, wire);
   const box = new THREE.Box3().setFromObject(body).translate(group.position.clone().negate());
 
   const s = CAR.steer;

@@ -1148,7 +1148,7 @@ function facingPositions([a, b, c], facing) {
  *
  * @param {Part[]} parts
  */
-function withPolygons(parts) {
+export function withPolygons(parts) {
   const { geometry, polygon } = mergeParts(parts);
   geometry.userData.polygons = {
     inner: innerEdges(geometry, polygon),

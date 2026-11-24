@@ -397,6 +397,10 @@ export const CAR = {
     [1.227, 0.56, 1.975],
     [1.227, 0.56, -2.55],
   ],
+  /** The fuel cap, round, on the right rear wing as the Polonez had it: how far back (z) and up
+   * (y), in the car's frame like the wheels, and its radius; it sits on the body where a ray from
+   * the right meets it. */
+  fuelCap: { at: [2.18, 1.39], radius: 0.08 },
   steer: {
     baseSpeed: 4.8, // units/s as soon as a key is held (v1: 0.08 per frame)
     maxSpeed: 24, // units/s (v1: 0.4 per frame)

@@ -1,24 +1,23 @@
 import * as THREE from "three";
 import { CAR, MINIGAME, SPAWN, SPEED, TEXT, TRAFFIC, WORLD } from "../config.js";
-import { createRandom, pick } from "../core/random.js";
+import { createRandom, pick, randomIn, randomInt } from "../core/random.js";
 import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
 import { createTrafficModels, trafficHalfWidth } from "../scene/traffic.js";
 import { createCrash } from "./crash.js";
 
+/** @typedef {import("./game.js").Mode} Mode */
+
 /**
- * Obstacle x positions from v1: obstacles fill one lane (left or right of the centre safe zone)
- * for a batch of 1-3, then switch lanes. Lanes stay inside the car's steering range.
+ * The lanes the traffic keeps to, x from and to: left and right of the centre safe zone, inside
+ * the car's steering range.
  *
  * @param {number} [halfWidth] half the widest obstacle
- * @param {() => number} [rng]
  */
-export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.random) {
-  const { between, randomInt } = createRandom(rng);
-  const { innerGap, outerMargin, safeZone, batch } = MINIGAME;
+export function lanesOf(halfWidth = trafficHalfWidth()) {
+  const { innerGap, outerMargin, safeZone } = MINIGAME;
   const reach = CAR.steer.maxOffset;
   const minLaneWidth = 0.1; // v1 guard for tiny steering ranges
-
   const lanes = {
     left: [-reach + outerMargin, -safeZone - halfWidth - innerGap],
     right: [safeZone + halfWidth + innerGap, reach - outerMargin],
@@ -26,6 +25,20 @@ export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.rand
   for (const range of Object.values(lanes)) {
     if (range[1] <= range[0]) range[1] = range[0] + minLaneWidth;
   }
+  return lanes;
+}
+
+/**
+ * Obstacle x positions from v1: obstacles fill one lane (left or right of the centre safe zone)
+ * for a batch of 1-3, then switch lanes.
+ *
+ * @param {number} [halfWidth] half the widest obstacle
+ * @param {() => number} [rng]
+ */
+export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.random) {
+  const { between, randomInt } = createRandom(rng);
+  const { batch } = MINIGAME;
+  const lanes = lanesOf(halfWidth);
 
   /** @type {"left" | "right"} */
   let lane = "left";
@@ -57,13 +70,6 @@ function hitboxOf(car, target) {
   target.max.fromArray(max);
   return target;
 }
-
-/**
- * How fast the traffic goes over the road (forward, +z), units/s.
- *
- * @param {number} speedMultiplier
- */
-const overRoad = (speedMultiplier) => (SPEED.traffic - WORLD.speed) * speedMultiplier;
 
 /** The heights a palm's trunk is measured at for a crash: where the cars hit it, units. */
 const TRUNK = [0.5, 1.8];
@@ -106,9 +112,10 @@ function trunkOf(palm) {
  */
 
 /**
- * Minigame obstacles: oncoming traffic (scene/traffic.js), collision with the car, the crash that
- * follows (the palms and the rocks by the road take part) and scoring. Each car is a clone of a
- * random model; its hitbox is the model's bounds (scene/traffic.js).
+ * Minigame obstacles: oncoming traffic (scene/traffic.js), and in overtake the cars going the
+ * Bolones' way; collision with the car, the crash that follows (the palms and the rocks by the
+ * road take part) and scoring. Each car is a clone of a random model; its hitbox is the model's
+ * bounds (scene/traffic.js).
  *
  * @param {{ scene: THREE.Scene, car: ReturnType<typeof import("../scene/car.js").createCar>, materials: import("../scene/materials.js").Materials, palms: THREE.Object3D[], rocks: THREE.Object3D[] }} deps
  */
@@ -117,32 +124,100 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   const colorOf = (material) => /** @type {THREE.MeshBasicMaterial} */ (material).color;
   const models = createTrafficModels(materials);
   const nextX = createLanePicker();
+  const lanes = lanesOf();
   const [minInterval, maxInterval] = MINIGAME.interval;
+  const { overtake } = MINIGAME;
+  /** @type {Mode} */
+  let mode = "dodge";
+  let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
+
+  /**
+   * How fast the traffic towards the Bolones goes over the road (+z), units/s.
+   *
+   * @param {number} level the traffic's speed multiplier
+   */
+  const towards = (level) =>
+    (mode === "overtake" ? overtake.oncoming / SPEED.kmh : SPEED.traffic - WORLD.speed) * level;
+
+  /**
+   * How fast a car of the traffic goes over the road, units/s, +z: towards the Bolones, or (below
+   * 0) going its way.
+   *
+   * @param {THREE.Object3D} other
+   * @param {number} level the traffic's speed multiplier
+   */
+  const overRoadOf = (other, level) =>
+    other.userData.sameWay ? -overtake.slow / SPEED.kmh : towards(level);
+
+  /**
+   * How fast the traffic towards the Bolones comes at it, of SPEED.traffic (a spawner's speed
+   * multiplier): its speed and the Bolones'.
+   *
+   * @param {number} world the Bolones' speed, of WORLD.speed
+   * @param {number} level the traffic's speed multiplier
+   */
+  const closing = (world, level) => (WORLD.speed * world + towards(level)) / SPEED.traffic;
+
+  /**
+   * Units apart, at random, as seconds at SPEED.traffic (the spawners').
+   *
+   * @param {number[]} range
+   * @param {number} roll
+   */
+  const apart = ([near, far], roll) => (near + roll * (far - near)) / SPEED.traffic;
 
   /** @type {THREE.Object3D[]} the cars spawned since the last frame */
   const spawned = [];
-  const spawner = createSpawner({
+  /**
+   * A car of a random model coming along, turned round when it goes the Bolones' way; after a
+   * crash none comes out of the haze where it could not stop for the jam.
+   *
+   * @param {number} x
+   * @param {boolean} sameWay
+   */
+  const arrive = (x, sameWay) => {
+    const other = pick(models).clone();
+    other.position.set(x, TRAFFIC.y, SPAWN.startZ);
+    other.rotation.y = sameWay ? Math.PI : 0;
+    other.userData.sameWay = sameWay;
+    if (crash && !crash.room(asCar(other))) return [];
+    other.userData.scored = false;
+    spawned.push(other);
+    return [other];
+  };
+  // towards the Bolones, in either lane (overtake: the left one, in groups)
+  const oncoming = createSpawner({
     parent: scene,
     speed: SPEED.traffic,
-    interval: (roll) => minInterval + roll * (maxInterval - minInterval),
+    interval: (roll) =>
+      mode !== "overtake"
+        ? minInterval + roll * (maxInterval - minInterval)
+        : apart(platoon > 0 ? overtake.platoon : overtake.window, roll),
     create: () => {
-      const car = pick(models).clone();
-      car.position.set(nextX(), TRAFFIC.y, SPAWN.startZ);
-      // after a crash none comes out of the haze where it could not stop for the jam
-      if (crash && !crash.room(traffic(car))) return [];
-      car.userData.scored = false;
-      spawned.push(car);
-      return [car];
+      if (mode !== "overtake") return arrive(nextX(), false);
+      platoon = platoon > 0 ? platoon - 1 : randomInt(MINIGAME.batch) - 1;
+      return arrive(randomIn(lanes.left), false);
     },
   });
-  spawner.spawning = false;
+  // overtake: going the Bolones' way, in the right lane
+  const sameWay = createSpawner({
+    parent: scene,
+    speed: SPEED.traffic,
+    interval: (roll) => apart(overtake.gaps, roll),
+    create: () => arrive(randomIn(lanes.right), true),
+  });
+  const streams = [oncoming, sameWay];
+  for (const stream of streams) stream.spawning = false;
+  /** The traffic there is, either way. */
+  const traffic = () => [...oncoming.objects, ...sameWay.objects];
 
   const carBounds = new THREE.Box3();
   const obstacleBounds = new THREE.Box3();
   let score = 0;
   /** @type {ReturnType<typeof createCrash> | null} */
   let crash = null;
-  let pace = 1; // the speed multiplier the crash came at: the traffic keeps coming at it
+  let pace = 1; // the traffic's speed multiplier when the crash came: it keeps coming at it
+  let coming = 1; // how fast it came at the Bolones then (closing)
   let since = 0; // game seconds since the crash
 
   /**
@@ -168,14 +243,15 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
    * @param {THREE.Object3D} other
    * @returns {import("./crash.js").Car}
    */
-  const traffic = (other) => ({
+  const asCar = (other) => ({
     object: other,
     box: hitboxOf(other, new THREE.Box3()),
     mass: other.userData.mass,
-    velocity: new THREE.Vector3(0, 0, overRoad(pace)),
+    velocity: new THREE.Vector3(0, 0, overRoadOf(other, pace)),
     color: colorOf(materials.wire.traffic),
     onCrash: lampsOut(other),
     label: other.userData.label,
+    driving: mode === "overtake" ? overtake.drivers : undefined,
   });
 
   /**
@@ -183,13 +259,16 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
    * (game/crash.js), each with its speed over the road.
    *
    * @param {THREE.Object3D} obstacle
-   * @param {number} speedMultiplier
+   * @param {number} world the Bolones' speed, of WORLD.speed
+   * @param {number} level the traffic's speed multiplier
    */
-  function hit(obstacle, speedMultiplier) {
-    pace = speedMultiplier;
+  function hit(obstacle, world, level) {
+    pace = level;
+    coming = closing(world, level);
     since = 0;
     spawned.length = 0; // the traffic there is goes in as it is
-    const road = WORLD.speed * speedMultiplier;
+    sameWay.spawning = false; // going away from the crash
+    const road = WORLD.speed * world;
     // every palm and rock by the road, measured where it is when it comes up
     /** @type {WeakMap<THREE.Object3D, import("./crash.js").Post>} */
     const measured = new WeakMap();
@@ -235,11 +314,25 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
           color: colorOf(materials.wire.bolones),
           label: TEXT.bolones,
         },
-        traffic(obstacle),
-        ...spawner.objects.filter((other) => other !== obstacle).map(traffic),
+        asCar(obstacle),
+        ...traffic()
+          .filter((other) => other !== obstacle)
+          .map(asCar),
       ],
       posts,
     );
+  }
+
+  /** Removes all traffic and the crash, stops spawning and zeroes the score. */
+  function reset() {
+    crash?.dispose();
+    crash = null;
+    for (const stream of streams) {
+      stream.clear();
+      stream.spawning = false;
+    }
+    spawned.length = 0;
+    score = 0;
   }
 
   return {
@@ -249,23 +342,28 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
 
     /** @param {boolean} value */
     set spawning(value) {
-      spawner.spawning = value;
+      oncoming.spawning = value;
+      sameWay.spawning = value && mode === "overtake";
     },
 
-    /** How many times as dense the traffic comes (crash mode). @param {number} value */
-    set density(value) {
-      spawner.density = value;
+    /**
+     * Gets a minigame ready (reset): crash mode's traffic denser, overtake's cars going the
+     * Bolones' way lined up ahead.
+     *
+     * @param {Mode} value
+     */
+    play(value) {
+      reset();
+      mode = value;
+      platoon = 0;
+      oncoming.density = mode === "crash" ? MINIGAME.crashMode.density : 1;
+      if (mode !== "overtake") return;
+      sameWay.spawning = true;
+      sameWay.prewarm(0.25, -overtake.ahead);
+      sameWay.spawning = false;
     },
 
-    /** Removes all traffic and the crash, stops spawning and zeroes the score. */
-    reset() {
-      crash?.dispose();
-      crash = null;
-      spawner.clear();
-      spawner.spawning = false;
-      spawned.length = 0;
-      score = 0;
-    },
+    reset,
 
     /** How much power the Bolones' engine has left after the crash, in the player's hands. */
     get engine() {
@@ -294,36 +392,41 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     },
 
     /**
-     * Moves the traffic, scores the cars that passed and reports a crash.
+     * Moves the traffic, scores the cars passed (dodged, or overtaken) and reports a crash.
      *
      * @param {number} dt
-     * @param {number} speedMultiplier
+     * @param {number} world the Bolones' speed, of WORLD.speed (the world's speed multiplier)
+     * @param {number} [level] the traffic's speed multiplier, if not the Bolones' (overtake)
      * @returns {{ crashed: boolean, scored: boolean }}
      */
-    update(dt, speedMultiplier) {
-      spawner.update(dt, speedMultiplier);
-      spawned.length = 0; // the spawner moves them
-      const rolled = overRoad(speedMultiplier) * dt; // their wheels roll as far as they go
-      for (const other of spawner.objects) {
+    update(dt, world, level = world) {
+      oncoming.update(dt, closing(world, level));
+      const catching = WORLD.speed * world - overtake.slow / SPEED.kmh; // up on its way
+      sameWay.update(dt, Math.max(0, catching) / SPEED.traffic);
+      spawned.length = 0; // the spawners move them
+      const cars = traffic();
+      for (const other of cars) {
+        const rolled = Math.abs(overRoadOf(other, level)) * dt; // the wheels roll as far as it goes
         for (const { spin, radius } of wheelsOf(other)) spin.rotation.x += rolled / radius;
       }
-      if (spawner.objects.length === 0) return { crashed: false, scored: false };
+      if (cars.length === 0) return { crashed: false, scored: false };
 
       car.getBounds(carBounds);
       const carZ = car.group.position.z;
       let scored = false;
 
-      for (const obstacle of spawner.objects) {
-        hitboxOf(obstacle, obstacleBounds).translate(obstacle.position);
+      for (const obstacle of cars) {
+        obstacle.updateMatrix(); // turned round, going the Bolones' way
+        hitboxOf(obstacle, obstacleBounds).applyMatrix4(obstacle.matrix);
         if (carBounds.intersectsBox(obstacleBounds)) {
-          hit(obstacle, speedMultiplier);
+          hit(obstacle, world, level);
           return { crashed: true, scored };
         }
-        if (!obstacle.userData.scored && obstacle.position.z > carZ) {
-          obstacle.userData.scored = true;
-          score++;
-          scored = true;
-        }
+        if (obstacle.userData.scored || obstacle.position.z <= carZ) continue;
+        obstacle.userData.scored = true;
+        if (obstacle.userData.sameWay !== (mode === "overtake")) continue; // passed, not scoring
+        score++;
+        scored = true;
       }
 
       return { crashed: false, scored };
@@ -351,9 +454,10 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       since += dt;
       // the traffic keeps coming a while (MINIGAME.crash.keepComing), into the crash; the physics
       // moves it, the spawner still fades it
-      spawner.spawning = since < MINIGAME.crash.keepComing;
-      spawner.update(dt, 0, pace);
-      for (const other of spawned.splice(0)) crash.join(traffic(other));
+      oncoming.spawning = since < MINIGAME.crash.keepComing;
+      oncoming.update(dt, 0, coming);
+      sameWay.update(dt, 0);
+      for (const other of spawned.splice(0)) crash.join(asCar(other));
       return crash.update(dt, which) / WORLD.speed;
     },
 

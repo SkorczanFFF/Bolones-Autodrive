@@ -6,7 +6,7 @@ import { createDebris } from "../scene/debris.js";
 import { wheelsOf } from "../scene/rig.js";
 import { boxOf, endOn, overlap } from "./crash/boxes.js";
 import { createCrushes, reachOf } from "./crash/crush.js";
-import { createDriver, lookAhead, stopping } from "./crash/drivers.js";
+import { createDriver, hardest, lookAhead, stopping } from "./crash/drivers.js";
 import {
   CARS,
   GRAVITY,
@@ -40,6 +40,8 @@ export { ready } from "./crash/physics.js";
  * @property {(crushed: (point: THREE.Vector3) => boolean) => void} [onCrash] told what each crash
  *   crushed (world space): its lamps there go out
  * @property {string} label what it is called, for the one in view
+ * @property {import("./crash/drivers.js").Driving} [driving] how its driver reacts and brakes, if
+ *   not as MINIGAME.crash
  *
  * @typedef {import("./crash/posts.js").Post} Post
  * @typedef {import("../scene/crumple.js").Hit} Hit
@@ -182,7 +184,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       offset,
       vehicle,
       stiffness: stiffness * mass,
-      driver: createDriver(vehicle, swerves, random, joined ? time : undefined),
+      driver: createDriver(vehicle, swerves, random, joined ? time : undefined, car.driving),
       color: car.color,
       /** @param {Hit} hit @param {number} speed */
       struck(hit, speed) {
@@ -508,7 +510,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
         velocity: car.velocity,
         half: size.toArray(),
       };
-      return stopping(lookAhead(coming, looking)) <= MINIGAME.crash.friction.brake * GRAVITY;
+      const hard = hardest(car.driving);
+      return stopping(lookAhead(coming, looking), hard) <= hard;
     },
 
     /** How much power the Bolones' engine has left in the player's hands (0 to 1, stalling). */

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CAR, MINIGAME } from "../src/config.js";
+import { CAR, MINIGAME, SPEED, WORLD } from "../src/config.js";
 import { ready } from "../src/game/crash.js";
 import { createLanePicker, createMinigame } from "../src/game/minigame.js";
 import { trafficHalfWidth } from "../src/scene/traffic.js";
@@ -82,6 +82,63 @@ describe("crash", () => {
     for (const other of traffic()) seen.add(other);
     run(3);
     expect(traffic().filter((other) => !seen.has(other))).toEqual([]); // no more
+    minigame.reset();
+  });
+});
+
+describe("overtake", () => {
+  beforeAll(() => ready);
+
+  it("turns the cars going its way round, keeps the lanes, scores the cars overtaken", () => {
+    const scene = new THREE.Scene();
+    const bolones = testCar(0, 0, [3, 2.6, 7.8], CAR.mass, 0);
+    scene.add(bolones.object);
+    const car = {
+      group: new THREE.Group(),
+      wreck: bolones.object,
+      box: bolones.box,
+      sideways: 0,
+      getBounds: (/** @type {THREE.Box3} */ box) => box.makeEmpty(), // nothing to hit
+    };
+    const minigame = createMinigame(
+      /** @type {any} */ ({ scene, car, materials: testMaterials(), palms: [], rocks: [] }),
+    );
+    const cars = () => scene.children.filter(({ userData }) => userData.label);
+    minigame.play("overtake");
+    const lined = cars();
+    expect(lined.length).toBeGreaterThan(0); // lined up ahead, going its way
+    for (const other of lined) {
+      expect(other.userData.sameWay).toBe(true);
+      expect(other.rotation.y).toBe(Math.PI);
+      expect(other.position.z).toBeLessThan(-MINIGAME.overtake.ahead + 0.5 * SPEED.traffic);
+    }
+    minigame.spawning = true;
+    /** @type {Set<THREE.Object3D>} */
+    const passed = new Set();
+    const { speed, platoon, window } = MINIGAME.overtake;
+    /** @type {number[]} how far apart the cars towards it come, every second */
+    const gaps = [];
+    for (let frame = 0; frame < 60 * 30; frame++) {
+      minigame.update(1 / 60, speed.top / SPEED.kmh / WORLD.speed, 1);
+      for (const other of cars()) {
+        expect(other.position.x > 0).toBe(other.userData.sameWay); // its way on the right
+        if (other.position.z > 0) passed.add(other);
+      }
+      if (frame % 60) continue;
+      const towards = cars()
+        .filter(({ userData }) => !userData.sameWay)
+        .map(({ position }) => position.z)
+        .sort((a, b) => a - b);
+      gaps.push(...towards.slice(1).map((z, i) => z - towards[i]));
+    }
+    // in groups, room to overtake between them
+    for (const gap of gaps) expect(gap <= platoon[1] + 1 || gap >= window[0] - 1).toBe(true);
+    expect(gaps.some((gap) => gap <= platoon[1] + 1)).toBe(true);
+    expect(gaps.some((gap) => gap >= window[0] - 1)).toBe(true);
+    const overtaken = [...passed].filter(({ userData }) => userData.sameWay).length;
+    expect(overtaken).toBeGreaterThan(0);
+    expect([...passed].length).toBeGreaterThan(overtaken); // the oncoming ones passed too
+    expect(minigame.score).toBe(overtaken);
     minigame.reset();
   });
 });

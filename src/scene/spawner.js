@@ -120,14 +120,15 @@ export function createSpawner({
     },
 
     /**
-     * Fast-forwards one whole trip from startZ to endZ at speed 1, so the track starts lined
-     * with objects instead of waiting for the first ones to come from far away. Spacing does
-     * not depend on the step (see update), so big steps are fine.
+     * Fast-forwards one trip from startZ to `reach` (endZ: the whole way) at speed 1, so the track
+     * starts lined with objects instead of waiting for the first ones to come from far away.
+     * Spacing does not depend on the step (see update), so big steps are fine.
      *
      * @param {number} [step] seconds
+     * @param {number} [reach] z the first one gets to
      */
-    prewarm(step = 0.25) {
-      const trip = (endZ - startZ) / speed;
+    prewarm(step = 0.25, reach = endZ) {
+      const trip = (reach - startZ) / speed;
       for (let time = 0; time < trip; time += step) spawner.update(step, 1);
     },
 

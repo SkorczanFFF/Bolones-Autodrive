@@ -597,6 +597,10 @@ kbd {
   display: none;
 }
 
+.hud__games > .button-grid {
+  --columns: 3;
+}
+
 /* the name on top, the record at the bottom, both cards as tall */
 .button-grid > .button.hud__game {
   flex-direction: column;
@@ -779,7 +783,8 @@ kbd {
 }
 
 /* speeding up is the minigame's */
-[data-state="free"] .hud__faster {
+[data-state="free"] .hud__faster,
+[data-state="free"] .hud__slower {
   display: none;
 }
 

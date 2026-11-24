@@ -249,6 +249,21 @@ describe("crash", () => {
     expect(late.object.position.z).toBeCloseTo(at, 2); // stopped
   });
 
+  it("has a slow driver run into the wreck a quick one stops short of", () => {
+    const ends = (/** @type {import("../src/game/crash/drivers.js").Driving} */ driving) => {
+      const scene = new THREE.Scene();
+      const bolones = car(0, 0, BOLONES, 1160, 0);
+      const other = car(0, -8, POLAKITO, 580, 0); // the wreck, standing
+      const behind = { ...car(0, -60, POLAKITO, 580, 20), driving };
+      scene.add(bolones.object, other.object, behind.object);
+      const crash = create(scene, [bolones, other, behind], undefined, mulberry32(3));
+      run(crash, 6);
+      return crash.wrecks.includes(behind);
+    };
+    expect(ends({})).toBe(false);
+    expect(ends(MINIGAME.overtake.drivers)).toBe(true);
+  });
+
   it("has no room for a car coming along right behind the jam, room far enough back", () => {
     const { scene, crash } = headOn();
     run(crash, 3);

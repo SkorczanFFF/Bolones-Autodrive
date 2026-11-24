@@ -55,6 +55,15 @@ describe("spawner", () => {
     for (const object of spawner.objects.slice(1)) expect(object.position.z).toBeCloseTo(-100, 0);
   });
 
+  it("lines the track up as far as it is told", () => {
+    const { spawner } = setup();
+    spawner.prewarm(0.25, -50);
+    const reach = Math.max(...spawner.objects.map(({ position }) => position.z));
+    expect(spawner.objects.length).toBeGreaterThan(2);
+    expect(reach).toBeLessThanOrEqual(-50);
+    expect(reach).toBeGreaterThan(-50 - 10 - 1e-9); // within a spawn of it
+  });
+
   it("moves objects with speed * multiplier and removes them past endZ", () => {
     const { spawner, parent } = setup({ speed: 100, interval: () => 10 });
     run(spawner, 10);

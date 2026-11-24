@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { MINIGAME, SCENE, CAR, SPEED, TRAFFIC } from "../src/config.js";
+import { MINIGAME, SCENE, CAR, SPEED, TRAFFIC, WORLD } from "../src/config.js";
 import { createInput } from "../src/core/input.js";
 import { createTweens } from "../src/core/tween.js";
 import { createGame } from "../src/game/game.js";
@@ -22,7 +22,11 @@ function setup() {
     score: 7,
     /** @type {import("../src/game/minigame.js").Damage | null} */
     damage: null,
-    density: 1,
+    /** @type {string | null} the minigame got ready last */
+    played: null,
+    play(/** @type {string} */ mode) {
+      this.played = mode;
+    },
     engine: 1,
     /** @type {[number, boolean][]} what the player did with the Bolones after the crash */
     controls: [],
@@ -78,13 +82,13 @@ function setup() {
   };
 
   /** ENTER, then a minigame clicked in their list. */
-  const play = (/** @type {"dodge" | "crash"} */ mode = "dodge") => {
+  const play = (/** @type {import("../src/game/game.js").Mode} */ mode = "dodge") => {
     input.dispatch("start");
     input.dispatch(mode);
   };
 
   /** Plays a minigame and crashes as soon as it is on. */
-  const crash = (/** @type {"dodge" | "crash"} */ mode = "dodge") => {
+  const crash = (/** @type {import("../src/game/game.js").Mode} */ mode = "dodge") => {
     play(mode);
     run(MINIGAME.countdown + 0.1);
     state.crashNext = true;
@@ -416,13 +420,13 @@ describe("minigames", () => {
     expect(game.state).toBe("select");
     expect(hudCalls.setChoice.at(-1)).toEqual(["dodge"]);
     input.dispatch("left"); // round to the last
-    expect(hudCalls.setChoice.at(-1)).toEqual(["crash"]);
+    expect(hudCalls.setChoice.at(-1)).toEqual(["overtake"]);
     input.dispatch("right");
     input.dispatch("right");
     expect(hudCalls.setChoice.at(-1)).toEqual(["crash"]);
     input.dispatch("start");
     expect(game.state).toBe("countdown");
-    expect(minigame.density).toBe(MINIGAME.crashMode.density);
+    expect(minigame.played).toBe("crash");
     expect(hudCalls.setMode.at(-1)).toEqual(["crash"]);
     run(MINIGAME.countdown + 0.1);
     input.dispatch("start"); // not mid-game
@@ -445,7 +449,7 @@ describe("minigames", () => {
     input.dispatch("start");
     input.dispatch("dodge");
     expect(game.state).toBe("countdown");
-    expect(minigame.density).toBe(1);
+    expect(minigame.played).toBe("dodge");
   });
 
   it("plays the same one again from game over", () => {
@@ -454,7 +458,7 @@ describe("minigames", () => {
     run(MINIGAME.crash.lock + 1 / 60);
     input.dispatch("start"); // AGAIN
     expect(game.state).toBe("countdown");
-    expect(minigame.density).toBe(MINIGAME.crashMode.density);
+    expect(minigame.played).toBe("crash");
   });
 });
 
@@ -534,5 +538,53 @@ describe("crash mode", () => {
     minigame.engine = 0;
     run(0.1);
     expect(hudCalls.setDriveOn.at(-1)).toEqual([false]);
+  });
+});
+
+describe("overtake", () => {
+  it("goes as fast as the player says: ↑ up to the top, ↓ down to the slow cars, else it holds", () => {
+    const { world, input, run, play, hudCalls } = setup();
+    const { slow, speed } = MINIGAME.overtake;
+    const kmh = () => world.speedMultiplier * WORLD.speed * SPEED.kmh;
+    play("overtake");
+    expect(kmh()).toBeCloseTo(speed.start, 5);
+    run(MINIGAME.countdown + MINIGAME.startLabelDuration + 0.1);
+    expect(kmh()).toBeCloseTo(speed.start, 5);
+    expect(hudCalls.setSpeed.at(-1)).toEqual([speed.start]); // the speedometer
+    input.hold("faster", true);
+    run(0.5);
+    input.hold("faster", false);
+    expect(kmh()).toBeCloseTo(speed.start + 0.5 * speed.gas, 5);
+    const held = kmh();
+    run(1);
+    expect(kmh()).toBe(held);
+    input.hold("faster", true);
+    run(10);
+    input.hold("faster", false);
+    expect(kmh()).toBeCloseTo(speed.top, 5);
+    expect(hudCalls.setSpeed.at(-1)).toEqual([speed.top]);
+    input.hold("slower", true);
+    run(10);
+    input.hold("slower", false);
+    expect(kmh()).toBeCloseTo(slow, 5);
+  });
+
+  it("speeds the traffic up every few cars overtaken, not the Bolones", () => {
+    const { world, minigame, run, play } = setup();
+    /** @type {number[]} */
+    const levels = [];
+    const recording = (/** @type {number} */ dt, /** @type {number} */ speed, level = speed) => {
+      levels.push(level);
+      return { crashed: false, scored: false };
+    };
+    minigame.update = /** @type {any} */ (recording);
+    play("overtake");
+    run(MINIGAME.countdown + 0.1);
+    expect(levels.at(-1)).toBe(1);
+    minigame.score = SPEED.tierEvery;
+    run(1 / 60);
+    expect(levels.at(-1)).toBeCloseTo(1 + SPEED.tierStep);
+    const kmh = world.speedMultiplier * WORLD.speed * SPEED.kmh;
+    expect(kmh).toBeCloseTo(MINIGAME.overtake.speed.start, 5); // the Bolones: as the player says
   });
 });

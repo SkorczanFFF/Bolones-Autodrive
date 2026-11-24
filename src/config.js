@@ -439,6 +439,10 @@ export const SPEED = {
   traffic: 200 / 6, // units per second (v1: boxes crossed the 200-unit world in 6 s)
   tierEvery: 20, // points
   tierStep: 0.15, // speed multiplier added per tier
+  /** km/h per unit/s: what the speeds shown and set in km/h are in the scene's units. */
+  get kmh() {
+    return 3.6 / TRAFFIC.scale;
+  },
 };
 
 export const SPAWN = {
@@ -615,6 +619,27 @@ export const MINIGAME = {
    * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
    */
   crashMode: { density: 1.5, start: 100, every: 10, crush: 1, part: 20, post: 20 },
+  /**
+   * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the
+   * Bolones' way, `slow`, `gaps` units apart, the first lined up as far as `ahead` in front of
+   * it; in the left lane the traffic towards it, `oncoming` (faster every SPEED.tierEvery cars
+   * overtaken), in groups of MINIGAME.batch `platoon` units apart, `window` units between the
+   * groups: room to overtake. The Bolones starts at `start`; ↑ adds `gas` a second up to `top`,
+   * ↓ takes `brake` a second down to theirs (it can wait behind one for a gap), let go it holds.
+   */
+  overtake: {
+    slow: 40,
+    gaps: [20, 60],
+    ahead: 40,
+    oncoming: 60,
+    platoon: [25, 50],
+    window: [200, 400],
+    speed: { start: 70, top: 120, gas: 15, brake: 40 },
+    /** After a crash its drivers (MINIGAME.crash.drivers) are slow to see it, `reaction` seconds,
+     * and slow to stop, braking `brake` of friction.brake at most: the ones overtaken run into the
+     * wreck, or try to swerve round it. */
+    drivers: { reaction: [1.5, 2.8], brake: 0.5 },
+  },
   /** Holding ↑ speeds the game up by `factor`, easing in and out (time constants, seconds). */
   boost: { factor: 1.5, rise: 0.8, fall: 1.2 },
   /** Game over score, arcade style: counts up once it is in (and on as a crash in crash mode adds
@@ -634,7 +659,7 @@ export const CRT = {
   flickerIntensity: 0.4,
 };
 
-/** @typedef {"start" | "dodge" | "crash" | "free" | "exit" | "left" | "right" | "faster" | "next" | "stats" | "menu" | "glow" | "randomize"} Action */
+/** @typedef {"start" | "dodge" | "crash" | "overtake" | "free" | "exit" | "left" | "right" | "faster" | "slower" | "next" | "stats" | "menu" | "glow" | "randomize"} Action */
 
 /**
  * @typedef {object} ActionKeys
@@ -642,7 +667,7 @@ export const CRT = {
  * @property {string} [label] keycap text in the UI; actions without one are not advertised
  * @property {boolean} [optional] its keys keep doing what they do in the browser (Tab moves the
  *   focus) until the game arms the action (input.arm)
- * @property {"enter" | "arrowLeft" | "arrowRight" | "arrowUp"} [icon] drawn instead of the label (ui/icons.js):
+ * @property {"enter" | "arrowLeft" | "arrowRight" | "arrowUp" | "arrowDown"} [icon] drawn instead of the label (ui/icons.js):
  *   the UI font has no glyph for these keys; the label becomes the accessible name
  */
 
@@ -652,11 +677,14 @@ export const ACTIONS = {
   // the minigames, clicked in their list (← → and ENTER play the one chosen there)
   dodge: { keys: [] },
   crash: { keys: [] },
+  overtake: { keys: [] },
   free: { keys: ["KeyF"], label: "F" },
   exit: { keys: ["Escape"], label: "ESC" },
   left: { keys: ["ArrowLeft"], label: "Left arrow", icon: "arrowLeft" },
   right: { keys: ["ArrowRight"], label: "Right arrow", icon: "arrowRight" },
   faster: { keys: ["ArrowUp", "KeyW"], label: "Up arrow", icon: "arrowUp" },
+  // overtake's brake
+  slower: { keys: ["ArrowDown", "KeyS"], label: "Down arrow", icon: "arrowDown" },
   next: { keys: ["Tab"], label: "Tab", optional: true }, // the next car of a wreck
   stats: { keys: ["F10"] }, // developer overlay, not advertised in the UI
   menu: { keys: ["KeyH"], label: "H" },
@@ -722,7 +750,11 @@ export const SCREEN = {
 
 export const STORAGE = {
   /** localStorage keys of the best scores, by the minigame's mode */
-  best: { dodge: "polonez-autodrive:best", crash: "polonez-autodrive:best-crash" },
+  best: {
+    dodge: "polonez-autodrive:best",
+    crash: "polonez-autodrive:best-crash",
+    overtake: "polonez-autodrive:best-overtake",
+  },
 };
 
 /** F10 developer overlay. */
@@ -775,12 +807,15 @@ export const TEXT = {
   dodgeAbout: "Weave through the oncoming traffic: a point for every car you pass.",
   crash: "CRASH",
   crashAbout: "Crash into it on purpose: the bigger the wreck, the more points.",
+  overtake: "OVERTAKE",
+  overtakeAbout: "Pass the slow cars going your way through the oncoming lane: a point each.",
   choose: "choose",
   play: "play",
   again: "AGAIN",
   menu: "MENU",
   steer: "steer",
   faster: "faster",
+  slower: "slower",
   exit: "exit",
   freeRide: "FREE RIDE",
   countdownGo: "START!",
@@ -790,7 +825,7 @@ export const TEXT = {
   newBest: "NEW BEST!",
   gameOver: "Game Over",
   wrecked: "Wrecked", // crash mode's game over
-  speed: "KM/H", // crash mode: how fast the traffic comes at the Bolones
+  speed: "KM/H", // crash mode: how fast the traffic comes at the Bolones; overtake: its own
   cars: "CARS",
   tally: { crush: "CRUSH", parts: "PARTS OFF", posts: "PALMS & ROCKS" },
   lookAround: "Drag to look around, scroll to pull back",

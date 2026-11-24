@@ -56,6 +56,9 @@
           <span class="hud__record" data-record="crash">
             <span data-text="crash"></span> <span data-value></span>
           </span>
+          <span class="hud__record" data-record="overtake">
+            <span data-text="overtake"></span> <span data-value></span>
+          </span>
         </p>
         <!-- equal columns keep both buttons the same width; the steering hint spans both -->
         <div class="button-grid hud__bottom">
@@ -87,6 +90,13 @@
                 <span data-text="best"></span> <span data-value></span>
               </span>
             </button>
+            <button class="button hud__game" type="button" data-action="overtake">
+              <span class="hud__game-name" data-text="overtake"></span>
+              <span class="hud__game-about" data-text="overtakeAbout"></span>
+              <span class="hud__game-best" data-record="overtake">
+                <span data-text="best"></span> <span data-value></span>
+              </span>
+            </button>
           </div>
           <p class="hud__games-keys">
             <kbd data-key="left"></kbd><kbd data-key="right"></kbd> <span data-text="choose"></span>
@@ -112,6 +122,11 @@
         <span class="hud__dot">·</span>
         <span class="hud__faster">
           <kbd data-key="faster"></kbd> <span data-text="faster"></span>
+          <span class="hud__dot">·</span>
+        </span>
+        <!-- overtake: the brake -->
+        <span class="hud__slower" hidden>
+          <kbd data-key="slower"></kbd> <span data-text="slower"></span>
           <span class="hud__dot">·</span>
         </span>
         <kbd data-key="exit"></kbd> <span data-text="exit"></span>
@@ -140,6 +155,11 @@
         <div class="stat stat--main">
           <span class="stat__label" data-text="score"></span
           ><span class="stat__value" data-score></span>
+        </div>
+        <!-- overtake: the speedometer -->
+        <div class="stat hud__speed" hidden>
+          <span class="stat__label" data-text="speed"></span
+          ><span class="stat__value" data-speed></span>
         </div>
         <div class="stat">
           <span class="stat__label" data-text="level"></span

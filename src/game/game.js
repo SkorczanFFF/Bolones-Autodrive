@@ -1,17 +1,19 @@
 import * as THREE from "three";
-import { MINIGAME, SCENE, SPEED, STORAGE, TEXT, TRAFFIC } from "../config.js";
+import { MINIGAME, SCENE, SPEED, STORAGE, TEXT, WORLD } from "../config.js";
 import { loadNumber, saveNumber } from "../core/storage.js";
 import { createStateMachine } from "./state.js";
 
 /** @typedef {import("./state.js").GameState} GameState */
 /** The minigames, as their list in the menu shows them (index.html). */
-const MODES = /** @type {const} */ (["dodge", "crash"]);
+const MODES = /** @type {const} */ (["dodge", "crash", "overtake"]);
 /**
- * @typedef {(typeof MODES)[number]} Mode the minigame: dodge the oncoming traffic, or crash into
- *   it for the damage (MINIGAME.crashMode)
+ * @typedef {(typeof MODES)[number]} Mode the minigame: dodge the oncoming traffic, crash into it
+ *   for the damage (MINIGAME.crashMode), or overtake the cars going the Bolones' way
+ *   (MINIGAME.overtake)
  */
 
-const KMH = 3.6 / TRAFFIC.scale; // units/s -> km/h
+/** The world's speed multiplier for the Bolones going this fast. @param {number} kmh */
+const worldAt = (kmh) => kmh / SPEED.kmh / WORLD.speed;
 
 /**
  * The speed level a score has reached, from 0: every SPEED.tierEvery cars passed, in crash mode
@@ -30,7 +32,7 @@ const tierOf = (score, mode) =>
  * @param {Mode} mode
  */
 const speedOf = (score, mode) =>
-  (mode === "crash" ? MINIGAME.crashMode.start / (SPEED.traffic * KMH) : 1) +
+  (mode === "crash" ? MINIGAME.crashMode.start / (SPEED.traffic * SPEED.kmh) : 1) +
   tierOf(score, mode) * SPEED.tierStep;
 
 /**
@@ -96,11 +98,15 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   let boost = 1; // the minigame sped up while ↑ is held (MINIGAME.boost), eased
   /** @type {Mode} */
   let mode = "dodge"; // the one played, or chosen in the list
-  const best = { dodge: loadNumber(STORAGE.best.dodge), crash: loadNumber(STORAGE.best.crash) };
+  const best = Object.fromEntries(MODES.map((of) => [of, loadNumber(STORAGE.best[of])]));
+  let own = 0; // overtake: the Bolones' own speed, km/h (MINIGAME.overtake.speed)
+
+  /** How fast the traffic goes: as the Bolones, but in overtake by the score alone. */
+  const level = () => (mode === "overtake" ? speedOf(minigame.score, mode) : world.speedMultiplier);
   let record = 0; // the mode's best before this game over: to beat
   let counted = 0; // how far game over has counted its score up
 
-  /** This game's score: the cars dodged, or what the crash wrecked. */
+  /** This game's score: the cars passed (dodged or overtaken), or what the crash wrecked. */
   const scoreOf = () => (mode === "crash" ? (minigame.damage?.score ?? 0) : minigame.score);
 
   /** Keeps the mode's best score (also when leaving mid-game with ESC). */
@@ -235,9 +241,9 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       case "countdown":
         boost = 1;
         car.reset(tweens);
-        minigame.reset();
-        minigame.density = mode === "crash" ? MINIGAME.crashMode.density : 1;
-        world.speedMultiplier = speedOf(0, mode);
+        minigame.play(mode);
+        own = MINIGAME.overtake.speed.start;
+        world.speedMultiplier = mode === "overtake" ? worldAt(own) : speedOf(0, mode);
         menu?.hide();
         moveCamera(gamePosition);
         hud.setMode(mode);
@@ -300,6 +306,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         break;
       case "dodge":
       case "crash":
+      case "overtake":
         if (machine.state !== "select") return; // a minigame clicked in the list
         mode = action;
         machine.send("start");
@@ -362,7 +369,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       switch (machine.state) {
         case "countdown": {
           minigame.spawning = stateTime >= MINIGAME.trafficStartsAt;
-          minigame.update(dt, world.speedMultiplier);
+          minigame.update(dt, world.speedMultiplier, level());
           if (stateTime >= MINIGAME.countdown) {
             machine.send("timeout");
             break;
@@ -372,11 +379,20 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         }
 
         case "playing": {
-          const { factor, rise, fall } = MINIGAME.boost;
-          const target = input.isHeld("faster") ? factor : 1;
-          boost += (target - boost) * (1 - Math.exp(-dt / (target > boost ? rise : fall)));
-          world.speedMultiplier = speedOf(minigame.score, mode) * boost;
-          const { crashed, scored } = minigame.update(dt, world.speedMultiplier);
+          if (mode === "overtake") {
+            // ↑ gas, ↓ brake, down to the cars going its way at the least; let go it holds
+            const { slow, speed } = MINIGAME.overtake;
+            const gas = input.isHeld("faster") ? speed.gas : 0;
+            const brake = input.isHeld("slower") ? speed.brake : 0;
+            own = THREE.MathUtils.clamp(own + (gas - brake) * dt, slow, speed.top);
+            world.speedMultiplier = worldAt(own);
+          } else {
+            const { factor, rise, fall } = MINIGAME.boost;
+            const target = input.isHeld("faster") ? factor : 1;
+            boost += (target - boost) * (1 - Math.exp(-dt / (target > boost ? rise : fall)));
+            world.speedMultiplier = speedOf(minigame.score, mode) * boost;
+          }
+          const { crashed, scored } = minigame.update(dt, world.speedMultiplier, level());
           if (crashed) {
             machine.send("crash");
             break;
@@ -384,9 +400,11 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
           if (scored) hud.setLevel(tierOf(minigame.score, mode) + 1);
           if (stateTime < MINIGAME.startLabelDuration) break;
           hud.setCountdown(null);
-          if (mode === "dodge") hud.setScore(minigame.score);
-          // how fast the traffic comes at the Bolones: as hard as the crash will be
-          else hud.setScore(Math.round(SPEED.traffic * world.speedMultiplier * KMH), false);
+          // crash mode: how fast the traffic comes at the Bolones, as hard as the crash will be
+          if (mode === "crash") {
+            hud.setScore(Math.round(SPEED.traffic * world.speedMultiplier * SPEED.kmh), false);
+          } else hud.setScore(minigame.score);
+          if (mode === "overtake") hud.setSpeed(Math.round(own));
           break;
         }
 

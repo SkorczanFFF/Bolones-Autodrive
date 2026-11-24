@@ -117,9 +117,12 @@ export function createHud(
   const tally = $(".hud__tally");
   const games = $$(".hud__game");
   const driveOn = $(".hud__drive-on");
+  const slower = $(".hud__slower");
+  const speedometer = $(".hud__speed");
+  const speed = $("[data-speed]");
   /** @type {Mode} */
   let mode = "dodge";
-  const records = { dodge: 0, crash: 0 };
+  const records = { dodge: 0, crash: 0, overtake: 0 };
   let record = 0; // game over's: to beat
   const menuToggle = $(".hud__toggle");
   const wreck = $("[data-wreck]");
@@ -135,7 +138,7 @@ export function createHud(
         show(/** @type {HTMLElement} */ (entry.querySelector("[data-value]")), String(value));
       }
     }
-    menuBest.hidden = records.dodge <= 0 && records.crash <= 0;
+    menuBest.hidden = Object.values(records).every((value) => value <= 0);
   }
 
   /** @param {boolean} visible */
@@ -207,6 +210,8 @@ export function createHud(
       finalCars.hidden = !crash;
       tally.hidden = !crash;
       driveOn.hidden = !crash;
+      slower.hidden = mode !== "overtake";
+      speedometer.hidden = mode !== "overtake";
       showBest();
     },
 
@@ -264,6 +269,11 @@ export function createHud(
       }
       newBest.hidden = shown <= record;
       finalBest.hidden = shown > record; // the record is this score
+    },
+
+    /** The Bolones' speedometer (overtake), km/h. @param {number} value */
+    setSpeed(value) {
+      show(speed, String(value));
     },
 
     /**

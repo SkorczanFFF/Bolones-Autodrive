@@ -43,15 +43,28 @@ export function lookAhead(car, others) {
 }
 
 /**
+ * @typedef {object} Driving how a car's driver reacts and brakes, if not as MINIGAME.crash
+ * @property {number[]} [reaction] seconds, at random
+ * @property {number} [brake] the most they brake, of friction.brake
+ */
+
+/**
+ * How hard a driver can brake, units/s².
+ *
+ * @param {Driving} [driving]
+ */
+export const hardest = (driving) => MINIGAME.crash.friction.brake * (driving?.brake ?? 1) * GRAVITY;
+
+/**
  * How hard a car must brake to stop short of the car ahead (MINIGAME.crash.drivers gap), should
  * that one brake as hard as it can: units/s².
  *
  * @param {Seen | undefined} seen
+ * @param {number} [hard] how hard the car ahead can brake, units/s² (as they reckon: as they can)
  */
-export function stopping(seen) {
+export function stopping(seen, hard = hardest()) {
   if (!seen) return 0;
-  const { friction, drivers } = MINIGAME.crash;
-  const hard = friction.brake * GRAVITY;
+  const { drivers } = MINIGAME.crash;
   const room = seen.gap - drivers.gap * METRE + Math.max(seen.leading, 0) ** 2 / (2 * hard);
   return seen.speed ** 2 / (2 * Math.max(room, 1e-3));
 }
@@ -68,11 +81,13 @@ export function stopping(seen) {
  * @param {() => number} random in [0, 1)
  * @param {number} [joined] game seconds since the crash they came along at, having seen it ahead
  *   all the way: they act at once
+ * @param {Driving} [driving] how they react and brake, if not as MINIGAME.crash
  */
-export function createDriver(vehicle, swerves, random, joined) {
+export function createDriver(vehicle, swerves, random, joined, driving) {
   const { friction, reaction, drivers, player } = MINIGAME.crash;
   const { randomIn } = createRandom(random);
-  const reactAt = joined ?? randomIn(reaction);
+  const reactAt = joined ?? randomIn(driving?.reaction ?? reaction);
+  const hard = hardest(driving);
   const steer =
     swerves && random() < drivers.share
       ? THREE.MathUtils.degToRad(randomIn(drivers.angle)) * (random() < 0.5 ? -1 : 1)
@@ -131,7 +146,6 @@ export function createDriver(vehicle, swerves, random, joined) {
     drive(time) {
       const power = engine(time);
       const gas = (hands?.gas ?? false) && power > 0;
-      const hard = friction.brake * GRAVITY;
       let braking = friction.roll * GRAVITY; // rolling, until they react
       if (time < reactAt || gas) {
         // on
@@ -139,7 +153,7 @@ export function createDriver(vehicle, swerves, random, joined) {
         braking = drivers.gently * hard;
       } else {
         // as hard as it takes to stop short of the car ahead, but past what the tyres can, panic
-        const stop = stopping(ahead);
+        const stop = stopping(ahead, hard);
         if (stop > hard) panicked = Math.min(panicked, time);
         braking =
           time >= panicked

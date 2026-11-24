@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CAR, MINIGAME, SPEED, TEXT, TRAFFIC, WORLD } from "../config.js";
+import { CAR, MINIGAME, SPAWN, SPEED, TEXT, TRAFFIC, WORLD } from "../config.js";
 import { createRandom, pick } from "../core/random.js";
 import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
@@ -127,7 +127,9 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     interval: (roll) => minInterval + roll * (maxInterval - minInterval),
     create: () => {
       const car = pick(models).clone();
-      car.position.set(nextX(), TRAFFIC.y, 0);
+      car.position.set(nextX(), TRAFFIC.y, SPAWN.startZ);
+      // after a crash none comes out of the haze where it could not stop for the jam
+      if (crash && !crash.room(traffic(car))) return [];
       car.userData.scored = false;
       spawned.push(car);
       return [car];
@@ -348,10 +350,9 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     wreck(dt, which) {
       if (!crash) return 0;
       since += dt;
-      // the traffic keeps coming a while (MINIGAME.crash.keepComing), and as long as the Bolones
-      // can be driven into it (crash mode), into the crash; the physics moves it, the spawner
-      // still fades it
-      spawner.spawning = since < MINIGAME.crash.keepComing || crash.engine > 0;
+      // the traffic keeps coming a while (MINIGAME.crash.keepComing), into the crash; the physics
+      // moves it, the spawner still fades it
+      spawner.spawning = since < MINIGAME.crash.keepComing;
       spawner.update(dt, 0, pace);
       for (const other of spawned.splice(0)) crash.join(traffic(other));
       return crash.update(dt, which) / WORLD.speed;

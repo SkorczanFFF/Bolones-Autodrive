@@ -50,7 +50,7 @@ const SLACK = 0.1; // units: how much deeper the old faces must overlap than the
 const isPost = ({ stiffness }) => stiffness === Infinity;
 
 /** How far from its body's middle a solid's box reaches at most. @param {Solid} solid */
-const reachOf = ({ half, shift }) => Math.hypot(half[0], half[1], half[2]) + shift.length();
+export const reachOf = ({ half, shift }) => Math.hypot(half[0], half[1], half[2]) + shift.length();
 
 /**
  * Cars meet through their crumple zones, not as rigid boxes: a front is a spring as stiff as the
@@ -129,9 +129,6 @@ export function createCrushes(world, met) {
      * @param {number} time game seconds
      */
     collide(a, b, time) {
-      // too far apart to touch (most of the palms and rocks): not worth their boxes
-      const apart = vector(a.body.translation()).distanceTo(vector(b.body.translation()));
-      if (apart > reachOf(a) + reachOf(b)) return;
       // a post is round: as wide whichever way the car meets it
       const turn = rotation(a.body.rotation());
       const { x, z } = AHEAD.clone().applyQuaternion(turn);

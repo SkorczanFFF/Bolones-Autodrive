@@ -513,17 +513,27 @@ export const MINIGAME = {
      * a driver braking hard, rolling. */
     friction: { side: 0.8, brake: 0.5, roll: 0.015 },
     reaction: [0.8, 1.5], // seconds a driver takes to act on a crash (ahead, or their own), at random
-    /** Of the drivers, `share` swerve (`angle` degrees one way for `swerve` seconds, as long back,
-     * then straight on: about a lane over) braking `gently` (of friction.brake), the others brake;
-     * until they act the wheels roll. A car hit on its side (not end on) has a broken wheel,
+    /** Until they act the wheels roll. Then a driver brakes as hard as it takes to stop `gap` m
+     * short of the car ahead of them, should it brake hard (`margin` times that, to be sure), at
+     * least `gently` (of friction.brake): they have seen the crash. Who cannot stop in time panics:
+     * brakes hard, and `share` of them swerve (`angle` degrees one way for `swerve` seconds, as long back, then
+     * straight on: about a lane over). A car hit on its side (not end on) has a broken wheel,
      * pulling it `broken` degrees towards that side for good. */
-    drivers: { share: 0.5, angle: [1.5, 4], swerve: 0.6, gently: 0.4, broken: [2, 5] },
+    drivers: {
+      share: 0.5,
+      angle: [1.5, 4],
+      swerve: 0.6,
+      gap: 3,
+      margin: 1.25,
+      gently: 0.4,
+      broken: [2, 5],
+    },
     /** Crash mode: the Bolones stays the player's after the crash, a little: ← → turn its front
      * wheels up to `steer` degrees (all the way in `turn` seconds), ↑ drives it on at `gas` m/s²
      * up to `top` m/s until its engine stalls `stall` s after the crash; let go, it brakes
      * gently. */
     player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
-    keepComing: 2.5, // s the traffic keeps coming after a crash (crash mode: while the engine runs)
+    keepComing: 2.5, // s the traffic keeps coming after a crash, where it can stop for the jam
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
      * height up (unless the model says): cars are heavy low down, a hit pushes them more than it
      * tips them. It rides springs bouncing `bounce` times a second, damped `damping` of critical,

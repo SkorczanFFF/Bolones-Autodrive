@@ -232,17 +232,51 @@ describe("crash", () => {
     expect(bolones.object.position.distanceTo(at)).toBeLessThan(0.05); // braked to a stop
   });
 
-  it("takes in a car coming along later: its driver reacts from then on, not at once", () => {
+  it("takes in a car coming along later: its driver, who saw the wreck coming, brakes at once and calmly", () => {
     const { scene, crash } = headOn();
     run(crash, 3);
-    const late = car(20, -100, POLAKITO, 580, 18.9);
+    const late = car(0, -100, POLAKITO, 580, 18.9);
     scene.add(late.object);
     crash.join(late);
     const from = late.object.position.z;
-    run(crash, 6);
-    const went = late.object.position.z - from;
-    expect(went).toBeGreaterThan(30); // braking at once it would stop after about 20
-    expect(went).toBeLessThan(60); // stopped
+    run(crash, 8);
+    const at = late.object.position.z;
+    // hard it would stop after about 20, gently after about 50, reacting first after 65 or more
+    expect(at - from).toBeGreaterThan(30);
+    expect(at - from).toBeLessThan(60);
+    expect(late.lamps.front).toBe(true); // short of the wreck
+    run(crash, 0.5);
+    expect(late.object.position.z).toBeCloseTo(at, 2); // stopped
+  });
+
+  it("has no room for a car coming along right behind the jam, room far enough back", () => {
+    const { scene, crash } = headOn();
+    run(crash, 3);
+    const coming = (/** @type {number} */ z) => {
+      const late = car(0, z, POLAKITO, 580, 28);
+      scene.add(late.object);
+      return crash.room(late);
+    };
+    expect(coming(-40)).toBe(false); // it could not stop for the wreck
+    expect(coming(-200)).toBe(true);
+  });
+
+  it("has a driver who sees the wreck from afar stop well short of it, braking calmly, straight on", () => {
+    for (const seed of [1, 2, 3, 4]) {
+      const scene = new THREE.Scene();
+      const bolones = car(0, 0, BOLONES, 1160, 0);
+      const other = car(0, -8, POLAKITO, 580, 0); // the wreck, standing
+      const far = car(0, -200, POLAKITO, 580, 28);
+      scene.add(bolones.object, other.object, far.object);
+      const crash = create(scene, [bolones, other, far], undefined, mulberry32(seed));
+      run(crash, 12);
+      const { x, z } = far.object.position;
+      expect(Math.abs(x)).toBeLessThan(0.05); // no swerve
+      expect(z).toBeLessThan(-8 - 5.5 - 3); // short of the wreck, a few metres off
+      expect(z).toBeGreaterThan(-80); // braking no harder than it takes
+      expect(far.lamps.front).toBe(true);
+      crash.dispose();
+    }
   });
 
   it("stalls the Bolones' engine a while after the crash: ↑ still held, it stops", () => {

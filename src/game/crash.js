@@ -5,8 +5,8 @@ import { crumple, reaches } from "../scene/crumple.js";
 import { createDebris } from "../scene/debris.js";
 import { wheelsOf } from "../scene/rig.js";
 import { boxOf, endOn, overlap } from "./crash/boxes.js";
-import { createCrushes } from "./crash/crush.js";
-import { createDriver } from "./crash/drivers.js";
+import { createCrushes, reachOf } from "./crash/crush.js";
+import { createDriver, lookAhead, stopping } from "./crash/drivers.js";
 import {
   CARS,
   GRAVITY,
@@ -132,8 +132,9 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    *
    * @param {Car} car upright on the road, in the scene
    * @param {boolean} swerves whether its driver may swerve (not the Bolones')
+   * @param {boolean} [joined] it came along after the crash began
    */
-  function board(car, swerves) {
+  function board(car, swerves, joined = false) {
     const { object, box, mass, velocity, com = build.com } = car;
     object.updateWorldMatrix(true, true);
     const size = box.getSize(new THREE.Vector3());
@@ -181,7 +182,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       offset,
       vehicle,
       stiffness: stiffness * mass,
-      driver: createDriver(vehicle, swerves, random, time),
+      driver: createDriver(vehicle, swerves, random, joined ? time : undefined),
       color: car.color,
       /** @param {Hit} hit @param {number} speed */
       struck(hit, speed) {
@@ -221,6 +222,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   const stands = createPosts(world, posts, onRoad);
   /** @type {Party[]} the cars, then the palms and rocks there are now */
   let solids = bodies;
+  /** @type {import("./crash/drivers.js").Looking[]} the cars as the drivers saw them last */
+  let looking = [];
   let absorbed = 0; // J the crumple zones took up
   /** @type {Set<Party>} the palms and rocks hit */
   const struck = new Set();
@@ -422,8 +425,17 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       driver.drive(time);
       vehicle.update();
     }
+    // where each is, once: most pairs are too far apart to touch, not worth their boxes, nor are
+    // two at rest
+    const at = solids.map(({ body }) => vector(body.translation()));
+    const still = solids.map(({ body }) => body.isSleeping() || body.isFixed());
     for (let i = 0; i < bodies.length; i++) {
-      for (let j = i + 1; j < solids.length; j++) crushes.collide(solids[i], solids[j], time);
+      for (let j = i + 1; j < solids.length; j++) {
+        if (still[i] && still[j]) continue;
+        const reach = reachOf(solids[i]) + reachOf(solids[j]);
+        if (at[i].distanceToSquared(at[j]) > reach ** 2) continue;
+        crushes.collide(solids[i], solids[j], time);
+      }
     }
     world.step();
     time += STEP;
@@ -445,6 +457,13 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
      */
     update(dt, which = 0) {
       solids = [...bodies, ...stands.sync()];
+      // what each driver sees ahead, once a frame
+      looking = bodies.map(({ body, half }) => ({
+        at: vector(body.translation()),
+        velocity: vector(body.linvel()),
+        half,
+      }));
+      bodies.forEach(({ driver }, i) => driver.see(lookAhead(looking[i], looking)));
       lag = Math.min(lag + dt, 30 * STEP); // further behind, the rest is dropped
       for (; lag >= STEP; lag -= STEP) step();
       camera += (-wrecks[which].body.linvel().z - camera) * (1 - Math.exp(-dt / cameraLag));
@@ -472,7 +491,23 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
      * @param {Car} car upright on the road, in the scene
      */
     join(car) {
-      bodies.push(board(car, true));
+      bodies.push(board(car, true, true));
+    },
+
+    /**
+     * Whether a car coming along there could stop for the cars ahead in its way, braking hard at
+     * most: else the road is jammed up to there.
+     *
+     * @param {Car} car upright on the road, in the scene
+     */
+    room(car) {
+      const size = car.box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+      const coming = {
+        at: onRoad(car.object.position),
+        velocity: car.velocity,
+        half: size.toArray(),
+      };
+      return stopping(lookAhead(coming, looking)) <= MINIGAME.crash.friction.brake * GRAVITY;
     },
 
     /** How much power the Bolones' engine has left in the player's hands (0 to 1, stalling). */

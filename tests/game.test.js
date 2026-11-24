@@ -59,7 +59,6 @@ function setup() {
   const crash = () => {
     input.dispatch("start");
     run(MINIGAME.countdown + 0.1);
-    world.speedMultiplier = 1.3; // a later tier
     state.crashNext = true;
     run(1 / 60);
     state.crashNext = false;
@@ -226,6 +225,25 @@ describe("free ride camera", () => {
 });
 
 describe("crash", () => {
+  it("speeds the minigame up by half while ↑ is held, easing in and back out", () => {
+    const { input, world, run } = setup();
+    input.dispatch("start");
+    run(MINIGAME.countdown + 0.1);
+    expect(world.speedMultiplier).toBe(1);
+    input.hold("faster", true);
+    run(0.3);
+    const early = world.speedMultiplier;
+    expect(early).toBeGreaterThan(1.05); // seen at once
+    expect(early).toBeLessThan(1.3); // but eased in
+    run(4);
+    expect(world.speedMultiplier).toBeCloseTo(MINIGAME.boost.factor, 2);
+    input.hold("faster", false);
+    run(0.3);
+    expect(world.speedMultiplier).toBeGreaterThan(1.3); // easing back
+    run(6);
+    expect(world.speedMultiplier).toBeCloseTo(1, 2);
+  });
+
   it("brakes the world to a halt and keeps the traffic and the game camera", () => {
     const { game, world, camera, calls, run, crash } = setup();
     crash();

@@ -717,6 +717,11 @@ kbd {
   display: inline-block;
 }
 
+/* speeding up is the minigame's */
+[data-state="free"] .hud__faster {
+  display: none;
+}
+
 /* countdown + START! */
 .hud__countdown {
   position: fixed;

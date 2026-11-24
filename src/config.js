@@ -508,6 +508,8 @@ export const MINIGAME = {
     shakeAmount: 0.3, // largest camera offset, units
     lock: 0.6, // seconds before game over takes keys and clicks (and its panel shows)
   },
+  /** Holding ↑ speeds the game up by `factor`, easing in and out (time constants, seconds). */
+  boost: { factor: 1.5, rise: 0.8, fall: 1.2 },
   /** Game over score, arcade style: counts up once the panel is in, then flashes and pulses. */
   scoreCount: {
     perPoint: 0.06, // seconds per point
@@ -524,13 +526,13 @@ export const CRT = {
   flickerIntensity: 0.4,
 };
 
-/** @typedef {"start" | "free" | "exit" | "left" | "right" | "stats" | "menu" | "glow" | "randomize"} Action */
+/** @typedef {"start" | "free" | "exit" | "left" | "right" | "faster" | "stats" | "menu" | "glow" | "randomize"} Action */
 
 /**
  * @typedef {object} ActionKeys
  * @property {string[]} keys KeyboardEvent.code values that trigger the action
  * @property {string} [label] keycap text in the UI; actions without one are not advertised
- * @property {"enter" | "arrowLeft" | "arrowRight"} [icon] drawn instead of the label (ui/icons.js):
+ * @property {"enter" | "arrowLeft" | "arrowRight" | "arrowUp"} [icon] drawn instead of the label (ui/icons.js):
  *   the UI font has no glyph for these keys; the label becomes the accessible name
  */
 
@@ -541,6 +543,7 @@ export const ACTIONS = {
   exit: { keys: ["Escape"], label: "ESC" },
   left: { keys: ["ArrowLeft"], label: "Left arrow", icon: "arrowLeft" },
   right: { keys: ["ArrowRight"], label: "Right arrow", icon: "arrowRight" },
+  faster: { keys: ["ArrowUp", "KeyW"], label: "Up arrow", icon: "arrowUp" },
   stats: { keys: ["F10"] }, // developer overlay, not advertised in the UI
   menu: { keys: ["KeyH"], label: "H" },
   glow: { keys: ["KeyG"], label: "G" },
@@ -656,6 +659,7 @@ export const TEXT = {
   again: "AGAIN",
   menu: "MENU",
   steer: "steer",
+  faster: "faster",
   exit: "exit",
   freeRide: "FREE RIDE",
   countdownGo: "START!",

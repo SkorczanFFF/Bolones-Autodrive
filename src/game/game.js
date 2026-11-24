@@ -60,6 +60,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   const moveTo = new THREE.Vector3();
   const moveTarget = new THREE.Vector3();
   let stateTime = 0;
+  let boost = 1; // the minigame sped up while ↑ is held (MINIGAME.boost), eased
   let best = loadNumber(STORAGE.bestScore);
 
   /** Keeps the best score (also when leaving mid-game with ESC). @returns {boolean} new record */
@@ -200,6 +201,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     switch (next) {
       case "countdown":
         stopCrash();
+        boost = 1;
         car.reset(tweens);
         minigame.reset();
         world.speedMultiplier = 1;
@@ -295,13 +297,16 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
             hud.setCountdown(null);
             hud.setScore(minigame.score);
           }
+          const { factor, rise, fall } = MINIGAME.boost;
+          const target = input.isHeld("faster") ? factor : 1;
+          boost += (target - boost) * (1 - Math.exp(-dt / (target > boost ? rise : fall)));
+          world.speedMultiplier = speedForScore(minigame.score) * boost;
           const { crashed, scored } = minigame.update(dt, world.speedMultiplier);
           if (crashed) {
             machine.send("crash");
             break;
           }
           if (scored) {
-            world.speedMultiplier = speedForScore(minigame.score);
             hud.setScore(minigame.score);
             hud.setLevel(tierForScore(minigame.score) + 1);
           }

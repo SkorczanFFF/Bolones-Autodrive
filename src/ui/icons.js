@@ -16,4 +16,5 @@ export const ICONS = {
   enter: svg('<path d="M20 4v7a4 4 0 0 1-4 4H5" /><path d="M9 10l-5 5 5 5" />'),
   arrowLeft: svg('<path d="M20 12H4" /><path d="M10 6l-6 6 6 6" />'),
   arrowRight: svg('<path d="M4 12h16" /><path d="M14 6l6 6-6 6" />'),
+  arrowUp: svg('<path d="M12 20V4" /><path d="M6 10l6-6 6 6" />'),
 };

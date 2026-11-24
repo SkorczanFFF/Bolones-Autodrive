@@ -621,8 +621,17 @@ export const MINIGAME = {
    * km/h and faster every `every` cars passed (SPEED.tierStep), and the crash is the goal. It
    * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel or
    * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
+   * Its drivers (MINIGAME.crash.drivers) are a little slower to react: a few more pile in.
    */
-  crashMode: { density: 1.5, start: 100, every: 10, crush: 1, part: 20, post: 20 },
+  crashMode: {
+    density: 1.5,
+    start: 100,
+    every: 10,
+    crush: 1,
+    part: 20,
+    post: 20,
+    drivers: { reaction: [1, 1.8] },
+  },
   /**
    * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the
    * Bolones' way, `slow`, `gaps` units apart, the first lined up as far as `ahead` in front of

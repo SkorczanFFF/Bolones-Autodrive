@@ -127,6 +127,12 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   const lanes = lanesOf();
   const [minInterval, maxInterval] = MINIGAME.interval;
   const { overtake } = MINIGAME;
+  /** How the traffic's drivers react and brake after a crash, by the minigame. */
+  const habits = {
+    dodge: undefined,
+    crash: MINIGAME.crashMode.drivers,
+    overtake: overtake.drivers,
+  };
   /** @type {Mode} */
   let mode = "dodge";
   let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
@@ -251,7 +257,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     color: colorOf(materials.wire.traffic),
     onCrash: lampsOut(other),
     label: other.userData.label,
-    driving: mode === "overtake" ? overtake.drivers : undefined,
+    driving: habits[mode],
   });
 
   /**

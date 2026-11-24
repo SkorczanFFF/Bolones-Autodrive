@@ -41,7 +41,7 @@ export function createSpawner({
   const objects = [];
   /** @type {Map<import("three").Object3D, number>} seconds since each instance appeared */
   const ages = new Map();
-  let elapsed = 0;
+  let due = 0; // seconds at speed 1 since the last spawn
   let roll = Math.random();
   const fader = createFader();
   const fadeOutDistance = speed * fadeOut;
@@ -92,24 +92,28 @@ export function createSpawner({
       }
 
       if (!spawner.spawning) {
-        elapsed = 0; // the first spawn after re-enabling waits a full interval
+        due = 0; // the first spawn after re-enabling waits a full interval
         return;
       }
 
-      elapsed += dt;
-      let wait = spawner.currentInterval(speedMultiplier);
-      while (elapsed >= wait) {
-        elapsed -= wait;
+      // The way travelled, in seconds at speed 1: a world standing still (after a crash) saves up
+      // no spawns for when it moves again.
+      due += dt * speedMultiplier;
+      if (speedMultiplier <= 0) return;
+      let wait = spawner.currentInterval(speedMultiplier) * speedMultiplier;
+      while (due >= wait) {
+        due -= wait;
         // Objects spawned late in a long frame start a bit further, keeping the spacing even.
+        const late = due / speedMultiplier; // seconds
         for (const object of create()) {
-          object.position.z = startZ + elapsed * velocity;
+          object.position.z = startZ + late * velocity;
           parent.add(object);
           objects.push(object);
-          ages.set(object, elapsed);
+          ages.set(object, late);
           fader.set(object, opacityOf(object));
         }
         roll = Math.random();
-        wait = spawner.currentInterval(speedMultiplier);
+        wait = spawner.currentInterval(speedMultiplier) * speedMultiplier;
       }
     },
 
@@ -131,7 +135,7 @@ export function createSpawner({
       for (const object of objects) parent.remove(object);
       objects.length = 0;
       ages.clear();
-      elapsed = 0;
+      due = 0;
     },
   };
 

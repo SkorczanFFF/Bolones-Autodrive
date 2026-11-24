@@ -33,6 +33,17 @@ describe("spawner", () => {
     expect(spawner.objects).toHaveLength(3);
   });
 
+  it("saves up no spawns while the world stands still, so none come in a burst after", () => {
+    const { spawner } = setup();
+    run(spawner, 0.5);
+    run(spawner, 30, 0); // a crash: the world stopped
+    expect(spawner.objects).toHaveLength(0);
+    run(spawner, 0.4);
+    expect(spawner.objects).toHaveLength(0); // the half interval still due, not 30 of them
+    run(spawner, 0.2);
+    expect(spawner.objects).toHaveLength(1);
+  });
+
   it("moves objects with speed * multiplier and removes them past endZ", () => {
     const { spawner, parent } = setup({ speed: 100, interval: () => 10 });
     run(spawner, 10);

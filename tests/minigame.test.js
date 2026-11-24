@@ -104,6 +104,7 @@ describe("overtake", () => {
       /** @type {any} */ ({ scene, car, materials: testMaterials(), palms: [], rocks: [] }),
     );
     const cars = () => scene.children.filter(({ userData }) => userData.label);
+    const { speed, platoon, window } = MINIGAME.overtake;
     minigame.play("overtake");
     const lined = cars();
     expect(lined.length).toBeGreaterThan(0); // lined up ahead, going its way
@@ -112,10 +113,14 @@ describe("overtake", () => {
       expect(other.rotation.y).toBe(Math.PI);
       expect(other.position.z).toBeLessThan(-MINIGAME.overtake.ahead + 0.5 * SPEED.traffic);
     }
+    // none of them reaches the Bolones (from z -4 to 4) in the countdown, at the start speed
+    for (let t = 0; t < MINIGAME.countdown; t += 1 / 60) {
+      minigame.update(1 / 60, speed.start / SPEED.kmh / WORLD.speed, 1);
+    }
+    for (const other of cars()) expect(other.position.z).toBeLessThan(-4 - 4);
     minigame.spawning = true;
     /** @type {Set<THREE.Object3D>} */
     const passed = new Set();
-    const { speed, platoon, window } = MINIGAME.overtake;
     /** @type {number[]} how far apart the cars towards it come, every second */
     const gaps = [];
     for (let frame = 0; frame < 60 * 30; frame++) {

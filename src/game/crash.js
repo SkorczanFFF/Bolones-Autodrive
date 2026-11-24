@@ -195,7 +195,10 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
         for (const { node, position, quaternion } of dent.moved) {
           vehicle.skew(node, position, quaternion);
         }
-        for (const node of dent.torn) tearing.push({ car: entry, node, into: hit.into, speed });
+        for (const node of dent.torn) {
+          if (tearing.some((tear) => tear.node === node)) continue; // torn in this frame already
+          tearing.push({ car: entry, node, into: hit.into, speed });
+        }
         return dent;
       },
     };
@@ -216,8 +219,9 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    * @type {{ node: THREE.Object3D, body: RAPIER.RigidBody, collider: RAPIER.Collider, from: Body, clear: boolean, half: number[], shift: THREE.Vector3, offset: THREE.Matrix4, size: THREE.Vector3 }[]}
    */
   const loose = [];
-  /** @type {Body[]} the cars that crashed, in the order they did: the Bolones first */
+  /** @type {Body[]} the cars that crashed or touched, in the order they did: the Bolones first */
   const wrecks = bodies.slice(0, 2);
+  const crashed = new Set(wrecks); // of them, the ones that really crashed
   /** @type {Map<RAPIER.RigidBody, { at: THREE.Vector3, turn: THREE.Quaternion }>} */
   const before = new Map(); // where the bodies shown were a step ago
 
@@ -376,6 +380,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const met = bodies.filter((body) => body === a || body === b);
     for (const body of met) if (!wrecks.includes(body)) wrecks.push(body);
     if (!crash) return undefined;
+    for (const body of met) crashed.add(body);
     absorbed += crash.energy;
     for (const solid of [a, b]) if (!met.some((body) => body === solid)) struck.add(solid);
     for (const body of met) {
@@ -531,11 +536,11 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     },
 
     /**
-     * What it has wrecked so far: the energy the crumple zones took up (J), the cars in the wreck,
-     * the parts torn off, the palms and rocks hit.
+     * What it has wrecked so far: the energy the crumple zones took up (J), the cars that crashed
+     * (not only touched), the parts torn off, the palms and rocks hit.
      */
     get tally() {
-      return { energy: absorbed, cars: wrecks.length, parts: loose.length, posts: struck.size };
+      return { energy: absorbed, cars: crashed.size, parts: loose.length, posts: struck.size };
     },
 
     /** The cars that crashed, in the order they did (the Bolones and the car it hit first). */

@@ -249,6 +249,18 @@ describe("crash", () => {
     expect(late.object.position.z).toBeCloseTo(at, 2); // stopped
   });
 
+  it("counts a car that only touched the wreck in it, not in its tally", () => {
+    const scene = new THREE.Scene();
+    const bolones = car(0, 0, BOLONES, 1160, 0);
+    const other = car(0, -8, POLAKITO, 580, 0);
+    const touching = car(0, -14, POLAKITO, 580, 1.8); // 1 m/s: a touch, no crash
+    scene.add(bolones.object, other.object, touching.object);
+    const crash = createCrash(scene, [bolones, other, touching]);
+    run(crash, 2);
+    expect(crash.wrecks).toContain(touching);
+    expect(crash.tally.cars).toBe(2); // the two that crashed
+  });
+
   it("has a slow driver run into the wreck a quick one stops short of", () => {
     const ends = (/** @type {import("../src/game/crash/drivers.js").Driving} */ driving) => {
       const scene = new THREE.Scene();

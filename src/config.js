@@ -634,8 +634,8 @@ export const MINIGAME = {
   },
   /**
    * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the
-   * Bolones' way, `slow`, `gaps` units apart, the first lined up as far as `ahead` in front of
-   * it; in the left lane the traffic towards it, `oncoming` (faster every SPEED.tierEvery cars
+   * Bolones' way, `slow`, `gaps` units apart, lined up no nearer than `ahead` in front of it
+   * (the first reaches it after the countdown); in the left lane the traffic towards it, `oncoming` (faster every SPEED.tierEvery cars
    * overtaken), in groups of MINIGAME.batch `platoon` units apart, `window` units between the
    * groups: room to overtake. The Bolones starts at `start`; ↑ adds `gas` a second up to `top`,
    * ↓ takes `brake` a second down to theirs (it can wait behind one for a gap), let go it holds.

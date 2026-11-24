@@ -125,7 +125,7 @@ export function createSpawner({
      * Spacing does not depend on the step (see update), so big steps are fine.
      *
      * @param {number} [step] seconds
-     * @param {number} [reach] z the first one gets to
+     * @param {number} [reach] z none gets past (the first a spawn short of it)
      */
     prewarm(step = 0.25, reach = endZ) {
       const trip = (reach - startZ) / speed;

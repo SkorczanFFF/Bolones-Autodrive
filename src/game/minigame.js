@@ -269,6 +269,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
    * @param {number} level the traffic's speed multiplier
    */
   function hit(obstacle, world, level) {
+    crash?.dispose(); // one before, in the countdown (none so far), would go unseen
     pace = level;
     coming = closing(world, level);
     since = 0;

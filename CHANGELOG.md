@@ -64,6 +64,8 @@ lets you recolor and tweak everything.
   wreck. ESC first brings back what H hid, then leaves.
 - The SkorczanFFF link in the menu leads to the author's GitHub profile, not to the repository.
 - The browser tab's icon is the "B" of the logo.
+- A link to the app shows a preview in messengers and on social sites: the title, a line about it
+  and a picture of the title screen.
 - Hidden, the menu and game over leave a clearer eye in the corner to bring them back; on a touch
   screen a double tap on the scene hides or shows them too.
 - Turned round a wreck, the camera no longer goes under the road: it stays above the car in view.

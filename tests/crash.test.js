@@ -117,6 +117,14 @@ describe("crash", () => {
     expect(turn).toBeLessThan(Math.PI / 2);
   });
 
+  it("keeps fronts that met wide in each other however fast: a deep crush throws neither aside", () => {
+    // some 200 km/h closing: the crush goes deeper than the fronts are wide
+    const { bolones, other, crash } = headOn(0, 3);
+    run(crash, 0.6);
+    expect(Math.abs(other.object.position.x - bolones.object.position.x)).toBeLessThan(0.3);
+    expect(other.object.position.z).toBeLessThan(bolones.object.position.z); // not through it
+  });
+
   it("catches fronts that meet wide in each other for a while: they turn as one", () => {
     const { bolones, other, crash } = headOn(-0.5);
     const yaw = (/** @type {THREE.Object3D} */ object) =>

@@ -106,14 +106,17 @@ export function createCrushes(world, met) {
       return { ...crush, nudge: true, dent() {} };
     }
     const mass = 1 / (a.body.invMass() + b.body.invMass());
-    const expected = Math.sqrt(depth ** 2 + (mass * speed ** 2) / k); // all the closing energy
+    const full = Math.sqrt(depth ** 2 + (mass * speed ** 2) / k); // all the closing energy
     const ahead = new THREE.Vector3(normal.x, 0, normal.z).normalize(); // from a to b, level
     const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
     // as wide as they overlap halfway through the crush (where the dent is half as deep), there
-    const stretch = meeting(boxA, boxB, ahead, (expected - depth) / 2);
+    const stretch = meeting(boxA, boxB, ahead, (full - depth) / 2);
     const reach = stretch?.half ?? penetration(boxA, boxB, across) / 2;
     // of the narrower one's width
     const share = reach / Math.min(extent(boxA, across), extent(boxB, across));
+    // a corner takes up its share of the closing energy only, then glances off
+    const taken = Math.min(1, share / interlock.overlap);
+    const expected = Math.sqrt(depth ** 2 + (taken * mass * speed ** 2) / k);
     const at = middleOf(boxA, boxB, ahead);
     if (stretch) at.addScaledVector(across, stretch.middle - at.dot(across));
     // each takes its share of the crush (the stiffer front gives less), from its face, half the
@@ -124,7 +127,7 @@ export function createCrushes(world, met) {
       plane: (expected * k) / solid.stiffness - depth / 2,
       reach,
     }));
-    const energy = (0.5 * mass * speed ** 2 * (1 - e ** 2)) / METRE ** 2;
+    const energy = (0.5 * taken * mass * speed ** 2 * (1 - e ** 2)) / METRE ** 2;
     const show = met(a, b, { normal, hits, at, speed, energy });
     return {
       ...crush,
@@ -168,14 +171,21 @@ export function createCrushes(world, met) {
       if (last && !last.snag && last.meetings < MEETINGS) {
         // Done with (crushed and let go, or solid) and slid past each other, a corner into a
         // side: the faces they met through no longer keep them apart, they meet again through
-        // the faces they overlap least across. Only touched, they crash when they close fast
-        // enough.
+        // the faces they overlap least across. Met wide, what their crumple zones took up is no
+        // overlap (a fast crush goes deeper than the fronts are wide): they stay in each other,
+        // corners glance off. Only touched, they crash when they close fast enough.
         const facing = level(last.facing.clone().applyQuaternion(turn));
         const stale = penetration(boxA, boxB, facing);
         const done = last.free !== undefined || stale > last.capacity;
+        const wide = (last.share ?? 0) >= interlock.overlap;
+        const beyond = stale - (wide ? last.deepest : 0);
         if (facing.lengthSq() < 0.5) {
           crush = undefined; // rolled over: the faces they met through face up or down now
-        } else if (done && least.normal.dot(facing) < Math.SQRT1_2 && stale > least.depth + SLACK) {
+        } else if (
+          done &&
+          least.normal.dot(facing) < Math.SQRT1_2 &&
+          beyond > least.depth + SLACK
+        ) {
           crush = undefined;
         } else if (last.nudge && -relative.dot(facing) >= nudge * METRE) {
           crush = undefined;

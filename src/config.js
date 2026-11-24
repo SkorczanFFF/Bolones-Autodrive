@@ -519,7 +519,7 @@ export const MINIGAME = {
   crash: {
     /** Tyre-road friction coefficients (game/crash/vehicle.js): how hard a tyre grips at most,
      * a driver braking hard, rolling. */
-    friction: { side: 0.8, brake: 0.5, roll: 0.015 },
+    friction: { side: 1, brake: 0.5, roll: 0.015 },
     // seconds a driver takes to act on a crash (ahead, or their own), at random
     reaction: [0.8, 1.5],
     /** Until they act the wheels roll. Then a driver brakes as hard as it takes to stop `gap` m

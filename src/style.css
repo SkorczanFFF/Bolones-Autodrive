@@ -890,8 +890,9 @@ kbd {
     0 0 20px var(--pink);
 }
 
+/* a new number lights up a moment, as a lamp would: no scaling, the 80s had none */
 .stat__value.is-pop {
-  animation: pop-small 0.25s ease-out;
+  animation: lit 0.25s steps(1);
 }
 
 .stat__value.is-flash {
@@ -1019,23 +1020,23 @@ kbd {
     0 0 28px var(--pink);
 }
 
-/* counting up: every new number ticks */
+/* counting up: every new number lights up */
 .hud__final-score.is-tick {
-  animation: score-tick 0.12s ease-out;
+  animation: lit 0.12s steps(1);
 }
 
-/* counted: an arcade flash, then the score keeps pulsing like a neon sign */
+/* counted: an arcade flash, then the score keeps blinking like a neon sign */
 .hud__final-score.is-final {
   --flash: 0.18s;
   --flashes: 6;
   animation:
     score-flash var(--flash) steps(1) var(--flashes),
-    score-pulse 1.4s ease-in-out calc(var(--flash) * var(--flashes)) infinite; /* after the flashes */
+    score-blink 1.4s steps(1) calc(var(--flash) * var(--flashes)) infinite; /* after the flashes */
 }
 
-@keyframes score-tick {
+@keyframes lit {
   from {
-    scale: 1.15;
+    color: var(--yellow);
   }
 }
 
@@ -1049,13 +1050,10 @@ kbd {
   }
 }
 
-@keyframes score-pulse {
-  50% {
-    scale: 1.06;
-    text-shadow:
-      3px 3px 0 var(--ui-deep),
-      0 0 18px var(--pink),
-      0 0 48px var(--pink);
+@keyframes score-blink {
+  70% {
+    opacity: 0.35;
+    text-shadow: 3px 3px 0 var(--ui-deep);
   }
 }
 
@@ -1101,15 +1099,6 @@ kbd {
   to {
     scale: 1;
     opacity: 1;
-  }
-}
-
-@keyframes pop-small {
-  from {
-    scale: 1.35;
-  }
-  to {
-    scale: 1;
   }
 }
 

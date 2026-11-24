@@ -24,7 +24,8 @@ export const PALETTE = {
   dusk: "#261447", // road
   deepTeal: "#13304a", // rocks
   bolonesBody: "#420d59", // the star: stands apart from the road; neon pink lines are its own
-  nightBlue: "#0e2238", // traffic bodies under neon cyan lines, the Bolones' complement
+  nightBlue: "#0e2238", // traffic bodies under pale lavender lines
+  lavender: "#cbb4ff", // the traffic's lines: white tinged with the mountains' violet
   grape: "#2a0a4a", // horizon range
   plum: "#1e0f4f", // side mountains
   horizon: "#c70050", // fog: distant things sink into a crimson-magenta glow
@@ -34,7 +35,7 @@ export const PALETTE = {
   neonViolet: "#b967ff",
   neonOrange: "#ff8c1a",
   sunYellow: "#f9c80e",
-  headlight: "#fff3c4",
+  headlight: "#ffcc4d", // warm halogen: apart from the traffic's pale lines
 };
 
 /**
@@ -117,10 +118,11 @@ export const LAYERS = {
   traffic: {
     label: "Traffic",
     solid: PALETTE.nightBlue,
-    wire: PALETTE.neonCyan, // clear of the crimson fog they come out of and of the yellow palms
+    wire: PALETTE.lavender, // apart from the cyan ground, the pink Bolones, the yellow lamps
     toggleSolid: true,
     wirePolygons: true,
     lineFade: 1.5, // far cars: dense glowing lines would turn them into blobs
+    glow: 0.6,
   },
 };
 
@@ -769,7 +771,7 @@ export const PICKER = {
     PALETTE.sunYellow,
     PALETTE.neonOrange,
     PALETTE.horizon,
-    PALETTE.starlight,
+    PALETTE.lavender,
     PALETTE.bolonesBody,
     PALETTE.nightBlue,
     PALETTE.dusk,

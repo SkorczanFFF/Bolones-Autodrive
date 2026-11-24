@@ -21,18 +21,6 @@ const worldAt = (kmh) => kmh / SPEED.kmh / WORLD.speed;
 const tierOf = (score, mode) => Math.floor(score / MINIGAME.modes[mode].every);
 
 /**
- * The traffic's speed multiplier at a score, from the mode's `start` km/h if it has one.
- *
- * @param {number} score
- * @param {Mode} mode
- */
-const speedOf = (score, mode) => {
-  const rules = MINIGAME.modes[mode];
-  const start = "start" in rules ? rules.start / (SPEED.traffic * SPEED.kmh) : 1;
-  return start + tierOf(score, mode) * SPEED.tierStep;
-};
-
-/**
  * @typedef {object} Menu
  * @property {() => void} show
  * @property {() => void} hide
@@ -96,7 +84,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   /** @type {Mode} */
   let mode = "dodge"; // the one played, or chosen in the list
   const best = Object.fromEntries(MODES.map((of) => [of, loadNumber(STORAGE.best[of])]));
-  let own = 0; // overtake: the Bolones' own speed, km/h (MINIGAME.modes.overtake.speed)
+  let own = 0; // overtake: the Bolones' own speed, km/h (MINIGAME.modes.overtake)
   let counted = 0; // how far game over has counted its score up
 
   /** This game's score: the cars passed (dodged or overtaken), or what the crash wrecked. */
@@ -104,13 +92,13 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
 
   /**
    * Sets the Bolones' speed, up to MINIGAME.top, and returns the traffic's: in overtake ↑ ↓ drive
-   * the Bolones and the score the traffic, otherwise the score drives both and ↑ speeds them up
-   * (MINIGAME.boost).
+   * the Bolones (from the mode's `start`) and the score the traffic, otherwise both go from the
+   * Bolones at `start`, faster with the score, ↑ speeding them up (MINIGAME.boost).
    *
    * @param {number} dt 0 to set it as it is (the countdown)
    */
   function pace(dt) {
-    const level = speedOf(minigame.score, mode);
+    const faster = tierOf(minigame.score, mode) * SPEED.tierStep;
     if (mode === "overtake") {
       // ↑ gas, ↓ brake, down to the cars going its way at the least; let go it holds
       const { slow, speed } = MINIGAME.modes.overtake;
@@ -118,11 +106,12 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       const brake = input.isHeld("slower") ? speed.brake : 0;
       own = THREE.MathUtils.clamp(own + (gas - brake) * dt, slow, MINIGAME.top);
       world.speedMultiplier = worldAt(own);
-      return level;
+      return 1 + faster;
     }
     const { factor, rise, fall } = MINIGAME.boost;
     const target = input.isHeld("faster") ? factor : 1;
     boost += (target - boost) * settle(target > boost ? rise : fall, dt);
+    const level = worldAt(MINIGAME.modes[mode].start) + faster;
     return (world.speedMultiplier = Math.min(level * boost, worldAt(MINIGAME.top)));
   }
 
@@ -262,7 +251,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         boost = 1;
         car.reset(tweens);
         minigame.play(mode);
-        own = MINIGAME.modes.overtake.speed.start;
+        own = MINIGAME.modes.overtake.start;
         pace(0);
         menu?.hide();
         moveCamera(gamePosition);

@@ -275,19 +275,19 @@ describe("crash", () => {
     const { input, world, run, play } = setup();
     play();
     run(MINIGAME.countdown + 0.1);
-    expect(world.speedMultiplier).toBe(1);
+    const start = world.speedMultiplier;
+    const boost = () => world.speedMultiplier / start;
     input.hold("faster", true);
     run(0.3);
-    const early = world.speedMultiplier;
-    expect(early).toBeGreaterThan(1.05); // seen at once
-    expect(early).toBeLessThan(1.3); // but eased in
+    expect(boost()).toBeGreaterThan(1.05); // seen at once
+    expect(boost()).toBeLessThan(1.3); // but eased in
     run(4);
-    expect(world.speedMultiplier).toBeCloseTo(MINIGAME.boost.factor, 2);
+    expect(boost()).toBeCloseTo(MINIGAME.boost.factor, 2);
     input.hold("faster", false);
     run(0.3);
-    expect(world.speedMultiplier).toBeGreaterThan(1.3); // easing back
+    expect(boost()).toBeGreaterThan(1.3); // easing back
     run(6);
-    expect(world.speedMultiplier).toBeCloseTo(1, 2);
+    expect(boost()).toBeCloseTo(1, 2);
   });
 
   it("follows the car in view, from the Bolones on Tab to each car of the wreck and round", () => {
@@ -508,9 +508,15 @@ describe("crash mode", () => {
     }
   });
 
-  it("comes at the Bolones at the start speed from the countdown on, faster every few cars", () => {
+  it("starts the Bolones at the mode's speed from the countdown on, faster every few cars", () => {
     const { world, minigame, run, play, hudCalls } = setup();
-    const kmh = () => ((SPEED.traffic * world.speedMultiplier) / TRAFFIC.scale) * 3.6;
+    const kmh = () => world.speedMultiplier * WORLD.speed * SPEED.kmh;
+    for (const mode of /** @type {const} */ (["dodge", "overtake"])) {
+      const other = setup();
+      other.play(mode);
+      const speed = other.world.speedMultiplier * WORLD.speed * SPEED.kmh;
+      expect(speed, mode).toBeCloseTo(MINIGAME.modes[mode].start);
+    }
     play("crash");
     expect(kmh()).toBeCloseTo(MINIGAME.modes.crash.start);
     run(MINIGAME.countdown + 0.1);
@@ -553,17 +559,17 @@ describe("crash mode", () => {
 describe("overtake", () => {
   it("goes as fast as the player says: ↑ up to the top, ↓ down to the slow cars, else it holds", () => {
     const { world, input, run, play, hudCalls } = setup();
-    const { slow, speed } = MINIGAME.modes.overtake;
+    const { slow, speed, start } = MINIGAME.modes.overtake;
     const kmh = () => world.speedMultiplier * WORLD.speed * SPEED.kmh;
     play("overtake");
-    expect(kmh()).toBeCloseTo(speed.start, 5);
+    expect(kmh()).toBeCloseTo(start, 5);
     run(MINIGAME.countdown + MINIGAME.startLabelDuration + 0.1);
-    expect(kmh()).toBeCloseTo(speed.start, 5);
-    expect(hudCalls.setSpeed.at(-1)).toEqual([speed.start]); // the speedometer
+    expect(kmh()).toBeCloseTo(start, 5);
+    expect(hudCalls.setSpeed.at(-1)).toEqual([start]); // the speedometer
     input.hold("faster", true);
     run(0.5);
     input.hold("faster", false);
-    expect(kmh()).toBeCloseTo(speed.start + 0.5 * speed.gas, 5);
+    expect(kmh()).toBeCloseTo(start + 0.5 * speed.gas, 5);
     const held = kmh();
     run(1);
     expect(kmh()).toBe(held);
@@ -594,6 +600,6 @@ describe("overtake", () => {
     run(1 / 60);
     expect(levels.at(-1)).toBeCloseTo(1 + SPEED.tierStep);
     const kmh = world.speedMultiplier * WORLD.speed * SPEED.kmh;
-    expect(kmh).toBeCloseTo(MINIGAME.modes.overtake.speed.start, 5); // the Bolones: as the player says
+    expect(kmh).toBeCloseTo(MINIGAME.modes.overtake.start, 5); // the Bolones: as the player says
   });
 });

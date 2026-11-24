@@ -117,7 +117,7 @@ describe("overtake", () => {
     }
     // none of them reaches the Bolones (from z -4 to 4) in the countdown, at the start speed
     for (let t = 0; t < MINIGAME.countdown; t += 1 / 60) {
-      minigame.update(1 / 60, speed.start / SPEED.kmh / WORLD.speed, 1);
+      minigame.update(1 / 60, MINIGAME.modes.overtake.start / SPEED.kmh / WORLD.speed, 1);
     }
     for (const other of cars()) expect(other.position.z).toBeLessThan(-4 - 4);
     minigame.spawning = true;

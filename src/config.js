@@ -431,6 +431,7 @@ export const CAR = {
     wheelSteer: { max: (12 * Math.PI) / 180, perYawRate: 0.15, easing: 0.075 },
   },
   resetDuration: 1, // seconds
+  resetBlink: 8, // times a second the car blinks easing back from a crash, arcade style
 };
 
 export const SPEED = {

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { CAR, SPEED, WORLD } from "../config.js";
+import { easeInOutCubic } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
 import { mountWheel, wheelsOf } from "./rig.js";
 import { dress } from "./wire.js";
@@ -213,8 +214,8 @@ export function createCar({ scene, models, materials }) {
     },
 
     /**
-     * Eases the car back to the start position (also from where a crash pushed it); roll, yaw and
-     * wheels settle on their own.
+     * Eases the car back to the start position (also from where a crash pushed it, blinking, as an
+     * arcade car comes back); roll, yaw and wheels settle on their own.
      *
      * @param {import("../core/tween.js").Tweens} tweens
      */
@@ -222,12 +223,17 @@ export function createCar({ scene, models, materials }) {
       resetTween?.cancel();
       const fromX = group.position.x;
       const [fromPosition, fromTurn] = [wreck.position.clone(), wreck.quaternion.clone()];
+      const wrecked = !fromPosition.equals(ORIGIN) || !fromTurn.equals(UPRIGHT);
       resetTween = tweens.add({
         duration: CAR.resetDuration,
+        ease: (t) => t, // the blinking keeps time, the move eases
         onUpdate: (t) => {
-          group.position.x = fromX * (1 - t);
-          wreck.position.lerpVectors(fromPosition, ORIGIN, t);
-          wreck.quaternion.slerpQuaternions(fromTurn, UPRIGHT, t);
+          const eased = easeInOutCubic(t);
+          group.position.x = fromX * (1 - eased);
+          wreck.position.lerpVectors(fromPosition, ORIGIN, eased);
+          wreck.quaternion.slerpQuaternions(fromTurn, UPRIGHT, eased);
+          const blink = Math.floor(2 * t * CAR.resetDuration * CAR.resetBlink) % 2 === 1;
+          wreck.visible = !(wrecked && blink && t < 1);
         },
         onComplete: stop,
       });

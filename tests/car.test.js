@@ -241,6 +241,30 @@ describe("car steering", () => {
   });
 });
 
+describe("car reset", () => {
+  it("blinks back to the start after a crash, and shows at the end; at rest, it does not", () => {
+    const car = setup();
+    const tweens = createTweens();
+    car.wreck.position.set(1, 0, 3); // where a crash threw it
+    car.reset(tweens);
+    /** @type {boolean[]} */
+    const shown = [];
+    for (let t = 0; t < CAR.resetDuration; t += 1 / 60) {
+      tweens.update(1 / 60);
+      shown.push(car.wreck.visible);
+    }
+    tweens.update(1 / 60);
+    expect(shown.filter((visible) => !visible).length).toBeGreaterThan(10); // off half the time
+    expect(shown.filter((visible) => visible).length).toBeGreaterThan(10);
+    expect(car.wreck.visible).toBe(true);
+    car.reset(tweens); // already at the start
+    for (let t = 0; t < CAR.resetDuration; t += 1 / 60) {
+      tweens.update(1 / 60);
+      expect(car.wreck.visible).toBe(true);
+    }
+  });
+});
+
 describe("car wheels", () => {
   /** The wheel model inside mount -> steer -> spin -> mirror. @param {THREE.Object3D} mount */
   const modelOf = (mount) => mount.children[0].children[0].children[0].children[0];

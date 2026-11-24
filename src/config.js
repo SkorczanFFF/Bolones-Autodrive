@@ -608,7 +608,7 @@ export const MINIGAME = {
      * off a crash: `count` per car (and as many sparks) per 10 kJ the crumple zones take up,
      * `size` units long, at up to `spread` of the closing speed. */
     debris: {
-      count: 8,
+      count: 4,
       shard: { size: 0.7, spread: 0.3 },
       spark: { size: 0.3, spread: 0.6, life: 0.6 },
     },

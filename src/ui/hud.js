@@ -111,14 +111,10 @@ export function createHud(
   const bestValues = $$("[data-best]");
   const scoreLabel = $(".hud__scoreboard .stat--main .stat__label");
   const title = $(".hud__gameover-title");
-  const finalLevel = $(".hud__final-level");
-  const finalCars = $(".hud__final-cars");
   const cars = $("[data-cars]");
   const tally = $(".hud__tally");
   const games = $$(".hud__game");
   const driveOn = $(".hud__drive-on");
-  const slower = $(".hud__slower");
-  const speedometer = $(".hud__speed");
   const speed = $("[data-speed]");
   /** @type {Mode} */
   let mode = "dodge";
@@ -207,12 +203,10 @@ export function createHud(
       const crash = mode === "crash";
       scoreLabel.textContent = crash ? TEXT.speed : TEXT.score;
       title.textContent = crash ? TEXT.wrecked : TEXT.gameOver;
-      finalLevel.hidden = crash;
-      finalCars.hidden = !crash;
-      tally.hidden = !crash;
-      driveOn.hidden = !crash;
-      slower.hidden = mode !== "overtake";
-      speedometer.hidden = mode !== "overtake";
+      // what only some modes have (data-modes, index.html)
+      for (const element of $$("[data-modes]")) {
+        element.hidden = !(element.dataset.modes ?? "").split(" ").includes(mode);
+      }
       showBest();
     },
 

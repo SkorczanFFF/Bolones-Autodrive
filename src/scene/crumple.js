@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { MINIGAME } from "../config.js";
 import { valueNoise } from "../core/noise.js";
 import { dent, dentable, moveNodes } from "./dents.js";
+import { partOf } from "./rig.js";
 
 /**
  * @typedef {object} Hit where a car was hit, in world space
@@ -26,8 +27,8 @@ const UP = new THREE.Vector3(0, 1, 0);
  * Crushes a car where it was hit (MINIGAME.crash.dents): whatever is in front of the crush plane,
  * within `reach` of the point across, goes back onto the plane (the whole height), running out
  * beyond it, buckled a little deeper here and there, so two crushed fronts meet on one plane
- * without passing into each other. Behind it the sheet metal bends. Rigid pieces, the wheels (a
- * node with `userData.rigid`), are not crushed: pushed back as far as the crush reaches them,
+ * without passing into each other. Behind it the sheet metal bends. The wheels (a node with
+ * `userData.part` "wheel") are rigid, not crushed: pushed back as far as the crush reaches them,
  * they turn and lean. A wheel or a bumper (a node with `userData.part`) crushed past by more
  * than it takes (MINIGAME.crash.parts) is torn off: left as it is, for the crash to take away.
  *
@@ -55,7 +56,7 @@ export function crumple(root, hit) {
   // every mesh's points in the world, crushed as they will be after the earlier dents
   const entries = dentable(root).map((entry) => ({
     ...entry,
-    node: pieceOf(entry.mesh, root),
+    node: partOf(entry.mesh, root),
   }));
 
   // the car: how high, how wide round its middle line, how long behind the plane
@@ -161,7 +162,7 @@ export function crumple(root, hit) {
       torn.push(node);
       continue;
     }
-    if (!node.userData.rigid) continue;
+    if (part !== "wheel") continue;
     const turn = Math.min(1, push / (piece.size || 1));
     // out of the car, across it (whichever way it was hit): the wheel leans about its length
     const out = widthwise
@@ -204,7 +205,8 @@ export function crumple(root, hit) {
   const nodeOf = new Map(entries.map(({ mesh, node }) => [mesh, node]));
   const meshes = dent(entries, ({ mesh }, v) => {
     const node = nodeOf.get(mesh);
-    if (!node || !(node.userData.rigid || torn.includes(node))) bend(v); // a bumper bends along
+    // a bumper bends along
+    if (!node || !(node.userData.part === "wheel" || torn.includes(node))) bend(v);
   });
   const nodes = moveNodes(moved);
   return {
@@ -246,21 +248,6 @@ function reachOf({ plane, reach }) {
   const fade = Math.max(sheet.fade, sheet.taper * Math.max(0, plane));
   return (/** @type {number} */ across) =>
     across <= reach ? 1 : Math.max(0, 1 - (across - reach) / fade) ** 2;
-}
-
-/**
- * The wheel or bumper a mesh is part of (the node with `userData.rigid` or `userData.part`
- * above it, under the root), or null: the body.
- *
- * @param {THREE.Mesh} mesh
- * @param {THREE.Object3D} root
- * @returns {THREE.Object3D | null}
- */
-function pieceOf(mesh, root) {
-  for (let node = mesh.parent; node && node !== root; node = node.parent) {
-    if (node.userData.rigid || node.userData.part) return node;
-  }
-  return null;
 }
 
 /**

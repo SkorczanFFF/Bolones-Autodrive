@@ -24,8 +24,23 @@ export function mountWheel(wheel, at, radius, steers) {
   const steer = new THREE.Group().add(spin);
   const mount = new THREE.Group().add(steer);
   mount.position.copy(at);
-  Object.assign(mount.userData, { part: "wheel", rigid: true, radius, steers });
+  Object.assign(mount.userData, { part: "wheel", radius, steers });
   return mount;
+}
+
+/**
+ * The wheel or bumper a node is part of (the node with `userData.part` above it, under the car's
+ * root), or null: the body.
+ *
+ * @param {THREE.Object3D} node
+ * @param {THREE.Object3D} root
+ * @returns {THREE.Object3D | null}
+ */
+export function partOf(node, root) {
+  for (let up = node.parent; up && up !== root; up = up.parent) {
+    if (up.userData.part) return up;
+  }
+  return null;
 }
 
 /**

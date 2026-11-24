@@ -516,14 +516,14 @@ describe("crash mode", () => {
     const { world, minigame, run, play, hudCalls } = setup();
     const kmh = () => ((SPEED.traffic * world.speedMultiplier) / TRAFFIC.scale) * 3.6;
     play("crash");
-    expect(kmh()).toBeCloseTo(MINIGAME.crashMode.start);
+    expect(kmh()).toBeCloseTo(MINIGAME.modes.crash.start);
     run(MINIGAME.countdown + 0.1);
-    expect(kmh()).toBeCloseTo(MINIGAME.crashMode.start);
+    expect(kmh()).toBeCloseTo(MINIGAME.modes.crash.start);
     const start = world.speedMultiplier;
-    minigame.score = MINIGAME.crashMode.every - 1;
+    minigame.score = MINIGAME.modes.crash.every - 1;
     run(1 / 60);
     expect(world.speedMultiplier).toBe(start);
-    minigame.score = MINIGAME.crashMode.every;
+    minigame.score = MINIGAME.modes.crash.every;
     minigame.update = () => ({ crashed: false, scored: true });
     run(1 / 60);
     expect(world.speedMultiplier).toBeCloseTo(start + SPEED.tierStep);
@@ -544,7 +544,7 @@ describe("crash mode", () => {
 describe("overtake", () => {
   it("goes as fast as the player says: ↑ up to the top, ↓ down to the slow cars, else it holds", () => {
     const { world, input, run, play, hudCalls } = setup();
-    const { slow, speed } = MINIGAME.overtake;
+    const { slow, speed } = MINIGAME.modes.overtake;
     const kmh = () => world.speedMultiplier * WORLD.speed * SPEED.kmh;
     play("overtake");
     expect(kmh()).toBeCloseTo(speed.start, 5);
@@ -581,10 +581,10 @@ describe("overtake", () => {
     play("overtake");
     run(MINIGAME.countdown + 0.1);
     expect(levels.at(-1)).toBe(1);
-    minigame.score = SPEED.tierEvery;
+    minigame.score = MINIGAME.modes.overtake.every;
     run(1 / 60);
     expect(levels.at(-1)).toBeCloseTo(1 + SPEED.tierStep);
     const kmh = world.speedMultiplier * WORLD.speed * SPEED.kmh;
-    expect(kmh).toBeCloseTo(MINIGAME.overtake.speed.start, 5); // the Bolones: as the player says
+    expect(kmh).toBeCloseTo(MINIGAME.modes.overtake.speed.start, 5); // the Bolones: as the player says
   });
 });

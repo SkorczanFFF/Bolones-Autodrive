@@ -277,7 +277,7 @@ describe("crash", () => {
       return crash.wrecks.includes(behind);
     };
     expect(ends({})).toBe(false);
-    expect(ends(MINIGAME.overtake.drivers)).toBe(true);
+    expect(ends(MINIGAME.modes.overtake.drivers)).toBe(true);
   });
 
   it("has no room for a car coming along right behind the jam, room far enough back", () => {

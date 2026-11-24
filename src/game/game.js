@@ -5,36 +5,32 @@ import { settle } from "../core/tween.js";
 import { createStateMachine } from "./state.js";
 
 /** @typedef {import("./state.js").GameState} GameState */
-/** The minigames, as their list in the menu shows them (index.html). */
-const MODES = /** @type {const} */ (["dodge", "crash", "overtake"]);
-/**
- * @typedef {(typeof MODES)[number]} Mode the minigame: dodge the oncoming traffic, crash into it
- *   for the damage (MINIGAME.crashMode), or overtake the cars going the Bolones' way
- *   (MINIGAME.overtake)
- */
+/** @typedef {import("../config.js").Mode} Mode */
+/** The minigames, in their list's order. */
+const MODES = /** @type {Mode[]} */ (Object.keys(MINIGAME.modes));
 
 /** The world's speed multiplier for the Bolones going this fast. @param {number} kmh */
 const worldAt = (kmh) => kmh / SPEED.kmh / WORLD.speed;
 
 /**
- * The speed level a score has reached, from 0: every SPEED.tierEvery cars passed, in crash mode
- * every MINIGAME.crashMode.every.
+ * The speed level a score has reached, from 0: one every MINIGAME.modes' `every` cars.
  *
  * @param {number} score
  * @param {Mode} mode
  */
-const tierOf = (score, mode) =>
-  Math.floor(score / (mode === "crash" ? MINIGAME.crashMode.every : SPEED.tierEvery));
+const tierOf = (score, mode) => Math.floor(score / MINIGAME.modes[mode].every);
 
 /**
- * The world's speed multiplier at a score: crash mode starts as fast as MINIGAME.crashMode.start.
+ * The traffic's speed multiplier at a score, from the mode's `start` km/h if it has one.
  *
  * @param {number} score
  * @param {Mode} mode
  */
-const speedOf = (score, mode) =>
-  (mode === "crash" ? MINIGAME.crashMode.start / (SPEED.traffic * SPEED.kmh) : 1) +
-  tierOf(score, mode) * SPEED.tierStep;
+const speedOf = (score, mode) => {
+  const rules = MINIGAME.modes[mode];
+  const start = "start" in rules ? rules.start / (SPEED.traffic * SPEED.kmh) : 1;
+  return start + tierOf(score, mode) * SPEED.tierStep;
+};
 
 /**
  * @typedef {object} Menu
@@ -100,15 +96,34 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   /** @type {Mode} */
   let mode = "dodge"; // the one played, or chosen in the list
   const best = Object.fromEntries(MODES.map((of) => [of, loadNumber(STORAGE.best[of])]));
-  let own = 0; // overtake: the Bolones' own speed, km/h (MINIGAME.overtake.speed)
-
-  /** How fast the traffic goes: as the Bolones, but in overtake by the score alone. */
-  const level = () => (mode === "overtake" ? speedOf(minigame.score, mode) : world.speedMultiplier);
-  let record = 0; // the mode's best before this game over: to beat
+  let own = 0; // overtake: the Bolones' own speed, km/h (MINIGAME.modes.overtake.speed)
   let counted = 0; // how far game over has counted its score up
 
   /** This game's score: the cars passed (dodged or overtaken), or what the crash wrecked. */
   const scoreOf = () => (mode === "crash" ? (minigame.damage?.score ?? 0) : minigame.score);
+
+  /**
+   * Sets the Bolones' speed and returns the traffic's: in overtake ↑ ↓ drive the Bolones and the
+   * score the traffic, otherwise the score drives both and ↑ speeds them up (MINIGAME.boost).
+   *
+   * @param {number} dt 0 to set it as it is (the countdown)
+   */
+  function pace(dt) {
+    const level = speedOf(minigame.score, mode);
+    if (mode === "overtake") {
+      // ↑ gas, ↓ brake, down to the cars going its way at the least; let go it holds
+      const { slow, speed } = MINIGAME.modes.overtake;
+      const gas = input.isHeld("faster") ? speed.gas : 0;
+      const brake = input.isHeld("slower") ? speed.brake : 0;
+      own = THREE.MathUtils.clamp(own + (gas - brake) * dt, slow, speed.top);
+      world.speedMultiplier = worldAt(own);
+      return level;
+    }
+    const { factor, rise, fall } = MINIGAME.boost;
+    const target = input.isHeld("faster") ? factor : 1;
+    boost += (target - boost) * settle(target > boost ? rise : fall, dt);
+    return (world.speedMultiplier = level * boost);
+  }
 
   /** Keeps the mode's best score (also when leaving mid-game with ESC). */
   function recordScore() {
@@ -243,8 +258,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         boost = 1;
         car.reset(tweens);
         minigame.play(mode);
-        own = MINIGAME.overtake.speed.start;
-        world.speedMultiplier = mode === "overtake" ? worldAt(own) : speedOf(0, mode);
+        own = MINIGAME.modes.overtake.speed.start;
+        pace(0);
         menu?.hide();
         moveCamera(gamePosition);
         hud.setMode(mode);
@@ -260,9 +275,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       case "gameover":
         // the wreck stays on the road, the camera can be turned round it and pulled back at
         // once; the camera and the scene GUI return on leaving
-        record = best[mode];
         counted = 0;
-        hud.showGameOver(record);
+        hud.showGameOver(best[mode]);
         // the road stops with the crash: the palms stay where it found them
         world.speedMultiplier = 0;
         wreckFocus = 0;
@@ -371,7 +385,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       switch (machine.state) {
         case "countdown": {
           minigame.spawning = stateTime >= MINIGAME.trafficStartsAt;
-          minigame.update(dt, world.speedMultiplier, level());
+          minigame.update(dt, world.speedMultiplier, pace(0));
           if (stateTime >= MINIGAME.countdown) {
             machine.send("timeout");
             break;
@@ -381,20 +395,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         }
 
         case "playing": {
-          if (mode === "overtake") {
-            // ↑ gas, ↓ brake, down to the cars going its way at the least; let go it holds
-            const { slow, speed } = MINIGAME.overtake;
-            const gas = input.isHeld("faster") ? speed.gas : 0;
-            const brake = input.isHeld("slower") ? speed.brake : 0;
-            own = THREE.MathUtils.clamp(own + (gas - brake) * dt, slow, speed.top);
-            world.speedMultiplier = worldAt(own);
-          } else {
-            const { factor, rise, fall } = MINIGAME.boost;
-            const target = input.isHeld("faster") ? factor : 1;
-            boost += (target - boost) * settle(target > boost ? rise : fall, dt);
-            world.speedMultiplier = speedOf(minigame.score, mode) * boost;
-          }
-          const { crashed, scored } = minigame.update(dt, world.speedMultiplier, level());
+          const level = pace(dt);
+          const { crashed, scored } = minigame.update(dt, world.speedMultiplier, level);
           if (crashed) {
             machine.send("crash");
             break;

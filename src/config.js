@@ -441,7 +441,6 @@ export const CAR = {
 export const SPEED = {
   wheelSpin: -13.2, // radians/s at speedMultiplier 1 (v1: -0.22 per frame)
   traffic: 200 / 6, // units per second (v1: boxes crossed the 200-unit world in 6 s)
-  tierEvery: 20, // points
   tierStep: 0.15, // speed multiplier added per tier
   /** km/h per unit/s: what the speeds shown and set in km/h are in the scene's units. */
   get kmh() {
@@ -619,43 +618,51 @@ export const MINIGAME = {
     orbit: 24, // units: how far the camera can be pulled back from the car in view
   },
   /**
-   * Crash mode: the same road with `density` times the traffic, coming at the Bolones at `start`
-   * km/h and faster every `every` cars passed (SPEED.tierStep), and the crash is the goal. It
-   * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel or
-   * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
-   * Its drivers (MINIGAME.crash.drivers) are a little slower to react: a few more pile in.
+   * The minigames, in their list's order (index.html), each faster (SPEED.tierStep) every `every`
+   * cars passed, with `density` times the traffic; `drivers`: how its traffic's drivers react and
+   * brake after a crash, if not as MINIGAME.crash.drivers (crash/drivers.js Driving).
    */
-  crashMode: {
-    density: 1.5,
-    start: 100,
-    every: 10,
-    crush: 1,
-    part: 20,
-    post: 20,
-    drivers: { reaction: [1, 1.8] },
-  },
-  /**
-   * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the
-   * Bolones' way, `slow`, `gaps` units apart, lined up no nearer than `ahead` in front of it (the
-   * first reaches it after the countdown); in the left lane the traffic towards it, `oncoming`
-   * (faster every SPEED.tierEvery cars overtaken), in groups of `group` cars `platoon` units
-   * apart, `window` units between the groups: room to overtake. The Bolones starts at `start`; ↑
-   * adds `gas` a second up to `top`, ↓ takes `brake` a second down to theirs (it can wait behind
-   * one for a gap), let go it holds.
-   */
-  overtake: {
-    slow: 40,
-    gaps: [20, 60],
-    ahead: 40,
-    oncoming: 60,
-    group: [1, 4],
-    platoon: [25, 50],
-    window: [120, 260],
-    speed: { start: 70, top: 120, gas: 15, brake: 40 },
-    /** After a crash its drivers (MINIGAME.crash.drivers) are slow to see it, `reaction` seconds,
-     * and slow to stop, braking `brake` of friction.brake at most: the ones overtaken run into the
-     * wreck, or try to swerve round it. */
-    drivers: { reaction: [1.5, 2.8], brake: 0.5 },
+  modes: {
+    /** Dodge: every car that passes scores. */
+    dodge: { every: 20, density: 1 },
+    /**
+     * Crash: the traffic comes at the Bolones at `start` km/h, and the crash is the goal. It
+     * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel or
+     * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
+     * Its drivers are a little slower to react: a few more pile in.
+     */
+    crash: {
+      every: 10,
+      density: 1.5,
+      start: 100,
+      crush: 1,
+      part: 20,
+      post: 20,
+      drivers: { reaction: [1, 1.8] },
+    },
+    /**
+     * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the
+     * Bolones' way, `slow`, `gaps` units apart, lined up no nearer than `ahead` in front of it
+     * (the first reaches it after the countdown); in the left lane the traffic towards it,
+     * `oncoming`, in groups of `group` cars `platoon` units apart, `window` units between the
+     * groups: room to overtake. The Bolones starts at `speed.start`; ↑ adds `gas` a second up to
+     * `top`, ↓ takes `brake` a second down to theirs (it can wait behind one for a gap), let go it
+     * holds. Its drivers are slow to see a crash and slow to stop: the ones overtaken run into
+     * the wreck, or try to swerve round it.
+     */
+    overtake: {
+      every: 20,
+      density: 1,
+      slow: 40,
+      gaps: [20, 60],
+      ahead: 40,
+      oncoming: 60,
+      group: [1, 4],
+      platoon: [25, 50],
+      window: [120, 260],
+      speed: { start: 70, top: 120, gas: 15, brake: 40 },
+      drivers: { reaction: [1.5, 2.8], brake: 0.5 },
+    },
   },
   /** Holding ↑ speeds the game up by `factor`, easing in and out (time constants, seconds). */
   boost: { factor: 1.5, rise: 0.8, fall: 1.2 },
@@ -676,7 +683,9 @@ export const CRT = {
   flickerIntensity: 0.4,
 };
 
-/** @typedef {"start" | "dodge" | "crash" | "overtake" | "free" | "exit" | "left" | "right" | "faster" | "slower" | "next" | "stats" | "menu" | "glow" | "randomize"} Action */
+/** @typedef {keyof typeof MINIGAME.modes} Mode a minigame (MINIGAME.modes) */
+
+/** @typedef {Mode | "start" | "free" | "exit" | "left" | "right" | "faster" | "slower" | "next" | "stats" | "menu" | "glow" | "randomize"} Action */
 
 /**
  * @typedef {object} ActionKeys

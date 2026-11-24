@@ -24,6 +24,21 @@ export function applyMaterial(root, material, shadows = true) {
 const edgesOf = memoByGeometry((geometry) => new THREE.EdgesGeometry(geometry, WIRE.edgeAngle));
 
 /**
+ * The solid meshes under a root (and it, if one): not their wireframe twins.
+ *
+ * @param {THREE.Object3D} root
+ * @returns {THREE.Mesh[]}
+ */
+export function solidMeshes(root) {
+  /** @type {THREE.Mesh[]} */
+  const meshes = [];
+  root.traverse((object) => {
+    if (object instanceof THREE.Mesh && !object.userData.isWire) meshes.push(object);
+  });
+  return meshes;
+}
+
+/**
  * Adds a line twin as a child of every mesh under root: outlines (LineSegments over the
  * mesh's creases) for line materials, shader-drawn lines for the materials of scene/lines.js
  * (triangle edges, or polygon outlines per the material's userData.wirePolygons), the plain
@@ -35,13 +50,7 @@ const edgesOf = memoByGeometry((geometry) => new THREE.EdgesGeometry(geometry, W
  * @param {boolean} [shadows] receive them (false: far outside the shadow box)
  */
 export function addWireframe(root, material, shadows = true) {
-  /** @type {THREE.Mesh[]} */
-  const meshes = [];
-  root.traverse((object) => {
-    if (object instanceof THREE.Mesh && !object.userData.isWire) meshes.push(object);
-  });
-
-  for (const mesh of meshes) {
+  for (const mesh of solidMeshes(root)) {
     const geometry = wireGeometry(mesh.geometry, material);
     const wire =
       material instanceof THREE.LineBasicMaterial

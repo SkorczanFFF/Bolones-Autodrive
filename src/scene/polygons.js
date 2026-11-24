@@ -15,6 +15,10 @@ import { WIRE } from "../config.js";
 
 /** Segments of a rounded corner (a window's, a screen's). */
 export const CORNER_STEPS = 4;
+/** Stations along and round a car's body at least this close, metres (a crash bends them). */
+export const STATION = 0.15;
+/** Windows, lamps and marks sit this far off the body, so they draw their own outline, metres. */
+export const OFFSET = 0.005;
 /** Segments of a round lamp (rectangle() with `round` 0.5). */
 const LAMP_SEGMENTS = 12;
 /** How far the glass sits in behind the pillars and frames, metres. */
@@ -654,16 +658,30 @@ export function zip(outer, inner, angle) {
     return { points: [...points, points[0]], angles: [...turned, turned[0] + 2 * Math.PI] };
   };
   const [o, w] = [unwrap(outer), unwrap(inner)];
-  /** @type {Point[][]} */
+  return mirroredHalves(zipBy(o.points, w.points, o.angles, w.angles));
+}
+
+/**
+ * Triangles between two chains of points from one end to the other, every point a corner, zipped
+ * in the order of their keys (how far along, or round, each is).
+ *
+ * @template T
+ * @param {T[]} a
+ * @param {T[]} b
+ * @param {number[]} ka a's keys, rising
+ * @param {number[]} kb b's keys, rising
+ * @returns {T[][]}
+ */
+export function zipBy(a, b, ka, kb) {
+  /** @type {T[][]} */
   const triangles = [];
   let [i, j] = [0, 0];
-  while (i < o.points.length - 1 || j < w.points.length - 1) {
-    const along =
-      j === w.points.length - 1 || (i < o.points.length - 1 && o.angles[i + 1] <= w.angles[j + 1]);
-    if (along) triangles.push([o.points[i], o.points[++i], w.points[j]]);
-    else triangles.push([o.points[i], w.points[j + 1], w.points[j++]]);
+  while (i < a.length - 1 || j < b.length - 1) {
+    if (j === b.length - 1 || (i < a.length - 1 && ka[i + 1] <= kb[j + 1])) {
+      triangles.push([a[i], a[++i], b[j]]);
+    } else triangles.push([a[i], b[j + 1], b[j++]]);
   }
-  return mirroredHalves(triangles);
+  return triangles;
 }
 
 /**
@@ -676,15 +694,8 @@ export function zip(outer, inner, angle) {
  * @returns {Point[][]}
  */
 export function ladder(bottom, top) {
-  /** @type {Point[][]} */
-  const triangles = [];
-  let [i, j] = [0, 0];
-  while (i < bottom.length - 1 || j < top.length - 1) {
-    const up = i === bottom.length - 1 || (j < top.length - 1 && top[j + 1][0] < bottom[i + 1][0]);
-    if (up) triangles.push([bottom[i], top[j + 1], top[j++]]);
-    else triangles.push([bottom[i], bottom[++i], top[j]]);
-  }
-  return mirroredHalves(triangles);
+  const along = (/** @type {Point[]} */ row) => row.map(([x]) => x);
+  return mirroredHalves(zipBy(bottom, top, along(bottom), along(top)));
 }
 
 /**

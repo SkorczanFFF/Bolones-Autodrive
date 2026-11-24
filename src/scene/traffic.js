@@ -1,8 +1,11 @@
 import * as THREE from "three";
 import { TRAFFIC } from "../config.js";
 import {
+  OFFSET,
+  STATION,
   bars,
   builtIn,
+  byFaces,
   counterClockwise,
   creaseRuns,
   densify,
@@ -58,8 +61,6 @@ const HOLE_SEGMENTS = 8;
 const [RIM_DEPTH, HUBCAP] = [0.04, 0.03];
 /** Bumper thickness, metres. */
 const BUMPER_DEPTH = 0.06;
-/** Windows, lamps and marks sit this far off the body, so they draw their own outline. */
-const OFFSET = 0.005;
 /** Window frame width around the windscreen and the rear window, metres. */
 const FRAME = 0.07;
 /**
@@ -73,8 +74,6 @@ const CROWN = 0.035;
 const ACROSS = [-1, -FACET, 0, FACET, 1];
 /** The drip rail along each side of the roof, this far under its edge, metres. */
 const RAIL = [0.012, 0.03];
-/** Stations along the body and the cabin at least this close, metres (a crash bends them). */
-const STATION = 0.15;
 /** How often a decal samples the body under it, and how far off it it sits, metres. */
 const [DECAL_STEP, DECAL_OFFSET] = [0.03, 0.01];
 /** How far a decal may stray from the body under it between the points it keeps, metres. */
@@ -83,21 +82,15 @@ const DECAL_TOLERANCE = 0.002;
 const FLAT_SCREEN = { bow: [0, 0], corners: [0, 0] };
 
 /**
- * How far a car reaches out from its centre line, metres: half its width, or its mirrors.
+ * How far the widest of the cars reaches out from its centre line, mirrors and all (their
+ * `reach`), in scene units: the minigame keeps lanes this far from the centre.
  *
- * @param {TrafficModel | import("./trafficModels.js").VanModel} model
+ * @param {THREE.Object3D[]} models createTrafficModels()
  */
-export function halfReach({ width, mirrors }) {
-  const mirror = mirrors ? Math.abs(mirrors.centre[2]) + mirrors.head[0] / 2 : 0;
-  return Math.max(width / 2, mirror);
-}
-
-/**
- * Half the widest car, mirrors and all, in scene units: the minigame keeps lanes this far from
- * the centre.
- */
-export function trafficHalfWidth() {
-  return Math.max(...Object.values(TRAFFIC_MODELS).map(halfReach)) * TRAFFIC.scale;
+export function widestReach(models) {
+  return Math.max(
+    ...models.map(({ userData: { reach } }) => Math.max(-reach.min[0], reach.max[0])),
+  );
 }
 
 /**
@@ -105,9 +98,9 @@ export function trafficHalfWidth() {
  * one template per TRAFFIC_MODELS entry; the front faces +z (towards the camera). The body is one
  * geometry (one draw call plus its wireframe twin), with `userData.polygons` like the FBX models
  * (core/fbx.js), so its lines follow the designed outlines, not every triangle. Each wheel and
- * bumper is a node of its own (`userData.part`; a wheel `rigid`), so a crash can move a wheel
- * whole and tear either off; each headlamp is a mesh of its own ("lamp"), so a crash can put out
- * just the ones it crushes.
+ * bumper is a node of its own (`userData.part`), so a crash can move a wheel whole and tear either
+ * off; each headlamp is a mesh of its own ("lamp"), so a crash can put out just the ones it
+ * crushes.
  *
  * The local hitbox (the bounds of the body, its wheels and bumpers: the crash's box for the
  * physics) is in `userData.hitbox` as { min, max } arrays: clone() copies userData through JSON,
@@ -1095,7 +1088,7 @@ function mirrorGeometry({ sides, head, depth, corners, centre, arms, arm }, mode
         ),
       );
       rod.translate(...a.add(b).multiplyScalar(0.5).toArray());
-      parts.push(builtIn(rod, (t) => Math.floor(t / 2))); // two triangles a face
+      parts.push(byFaces(rod));
     }
   }
   return centred(withPolygons(parts), model);
@@ -1220,7 +1213,7 @@ function bumper({ y, height, plan, guards, depth: thick = BUMPER_DEPTH }, end, b
     for (const side of [-1, 1]) {
       const box = new THREE.BoxGeometry(guards.width, guards.y[1] - guards.y[0], depth);
       box.translate(side * guards.x, (guards.y[0] + guards.y[1]) / 2, end + (back * depth) / 2);
-      parts.push(builtIn(box, (t) => Math.floor(t / 2))); // two triangles a face
+      parts.push(byFaces(box));
     }
   }
   return mergeParts(parts);

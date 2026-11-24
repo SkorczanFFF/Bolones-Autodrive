@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { TRAFFIC } from "../src/config.js";
 import { prism } from "../src/scene/polygons.js";
 import { dent, dentable } from "../src/scene/dents.js";
-import { createTrafficModels, halfReach, trafficHalfWidth } from "../src/scene/traffic.js";
+import { createTrafficModels, widestReach } from "../src/scene/traffic.js";
 import { TRAFFIC_MODELS } from "../src/scene/trafficModels.js";
 import { vanGeometry } from "../src/scene/van.js";
 import { testMaterials as materials } from "./helpers.js";
@@ -180,8 +180,6 @@ describe("traffic models", () => {
       const wheels = parts.filter(({ userData }) => userData.part === "wheel");
       const bumpers = parts.filter(({ userData }) => userData.part === "bumper");
       expect([wheels.length, bumpers.length]).toEqual([4, 2]);
-      expect(wheels.every(({ userData }) => userData.rigid)).toBe(true);
-      expect(bumpers.some(({ userData }) => userData.rigid)).toBe(false);
       for (const wheel of wheels) {
         // round the axle: the node sits in the middle of the wheel, on the ground
         const bounds = new THREE.Box3().setFromObject(wheel);
@@ -221,7 +219,6 @@ describe("traffic models", () => {
       expect(bounds.max.x, label).toBeGreaterThan(hitbox.max[0]); // the driver's side, out
       expect(bounds.min.y, label).toBeGreaterThan(0.5 * TRAFFIC.scale); // up by the windows
       expect(reach.max[0], label).toBeCloseTo(bounds.max.x, 5); // the Bolones must not touch them
-      expect(reach.max[0] / TRAFFIC.scale, label).toBeLessThanOrEqual(halfReach(configs[i]) + 1e-4);
       for (const k of [1, 2]) {
         // otherwise as the hitbox
         expect(reach.min[k], label).toBeCloseTo(hitbox.min[k], 5);
@@ -231,9 +228,16 @@ describe("traffic models", () => {
   });
 
   it("keeps lanes clear of the widest car, mirrors and all", () => {
-    const widest = Math.max(...configs.map(halfReach));
-    expect(widest).toBeGreaterThan(Math.max(...configs.map((config) => config.width)) / 2);
-    expect(trafficHalfWidth()).toBeCloseTo(widest * TRAFFIC.scale);
+    const widest = widestReach(models);
+    for (const model of models) {
+      const mirrors = /** @type {THREE.Object3D} */ (model.getObjectByName("mirrors"));
+      const { min, max } = new THREE.Box3().setFromObject(mirrors);
+      expect(widest).toBeGreaterThanOrEqual(Math.max(-min.x, max.x) - 1e-6);
+      expect(widest).toBeGreaterThanOrEqual(model.userData.hitbox.max[0]);
+    }
+    expect(widest).toBeGreaterThan(
+      Math.max(...configs.map(({ width }) => width / 2)) * TRAFFIC.scale,
+    );
   });
 
   it("give decals, bumpers and mirrors corners no further apart than a crash bends (15 cm)", () => {

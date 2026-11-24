@@ -4,7 +4,7 @@ import { easeInOutCubic, settle } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
 import { mountWheel, wheelsOf } from "./rig.js";
 import { withPolygons } from "./polygons.js";
-import { dress } from "./wire.js";
+import { dress, solidMeshes } from "./wire.js";
 
 /** @typedef {-1 | 0 | 1} SteerInput left, none, right */
 
@@ -24,9 +24,7 @@ const PROUD = 0.01; // units the fuel cap stands off the wing
  */
 function addFuelCap(car, body, solid, wire) {
   const { at, radius } = CAR.fuelCap;
-  /** @type {THREE.Mesh[]} */
-  const meshes = [];
-  body.traverse((o) => o instanceof THREE.Mesh && !o.userData.isWire && meshes.push(o));
+  const meshes = solidMeshes(body);
   const from = car.localToWorld(new THREE.Vector3(10, at[1], at[0]));
   const left = new THREE.Vector3(-1, 0, 0).transformDirection(car.matrixWorld);
   const [hit] = new THREE.Raycaster(from, left).intersectObjects(meshes, false);

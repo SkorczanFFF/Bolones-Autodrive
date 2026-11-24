@@ -3,18 +3,19 @@ import { CAR, MINIGAME, SPAWN, SPEED, TEXT, TRAFFIC, WORLD } from "../config.js"
 import { createRandom, pick, randomIn, randomInt } from "../core/random.js";
 import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
-import { createTrafficModels, trafficHalfWidth } from "../scene/traffic.js";
+import { createTrafficModels, widestReach } from "../scene/traffic.js";
+import { solidMeshes } from "../scene/wire.js";
 import { createCrash } from "./crash.js";
 
-/** @typedef {import("./game.js").Mode} Mode */
+/** @typedef {import("../config.js").Mode} Mode */
 
 /**
  * The lanes the traffic keeps to, x from and to: left and right of the centre safe zone, inside
  * the car's steering range.
  *
- * @param {number} [halfWidth] half the widest obstacle
+ * @param {number} halfWidth half the widest obstacle (widestReach)
  */
-function lanesOf(halfWidth = trafficHalfWidth()) {
+function lanesOf(halfWidth) {
   const { innerGap, outerMargin, safeZone } = MINIGAME;
   const reach = CAR.steer.maxOffset;
   const minLaneWidth = 0.1; // v1 guard for tiny steering ranges
@@ -32,10 +33,10 @@ function lanesOf(halfWidth = trafficHalfWidth()) {
  * Obstacle x positions from v1: obstacles fill one lane (left or right of the centre safe zone)
  * for a batch of 1-3, then switch lanes.
  *
- * @param {number} [halfWidth] half the widest obstacle
+ * @param {number} halfWidth half the widest obstacle (widestReach)
  * @param {() => number} [rng]
  */
-export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.random) {
+export function createLanePicker(halfWidth, rng = Math.random) {
   const { between, randomInt } = createRandom(rng);
   const { batch } = MINIGAME;
   const lanes = lanesOf(halfWidth);
@@ -67,7 +68,7 @@ export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.rand
  * @param {"hitbox" | "reach"} [which]
  */
 function hitboxOf(car, target, which = "hitbox") {
-  const { min, max } = car.userData[which] ?? car.userData.hitbox;
+  const { min, max } = car.userData[which];
   target.min.fromArray(min);
   target.max.fromArray(max);
   return target;
@@ -87,10 +88,7 @@ function trunkOf(palm) {
   const toPalm = palm.matrixWorld.clone().invert();
   /** @type {THREE.Vector3[]} */
   const points = [];
-  /** @type {THREE.Mesh[]} */
-  const meshes = [];
-  palm.traverse((o) => o instanceof THREE.Mesh && !o.userData.isWire && meshes.push(o));
-  for (const mesh of meshes) {
+  for (const mesh of solidMeshes(palm)) {
     const position = mesh.geometry.getAttribute("position");
     const matrix = toPalm.clone().multiply(mesh.matrixWorld);
     for (let i = 0; i < position.count; i++) {
@@ -110,7 +108,7 @@ function trunkOf(palm) {
  * @property {number} parts wheels and bumpers torn off
  * @property {number} posts palms and rocks hit
  * @property {number} others cars in the wreck besides the Bolones: the points are multiplied by it
- * @property {number} score MINIGAME.crashMode
+ * @property {number} score MINIGAME.modes.crash
  */
 
 /**
@@ -125,16 +123,11 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   /** The colour of a wireframe material. @param {THREE.Material} material */
   const colorOf = (material) => /** @type {THREE.MeshBasicMaterial} */ (material).color;
   const models = createTrafficModels(materials);
-  const nextX = createLanePicker();
-  const lanes = lanesOf();
+  const halfWidth = widestReach(models);
+  const nextX = createLanePicker(halfWidth);
+  const lanes = lanesOf(halfWidth);
   const [minInterval, maxInterval] = MINIGAME.interval;
-  const { overtake } = MINIGAME;
-  /** How the traffic's drivers react and brake after a crash, by the minigame. */
-  const habits = {
-    dodge: undefined,
-    crash: MINIGAME.crashMode.drivers,
-    overtake: overtake.drivers,
-  };
+  const { overtake } = MINIGAME.modes;
   /** @type {Mode} */
   let mode = "dodge";
   let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
@@ -254,6 +247,16 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   };
 
   /**
+   * How the traffic's drivers react and brake after a crash (MINIGAME.modes' `drivers`).
+   *
+   * @returns {import("./crash/drivers.js").Driving | undefined}
+   */
+  const drivingOf = () => {
+    const rules = MINIGAME.modes[mode];
+    return "drivers" in rules ? rules.drivers : undefined;
+  };
+
+  /**
    * A car of the traffic in the crash, at its speed over the road.
    *
    * @param {THREE.Object3D} other
@@ -267,7 +270,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     color: colorOf(materials.wire.traffic),
     onCrash: lampsOut(other),
     label: other.userData.label,
-    driving: habits[mode],
+    driving: drivingOf(),
   });
 
   /**
@@ -374,7 +377,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       reset();
       mode = value;
       platoon = 0;
-      oncoming.density = mode === "crash" ? MINIGAME.crashMode.density : 1;
+      oncoming.density = MINIGAME.modes[mode].density;
       if (mode !== "overtake") return;
       sameWay.spawning = true;
       sameWay.prewarm(0.25, -overtake.ahead);
@@ -392,7 +395,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     get damage() {
       if (!crash) return null;
       const { energy, cars, parts, posts } = crash.tally;
-      const { crush, part, post } = MINIGAME.crashMode;
+      const { crush, part, post } = MINIGAME.modes.crash;
       const kJ = Math.round(energy / 1000);
       const others = cars - 1;
       return {

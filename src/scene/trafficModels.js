@@ -35,7 +35,7 @@
  * @property {string} label
  * @property {number} mass kg, against the Bolones' in a crash (game/crash.js)
  * @property {number} length overall, bumper to bumper
- * @property {number} width overall: the lanes keep clear of it
+ * @property {number} width overall, the body traced to it
  * @property {{ radius: number, width: number, axles: number[], track: number[], arches: Point[], rim: Rim }} wheel
  *   tyres; per axle (rear, front): x, track and wheel arch (half an ellipse: half its length, its
  *   height above the wheel centre)
@@ -106,7 +106,7 @@
  * @property {string} label
  * @property {number} mass kg
  * @property {number} length overall, from the tail lamps to the front bumper
- * @property {number} width overall: the lanes keep clear of it
+ * @property {number} width overall, the body traced to it
  * @property {Omit<TrafficModel["wheel"], "arches">} wheel tyres; per axle (rear, front): x, track
  * @property {Van} van
  * @property {{ front: Bumper, rear: Bumper }} bumpers

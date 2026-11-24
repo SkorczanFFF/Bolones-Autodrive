@@ -4,7 +4,8 @@ import { MINIGAME, PALETTE, SPEED } from "../config.js";
 import { settle } from "../core/tween.js";
 import { crumple, reaches } from "../scene/crumple.js";
 import { createDebris } from "../scene/debris.js";
-import { wheelsOf } from "../scene/rig.js";
+import { partOf, wheelsOf } from "../scene/rig.js";
+import { solidMeshes } from "../scene/wire.js";
 import { boxOf, endOn, overlap } from "./crash/boxes.js";
 import { createCrushes, reachOf } from "./crash/crush.js";
 import { createDriver, hardest, lookAhead, stopping } from "./crash/drivers.js";
@@ -282,12 +283,11 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     // its middle and its size, in its own frame
     const toNode = node.matrixWorld.clone().invert();
     const bounds = new THREE.Box3();
-    node.traverse((mesh) => {
-      if (!(mesh instanceof THREE.Mesh) || mesh.userData.isWire) return;
+    for (const mesh of solidMeshes(node)) {
       mesh.geometry.computeBoundingBox();
       const box = /** @type {THREE.Box3} */ (mesh.geometry.boundingBox).clone();
       bounds.union(box.applyMatrix4(toNode.clone().multiply(mesh.matrixWorld)));
-    });
+    }
     const [at, turn, size] = [new THREE.Vector3(), new THREE.Quaternion(), new THREE.Vector3()];
     node.matrixWorld.decompose(at, turn, size);
     const middle = bounds.getCenter(new THREE.Vector3());
@@ -593,16 +593,7 @@ const translation = (v) => new THREE.Matrix4().makeTranslation(v);
  */
 function underside(object) {
   const bounds = new THREE.Box3();
-  /** Whether a node is in a wheel or a bumper. @param {THREE.Object3D | null} node */
-  const inPart = (node) => {
-    for (let up = node; up && up !== object; up = up.parent) if (up.userData.part) return true;
-    return false;
-  };
-  object.traverse((node) => {
-    if (node instanceof THREE.Mesh && !node.userData.isWire && !inPart(node)) {
-      bounds.expandByObject(node);
-    }
-  });
+  for (const mesh of solidMeshes(object)) if (!partOf(mesh, object)) bounds.expandByObject(mesh);
   return object.worldToLocal(new THREE.Vector3(0, bounds.min.y, 0)).y;
 }
 

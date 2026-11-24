@@ -189,6 +189,11 @@ function nearDistances(position, hidden, polygon) {
   const at = (i) => new THREE.Vector3().fromBufferAttribute(position, i);
   /** @param {number} t @param {number} v */
   const corner = (t, v) => `${polygon[t]} ${at(3 * t + v).toArray()}`;
+  /** The end of an edge (by its first corner) that is not `from`. */
+  const otherEnd = (/** @type {number} */ edge, /** @type {THREE.Vector3} */ from) => {
+    const [a, b] = [1, 2].map((s) => at(edge - (edge % 3) + ((edge + s) % 3)));
+    return a.equals(from) ? b : a;
+  };
 
   /** @type {Map<string, number[]>} polygon corner -> its visible edges (3 * triangle + k) */
   const through = new Map();
@@ -223,8 +228,7 @@ function nearDistances(position, hidden, polygon) {
         if (Math.floor(edge / 3) === t || seen.has(edge)) continue;
         seen.add(edge);
         const from = points[v];
-        const [a, b] = [1, 2].map((s) => at(edge - (edge % 3) + ((edge + s) % 3)));
-        const to = a.equals(from) ? b : a;
+        const to = otherEnd(edge, from);
         const along = to.clone().sub(from);
         const length = along.length();
         // where the outline goes on straight past the far end, its line may run on as far as it
@@ -232,15 +236,14 @@ function nearDistances(position, hidden, polygon) {
         const ahead = along.clone().divideScalar(length);
         let [last, end, further] = [edge, to, 0];
         for (let step = 0; step < 64; step++) {
+          let beyond = end;
           const next = (through.get(`${polygon[t]} ${end.toArray()}`) ?? []).find((n) => {
             if (n === last) return false;
-            const [c, d] = [1, 2].map((s) => at(n - (n % 3) + ((n + s) % 3)));
-            const onward = (c.equals(end) ? d : c).sub(end);
+            beyond = otherEnd(n, end);
+            const onward = beyond.clone().sub(end);
             return onward.dot(ahead) > STRAIGHT * onward.length();
           });
           if (next === undefined) break;
-          const [c, d] = [1, 2].map((s) => at(next - (next % 3) + ((next + s) % 3)));
-          const beyond = c.equals(end) ? d : c;
           further += beyond.clone().sub(end).dot(ahead);
           [last, end] = [next, beyond];
         }

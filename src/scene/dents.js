@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { evenNormals } from "./polygons.js";
-import { wireGeometry } from "./wire.js";
+import { solidMeshes, wireGeometry } from "./wire.js";
 
 /**
  * @typedef {object} Dent
@@ -38,13 +38,8 @@ const moverOf = new WeakMap();
  * @returns {Dentable[]}
  */
 export function dentable(root) {
-  /** @type {THREE.Mesh[]} */
-  const meshes = [];
-  root.traverse((object) => {
-    if (object instanceof THREE.Mesh && !object.userData.isWire) meshes.push(object);
-  });
   const p = new THREE.Vector3();
-  return meshes.map((mesh) => {
+  return solidMeshes(root).map((mesh) => {
     const dents = dentsOf.get(mesh) ?? {
       original: mesh.geometry,
       originalWire: wireOf(mesh)?.geometry,

@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CAR, MINIGAME, SPEED, WORLD } from "../src/config.js";
 import { ready } from "../src/game/crash.js";
 import { createLanePicker, createMinigame } from "../src/game/minigame.js";
-import { trafficHalfWidth } from "../src/scene/traffic.js";
+import { createTrafficModels, widestReach } from "../src/scene/traffic.js";
 import { testCar, testMaterials } from "./helpers.js";
 
 /** Deterministic pseudo-random sequence. @param {number} seed */
@@ -13,7 +13,7 @@ function rng(seed) {
 }
 
 describe("lane picker", () => {
-  const halfWidth = trafficHalfWidth();
+  const halfWidth = widestReach(createTrafficModels(testMaterials()));
   const reach = CAR.steer.maxOffset;
 
   it("keeps traffic inside the steering range and outside the centre safe zone", () => {
@@ -104,14 +104,14 @@ describe("overtake", () => {
       /** @type {any} */ ({ scene, car, materials: testMaterials(), palms: [], rocks: [] }),
     );
     const cars = () => scene.children.filter(({ userData }) => userData.label);
-    const { speed, platoon, window, group } = MINIGAME.overtake;
+    const { speed, platoon, window, group } = MINIGAME.modes.overtake;
     minigame.play("overtake");
     const lined = cars();
     expect(lined.length).toBeGreaterThan(0); // lined up ahead, going its way
     for (const other of lined) {
       expect(other.userData.sameWay).toBe(true);
       expect(other.rotation.y).toBe(Math.PI);
-      expect(other.position.z).toBeLessThan(-MINIGAME.overtake.ahead + 0.5 * SPEED.traffic);
+      expect(other.position.z).toBeLessThan(-MINIGAME.modes.overtake.ahead + 0.5 * SPEED.traffic);
     }
     // none of them reaches the Bolones (from z -4 to 4) in the countdown, at the start speed
     for (let t = 0; t < MINIGAME.countdown; t += 1 / 60) {

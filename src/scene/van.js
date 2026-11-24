@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import {
+  OFFSET,
+  STATION,
   CORNER_STEPS,
   bars,
   builtIn,
@@ -18,6 +20,7 @@ import {
   rectangle,
   rounded,
   withPolygons,
+  zipBy,
 } from "./polygons.js";
 
 /**
@@ -28,15 +31,12 @@ import {
  * @typedef {{ x: number, y: number, w: number }} Spot a point on the body: along, up, across
  */
 
-/** Stations along and round the body at least this close, metres (a crash bends them). */
-const STATION = 0.15;
 /**
  * Points inside a flat panel for a crash to bend it (polygons.js fillPoints): every STATION
  * along, every other one up; the stations round it do the rest.
  */
 const SPARSE = /** @type {const} */ ([STATION, 0.03, 2 * STATION]);
-/** Marks sit this far off the body, lamps twice as far, so they draw their own outline. */
-const OFFSET = 0.005;
+/** Marks sit OFFSET off the body, lamps twice as far. */
 /** The roof's corners, rounded in plan, keep at least this radius, metres. */
 const MIN_RADIUS = 0.02;
 /** Points closer than this are one, metres; a band is closed off where an arch gets this near. */
@@ -672,10 +672,7 @@ export function vanGeometry(model) {
       (y[0] + y[1]) / 2,
       x,
     );
-    add(
-      builtIn(flap, (t) => Math.floor(t / 2)),
-      own("mudflap"),
-    );
+    add(byFaces(flap), own("mudflap"));
   }
   {
     const { x, half: frameHalf, y } = van.frame;
@@ -980,20 +977,7 @@ function zipChains(a, b) {
     );
     return lengths.map((l) => l / lengths[lengths.length - 1]);
   };
-  const [sa, sb] = [shares(a), shares(b)];
-  /** @type {THREE.Vector3[][]} */
-  const triangles = [];
-  let [i, j] = [0, 0];
-  while (i < a.length - 1 || j < b.length - 1) {
-    if (j === b.length - 1 || (i < a.length - 1 && sa[i + 1] <= sb[j + 1])) {
-      triangles.push([a[i], a[i + 1], b[j]]);
-      i++;
-    } else {
-      triangles.push([a[i], b[j + 1], b[j]]);
-      j++;
-    }
-  }
-  return triangles;
+  return zipBy(a, b, shares(a), shares(b));
 }
 
 /**

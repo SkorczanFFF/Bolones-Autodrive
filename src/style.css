@@ -762,11 +762,11 @@ kbd {
   display: none;
 }
 
-/* padding and border stay (transparent), so the icon does not move */
+/* the eye alone, faded but clear, in a faint frame (padding and border stay: it does not move) */
 [data-menu="hidden"] .hud__toggle {
-  opacity: 0.3;
+  opacity: 0.75;
   background-color: transparent;
-  border-color: transparent;
+  border-color: color-mix(in srgb, var(--aqua) 35%, transparent);
   box-shadow: none;
   transform: none;
 }

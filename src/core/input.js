@@ -1,4 +1,4 @@
-import { ACTIONS } from "../config.js";
+import { ACTIONS, SCREEN } from "../config.js";
 
 /** @typedef {import("../config.js").Action} Action */
 /** @typedef {(action: Action) => void} ActionListener */
@@ -100,6 +100,43 @@ export function createInput(target = window) {
     hold(action, down, holder = "pointer") {
       if (down) press(action, holder);
       else release(action, holder);
+    },
+    /**
+     * Two quick taps of one finger on `element` press `action` (a drag, a pinch or a long press
+     * do not count): on a touch screen, what a key does.
+     *
+     * @param {HTMLElement} element
+     * @param {Action} action
+     */
+    doubleTap(element, action) {
+      const { within, slop } = SCREEN.doubleTap;
+      let fingers = 0;
+      /** @type {{ x: number, y: number, time: number } | null} this tap's start */
+      let down = null;
+      let last = { x: 0, y: 0, time: -Infinity }; // the last tap's end
+      const near = (/** @type {PointerEvent} */ e, /** @type {{ x: number, y: number }} */ p) =>
+        Math.hypot(e.clientX - p.x, e.clientY - p.y) <= slop;
+      element.addEventListener("pointerdown", (e) => {
+        if (e.pointerType !== "touch") return;
+        fingers++;
+        down = fingers === 1 ? { x: e.clientX, y: e.clientY, time: e.timeStamp } : null;
+      });
+      element.addEventListener("pointercancel", (e) => {
+        if (e.pointerType !== "touch") return;
+        fingers = Math.max(0, fingers - 1);
+        down = null;
+      });
+      element.addEventListener("pointerup", (e) => {
+        if (e.pointerType !== "touch") return;
+        fingers = Math.max(0, fingers - 1);
+        const tap = down && near(e, down) && e.timeStamp - down.time <= within * 1000;
+        down = null;
+        if (!tap) return void (last.time = -Infinity);
+        if (e.timeStamp - last.time <= within * 1000 && near(e, last)) {
+          last.time = -Infinity;
+          dispatch(action);
+        } else last = { x: e.clientX, y: e.clientY, time: e.timeStamp };
+      });
     },
     /** @param {Action} action */
     isHeld: (action) => (holders.get(action)?.size ?? 0) > 0,

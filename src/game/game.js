@@ -144,6 +144,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     const from = camera.position.clone();
     const fromTarget = controls.target.clone();
     const fromMax = controls.maxDistance; // a wreck's, pulled back further
+    controls.maxPolarAngle = SCENE.controls.maxPolarAngle;
     cameraTween = tweens.add({
       duration: SCENE.camera.transition,
       onUpdate: (t) => {
@@ -281,6 +282,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         shakeOffset.set(0, 0, 0);
         cameraTween?.cancel();
         controls.maxDistance = MINIGAME.crash.orbit;
+        // around a wreck the camera stays above its middle, so never under the road
+        controls.maxPolarAngle = Math.PI / 2;
         controls.enabled = true;
         input.arm("next", true);
         break;

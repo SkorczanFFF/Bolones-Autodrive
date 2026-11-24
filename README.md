@@ -32,7 +32,7 @@ The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, u
 
 All menu and game over buttons are clickable too. Drag with the mouse to orbit the camera outside the minigame and around a wreck, scroll to pull back.
 
-On touch screens (phones, tablets without a keyboard) orbit with one finger, pinch to zoom and recolor the scene in the side panel. Free ride and the minigames have the keys on screen: hold ← / → on the left to steer, and in a minigame ↑ (gas) and, in Overtake, ↓ (brake) on the right, also after a crash while the wreck can be driven on. The minigames are played sideways: full screen and turned where the browser allows it; held upright, a game waits for the phone to turn.
+On touch screens (phones, tablets without a keyboard) orbit with one finger, pinch to zoom and recolor the scene in the side panel. Free ride and the minigames have the keys on screen: hold ← / → on the left to steer, and in a minigame ↑ (gas) and, in Overtake, ↓ (brake) on the right, also after a crash while the wreck can be driven on. The minigames are played sideways: full screen and turned where the browser allows it; held upright, a game waits for the phone to turn. A double tap on the scene hides or shows the menu and game over, as **H** does.
 
 ---
 

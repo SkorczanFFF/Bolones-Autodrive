@@ -63,6 +63,10 @@ lets you recolor and tweak everything.
   and how to look around at the very bottom; hidden (H, or the eye) it keeps both, to watch the
   wreck. ESC first brings back what H hid, then leaves.
 - The SkorczanFFF link in the menu leads to the author's GitHub profile, not to the repository.
+- The browser tab's icon is the "B" of the logo.
+- Hidden, the menu and game over leave a clearer eye in the corner to bring them back; on a touch
+  screen a double tap on the scene hides or shows them too.
+- Turned round a wreck, the camera no longer goes under the road: it stays above the car in view.
 - The score no longer grows and shrinks: a new number lights up a moment, and game over's score
   blinks like a neon sign, as an 80s arcade would.
 - Tyres grip sideways as on dry asphalt (from 0.8 to 1 g): a car sliding sideways stops sooner.

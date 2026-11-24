@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createInput } from "../src/core/input.js";
-import { ACTIONS } from "../src/config.js";
+import { ACTIONS, SCREEN } from "../src/config.js";
 
 /**
  * @param {EventTarget} target
@@ -131,5 +131,36 @@ describe("input", () => {
     key(target, "keyup", NUMPAD_ENTER);
     expect(input.isHeld("start")).toBe(false);
     expect(released).toHaveBeenCalledTimes(1);
+  });
+
+  it("presses an action on a double tap of one finger, not on a drag, a slow pair or a mouse", () => {
+    const input = createInput(new EventTarget());
+    const scene = /** @type {HTMLElement} */ (/** @type {unknown} */ (new EventTarget()));
+    input.doubleTap(scene, "menu");
+    const pressed = vi.fn();
+    input.onPress(pressed);
+    const { within, slop } = SCREEN.doubleTap;
+    /** @param {string} type @param {number} time s @param {number} [x] @param {string} [kind] */
+    const pointer = (type, time, x = 100, kind = "touch") => {
+      const event = Object.assign(new Event(type), { pointerType: kind, clientX: x, clientY: 50 });
+      Object.defineProperty(event, "timeStamp", { value: time * 1000 });
+      scene.dispatchEvent(event);
+    };
+    /** @param {number} time @param {number} [x] @param {number} [to] @param {string} [kind] */
+    const tap = (time, x = 100, to = x, kind = "touch") => {
+      pointer("pointerdown", time, x, kind);
+      pointer("pointerup", time + 0.05, to, kind);
+    };
+    tap(0);
+    tap(within / 2);
+    expect(pressed).toHaveBeenCalledWith("menu");
+    pressed.mockClear();
+    tap(10);
+    tap(10 + within * 2); // too slow
+    tap(20, 100, 100 + slop * 3); // a drag
+    tap(20 + within / 2);
+    tap(30, 100, 100, "mouse");
+    tap(30 + within / 2, 100, 100, "mouse");
+    expect(pressed).not.toHaveBeenCalled();
   });
 });

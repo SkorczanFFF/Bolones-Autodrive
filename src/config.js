@@ -786,6 +786,9 @@ export const PICKER = {
 /** Screens the UI adapts to (core/device.js). */
 export const SCREEN = {
   phone: 600, // px; narrower (the HUD stacks its buttons) or lower (the scene panel starts folded)
+  /** A double tap on the scene (core/input.js): taps at most `within` s apart, neither moving
+   * nor landing further than `slop` px (a drag turns the camera instead). */
+  doubleTap: { within: 0.35, slop: 24 },
 };
 
 export const STORAGE = {
@@ -873,7 +876,7 @@ export const TEXT = {
   cars: "CARS",
   tally: { crush: "CRUSH", parts: "PARTS OFF", posts: "PALMS & ROCKS" },
   lookAround: "Drag to look around, scroll to pull back",
-  lookAroundTouch: "Drag to look around, pinch to pull back",
+  lookAroundTouch: "Drag to look around, pinch to pull back, tap twice to hide the rest",
   turnSideways: "Turn your phone sideways to play",
   driveOn: "drive the wreck on",
   nextCar: "Next car of the crash",

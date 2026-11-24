@@ -12,6 +12,7 @@ function setup() {
     enabled: true,
     target: new THREE.Vector3(),
     maxDistance: SCENE.controls.maxDistance,
+    maxPolarAngle: SCENE.controls.maxPolarAngle,
     update() {},
   };
   const world = { speedMultiplier: 1 };
@@ -349,12 +350,14 @@ describe("crash", () => {
     crash();
     expect(controls.enabled).toBe(true);
     expect(controls.maxDistance).toBe(MINIGAME.crash.orbit);
+    expect(controls.maxPolarAngle).toBeLessThanOrEqual(Math.PI / 2); // never under the road
     input.dispatch("menu");
     expect(hudCalls.toggleMenu).toHaveLength(1);
     run(MINIGAME.crash.lock + 1 / 60);
     input.dispatch("start");
     run(SCENE.camera.transition + 1 / 60);
     expect(controls.maxDistance).toBe(SCENE.controls.maxDistance);
+    expect(controls.maxPolarAngle).toBe(SCENE.controls.maxPolarAngle);
   });
 
   it("shakes the camera with its target, fading out", () => {

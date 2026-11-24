@@ -79,6 +79,7 @@ async function main() {
   input.onPress((action) => {
     if (action === "start" || action in MINIGAME.modes) device.sideways();
   });
+  input.doubleTap(view.renderer.domElement, "menu"); // hides or shows the menu, game over
   const waiting = () =>
     device.touch &&
     device.upright.matches &&

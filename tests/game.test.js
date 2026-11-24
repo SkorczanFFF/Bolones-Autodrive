@@ -493,23 +493,19 @@ describe("crash mode", () => {
     ).toBe(true);
   });
 
-  it("leaves the Bolones in the player's hands after the crash: ← → steer, ↑ drives on", () => {
-    const { input, minigame, run, crash } = setup();
-    crash();
-    input.hold("left", true);
-    run(0.1);
-    expect(minigame.controls).toEqual([]); // not when dodging
-    input.hold("left", false);
-    const again = setup();
-    again.crash("crash");
-    again.input.hold("left", true);
-    again.input.hold("faster", true);
-    again.run(0.1);
-    expect(again.minigame.controls.at(-1)).toEqual([-1, true]);
-    again.input.hold("left", false);
-    again.input.hold("faster", false);
-    again.run(0.1);
-    expect(again.minigame.controls.at(-1)).toEqual([0, false]);
+  it("leaves the Bolones in the player's hands after a crash, every minigame: ← → steer, ↑ on", () => {
+    for (const mode of /** @type {const} */ (["dodge", "crash", "overtake"])) {
+      const { input, minigame, run, crash } = setup();
+      crash(mode);
+      input.hold("left", true);
+      input.hold("faster", true);
+      run(0.1);
+      expect(minigame.controls.at(-1), mode).toEqual([-1, true]);
+      input.hold("left", false);
+      input.hold("faster", false);
+      run(0.1);
+      expect(minigame.controls.at(-1), mode).toEqual([0, false]);
+    }
   });
 
   it("comes at the Bolones at the start speed from the countdown on, faster every few cars", () => {

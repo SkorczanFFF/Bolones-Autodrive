@@ -537,9 +537,9 @@ export const MINIGAME = {
       gently: 0.4,
       broken: [2, 5],
     },
-    /** Crash mode: the Bolones stays the player's after the crash, a little: ← → turn its front
-     * wheels up to `steer` degrees (all the way in `turn` seconds), ↑ drives it on at `gas` m/s²
-     * up to `top` m/s until its engine stalls `stall` s after the crash; let go, it brakes
+    /** After a crash, in every minigame, the Bolones stays the player's, a little: ← → turn its
+     * front wheels up to `steer` degrees (all the way in `turn` seconds), ↑ drives it on at `gas`
+     * m/s² up to `top` m/s until its engine stalls `stall` s after the crash; let go, it brakes
      * gently. */
     player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
     keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)

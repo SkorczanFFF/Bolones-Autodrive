@@ -419,11 +419,9 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         }
 
         case "gameover": {
-          // crash mode: the Bolones is still the player's, a little, until its engine stalls
-          if (mode === "crash") {
-            minigame.control(steerInput(), input.isHeld("faster"));
-            hud.setDriveOn(minigame.engine > 0);
-          }
+          // the Bolones is still the player's, a little, until its engine stalls
+          minigame.control(steerInput(), input.isHeld("faster"));
+          hud.setDriveOn(minigame.engine > 0);
           const scale = slowMotion(stateTime);
           // the road under the camera, which rides along with the car in view
           world.speedMultiplier = minigame.wreck(dt * scale, wreckFocus) * scale;

@@ -1,0 +1,519 @@
+import RAPIER from "@dimforge/rapier3d-compat";
+import * as THREE from "three";
+import { MINIGAME, PALETTE, SPEED } from "../config.js";
+import { crumple, reaches } from "../scene/crumple.js";
+import { createDebris } from "../scene/debris.js";
+import { wheelsOf } from "../scene/rig.js";
+import { boxOf, endOn, overlap } from "./crash/boxes.js";
+import { createCrushes } from "./crash/crush.js";
+import { createDriver } from "./crash/drivers.js";
+import {
+  CARS,
+  GRAVITY,
+  IDENTITY,
+  METRE,
+  ORIGIN,
+  PARTS,
+  POSTS,
+  ROAD,
+  STEP,
+  UP,
+  groups,
+  rotation,
+  vector,
+  velocityAt,
+} from "./crash/physics.js";
+import { createPosts } from "./crash/posts.js";
+import { createVehicle } from "./crash/vehicle.js";
+
+export { ready } from "./crash/physics.js";
+
+/**
+ * @typedef {object} Car a car in a crash, on its rig (scene/rig.js)
+ * @property {THREE.Object3D} object posed by the crash; upright on the road when it starts
+ * @property {THREE.Box3} box the car in the object's frame
+ * @property {number} mass kg
+ * @property {number} [com] how high its centre of mass is, a share of its height (else
+ *   MINIGAME.crash.car.com)
+ * @property {THREE.Vector3} velocity over the road, units/s
+ * @property {THREE.Color} color its lines: the colour of its shards
+ * @property {(crushed: (point: THREE.Vector3) => boolean) => void} [onCrash] told what each crash
+ *   crushed (world space): its lamps there go out
+ * @property {string} label what it is called, for the one in view
+ *
+ * @typedef {import("./crash/posts.js").Post} Post
+ * @typedef {import("../scene/crumple.js").Hit} Hit
+ * @typedef {import("../scene/crumple.js").Dent} Dent
+ *
+ * @typedef {import("./crash/crush.js").Solid & {
+ *   color: THREE.Color,
+ *   struck: (hit: Hit, speed: number, time: number) => Dent | undefined,
+ * }} Party a car or a palm in a crash: what it does to it
+ */
+
+const SPARKS = new THREE.Color(PALETTE.headlight);
+/** Rapier's cylinder (along y) lying along x, as a wheel's axle. */
+const LYING = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+
+/**
+ * A crash (MINIGAME.crash) on Rapier, with the laws of car crashes on top:
+ * - each car is a box over its lower part with the centre of mass low (MINIGAME.crash.car), on
+ *   its wheels (crash/vehicle.js): springs, tyres gripping the road; its driver brakes or swerves
+ *   once they react (crash/drivers.js); its body scrapes the road where it comes down on it;
+ * - cars meet through their crumple zones (crash/crush.js), the palms and the rocks are posts
+ *   that do not give (crash/posts.js), every one by the road;
+ * - every crash dents both cars (scene/crumple.js), puts their lamps out, breaks a wheel of a car
+ *   hit on its side, pushes wheels askew and sheds shards and sparks (scene/debris.js) by the
+ *   energy it took up; a palm hit leans and sways;
+ * - a wheel or a bumper crushed past (MINIGAME.crash.parts) is torn off: it flies on by itself,
+ *   rolls (a wheel) to a stop, bounces off the cars, the palms and the other parts; a car down a
+ *   wheel sinks onto that corner's hub, dragging it.
+ *
+ * The camera rides along the road with the car in view (the Bolones first), at its speed forward
+ * with a lag: the road scrolls past (the scene rides along). update() returns that speed.
+ *
+ * @param {THREE.Object3D} scene where the debris goes
+ * @param {Car[]} cars the Bolones and the car it hit first (they crashed), then the other traffic
+ * @param {() => Post[]} [posts] by the road now (more come up as the camera goes on)
+ * @param {() => number} [random] what the drivers do, in [0, 1)
+ */
+export function createCrash(scene, cars, posts = () => [], random = Math.random) {
+  const {
+    stiffness,
+    cameraLag,
+    debris: spray,
+    car: build,
+    parts,
+    scrape,
+    restitution,
+  } = MINIGAME.crash;
+  const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
+  world.timestep = STEP;
+  world.lengthUnit = METRE;
+  // the tyres grip by themselves (crash/vehicle.js): the road itself is smooth, the metal on it not
+  const road = world.createCollider(
+    new RAPIER.ColliderDesc(new RAPIER.HalfSpace(UP))
+      .setFriction(0)
+      .setRestitution(restitution.contact)
+      .setCollisionGroups(groups(ROAD, CARS | PARTS)),
+    world.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
+  );
+  /** A car's sheet metal (its body, its hubs): it scrapes the road. @param {RAPIER.ColliderDesc} desc */
+  const metal = (desc) =>
+    desc
+      .setDensity(0)
+      .setFriction(scrape)
+      .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max)
+      .setRestitution(restitution.contact)
+      .setCollisionGroups(groups(CARS, ROAD | PARTS));
+
+  const debris = createDebris(GRAVITY);
+  scene.add(debris.object);
+  /** @type {(() => void)[]} */
+  const undo = [];
+  /** @type {{ set: (progress: number) => void, progress: number, shown: number }[]} */
+  const dents = [];
+  let time = 0; // game seconds since the crash
+  let lag = 0; // game seconds not stepped yet
+  let travel = 0; // how far the camera went forward since the crash: the scene rides along
+  /**
+   * A point of the road (the physics, the debris) in the scene, which rides along with the
+   * camera.
+   *
+   * @param {{ x: number, y: number, z: number }} point
+   */
+  const inScene = ({ x, y, z }, target = new THREE.Vector3()) => target.set(x, y, z + travel);
+  /** A point of the scene on the road. @param {{ x: number, y: number, z: number }} point */
+  const onRoad = ({ x, y, z }) => new THREE.Vector3(x, y, z - travel);
+
+  const pose = new THREE.Matrix4();
+  const bodies = cars.map((car, i) => {
+    const { object, box, mass, velocity, com = build.com } = car;
+    object.updateWorldMatrix(true, true);
+    const size = box.getSize(new THREE.Vector3());
+    const floor = -object.matrixWorld.elements[13]; // the road, in the object's frame
+    const height = box.max.y - floor;
+    const centre = box.getCenter(new THREE.Vector3()).setY(floor + com * height); // of mass
+    const half = new THREE.Vector3(size.x / 2, (build.box / 2) * height, size.z / 2);
+    const shift = new THREE.Vector3(0, (build.box / 2 - com) * height, 0); // box from centre
+    const [at, turn] = [new THREE.Vector3(), new THREE.Quaternion()];
+    pose.copy(object.matrixWorld).multiply(translation(centre));
+    pose.decompose(at, turn, new THREE.Vector3());
+    const { x, y, z } = half;
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(at.x, at.y, at.z)
+        .setRotation(turn)
+        .setLinvel(velocity.x, velocity.y, velocity.z)
+        // a box's, round the centre of mass
+        .setAdditionalMassProperties(
+          mass,
+          ORIGIN,
+          {
+            x: (mass * (y * y + z * z)) / 3,
+            y: (mass * (x * x + z * z)) / 3,
+            z: (mass * (x * x + y * y)) / 3,
+          },
+          IDENTITY,
+        ),
+    );
+    const rig = wheelsOf(object);
+    // on its wheels its body comes down on the road only when the springs give: from its underside
+    const bottom = rig.length ? underside(object) - centre.y : shift.y - y;
+    const top = shift.y + y;
+    const shape = RAPIER.ColliderDesc.cuboid(x, (top - bottom) / 2, z);
+    world.createCollider(metal(shape).setTranslation(0, (top + bottom) / 2, 0), body);
+    body.recomputeMassPropertiesFromColliders(); // so the crush and the springs weigh it at once
+    const vehicle = createVehicle(world, body, rig, centre, groups(CARS, ROAD));
+    const offset = translation(centre.clone().negate());
+    const entry = {
+      car,
+      body,
+      half: [x, y, z],
+      shift,
+      offset,
+      vehicle,
+      stiffness: stiffness * mass,
+      driver: createDriver(vehicle, i > 0, random),
+      color: car.color,
+      /** @param {Hit} hit @param {number} speed */
+      struck(hit, speed) {
+        // as they meet, not as last shown
+        put(car.object, offset, vector(body.translation()), rotation(body.rotation()));
+        car.onCrash?.(reaches(hit)); // before the dent moves the points
+        const dent = crumple(car.object, hit);
+        for (const { node, position, quaternion } of dent.moved) {
+          vehicle.skew(node, position, quaternion);
+        }
+        for (const node of dent.torn) tearing.push({ car: entry, node, into: hit.into, speed });
+        return dent;
+      },
+    };
+    return entry;
+  });
+  /** @typedef {(typeof bodies)[number]} Body */
+  /**
+   * Parts torn off in a physics step, taken away after it.
+   *
+   * @type {{ car: Body, node: THREE.Object3D, into: THREE.Vector3, speed: number }[]}
+   */
+  const tearing = [];
+  /**
+   * The parts torn off: on their own, clear of the car they came off (then they hit it too) or not
+   * yet.
+   *
+   * @type {{ node: THREE.Object3D, body: RAPIER.RigidBody, collider: RAPIER.Collider, from: Body, clear: boolean, half: number[], shift: THREE.Vector3, offset: THREE.Matrix4, size: THREE.Vector3 }[]}
+   */
+  const loose = [];
+  /** @type {Body[]} the cars that crashed, in the order they did: the Bolones first */
+  const wrecks = bodies.slice(0, 2);
+  /** @type {Map<RAPIER.RigidBody, { at: THREE.Vector3, turn: THREE.Quaternion }>} */
+  const before = new Map(); // where the bodies shown were a step ago
+
+  const stands = createPosts(world, posts, onRoad);
+  /** @type {Party[]} the cars, then the palms there are now */
+  let solids = bodies;
+
+  /**
+   * Puts an object where its body is, in the scene.
+   *
+   * @param {THREE.Object3D} object
+   * @param {THREE.Matrix4} offset the body's centre to the object's origin
+   * @param {THREE.Vector3} at
+   * @param {THREE.Quaternion} turn
+   * @param {THREE.Vector3} [size] its scale
+   */
+  function put(object, offset, at, turn, size = new THREE.Vector3(1, 1, 1)) {
+    place(object, pose.compose(inScene(at), turn, size).multiply(offset));
+    object.updateWorldMatrix(true, true);
+  }
+
+  /**
+   * Where a body is shown: between where it was a step ago and is now, as far as the time not
+   * stepped yet goes (steps do not come every frame in slow motion).
+   *
+   * @param {RAPIER.RigidBody} body
+   * @returns {[THREE.Vector3, THREE.Quaternion]}
+   */
+  function posed(body) {
+    const [at, turn] = [vector(body.translation()), rotation(body.rotation())];
+    const was = before.get(body);
+    if (!was) return [at, turn];
+    const t = lag / STEP;
+    return [new THREE.Vector3().lerpVectors(was.at, at, t), was.turn.clone().slerp(turn, t)];
+  }
+
+  /**
+   * Takes a part torn off a car away: it flies on by itself, thrown along the hit (and up), a
+   * wheel rolling on; a car down a wheel sinks onto that corner's hub, dragging it.
+   *
+   * @param {(typeof tearing)[number]} tear
+   */
+  function tearOff({ car, node, into, speed }) {
+    /** @type {"wheel" | "bumper"} */
+    const part = node.userData.part;
+    // its middle and its size, in its own frame
+    const toNode = node.matrixWorld.clone().invert();
+    const bounds = new THREE.Box3();
+    node.traverse((mesh) => {
+      if (!(mesh instanceof THREE.Mesh) || mesh.userData.isWire) return;
+      mesh.geometry.computeBoundingBox();
+      const box = /** @type {THREE.Box3} */ (mesh.geometry.boundingBox).clone();
+      bounds.union(box.applyMatrix4(toNode.clone().multiply(mesh.matrixWorld)));
+    });
+    const [at, turn, size] = [new THREE.Vector3(), new THREE.Quaternion(), new THREE.Vector3()];
+    node.matrixWorld.decompose(at, turn, size);
+    const middle = bounds.getCenter(new THREE.Vector3());
+    const centre = onRoad(middle.clone().applyMatrix4(node.matrixWorld));
+    const [x, y, z] = bounds.getSize(new THREE.Vector3()).multiply(size).toArray();
+    const radius = Math.max(y, z) / 2;
+    const fling = parts.fling * speed;
+    const velocity = velocityAt(car.body, centre).add(
+      new THREE.Vector3(into.x * fling, fling / 2, into.z * fling),
+    );
+    const desc = RAPIER.RigidBodyDesc.dynamic()
+      .setTranslation(centre.x, centre.y, centre.z)
+      .setRotation(turn)
+      .setLinvel(velocity.x, velocity.y, velocity.z)
+      .setCcdEnabled(true); // flung fast, never through the road
+    if (part === "wheel") {
+      // rolling on about its axle, as fast as it goes along it
+      const axle = new THREE.Vector3(1, 0, 0).applyQuaternion(turn);
+      const rolling = UP.clone().cross(velocity).divideScalar(radius);
+      desc.setAngvel(axle.multiplyScalar(axle.dot(rolling)));
+    }
+    const body = world.createRigidBody(desc);
+    const shape =
+      part === "wheel"
+        ? RAPIER.ColliderDesc.cylinder(x / 2, radius).setRotation(LYING)
+        : RAPIER.ColliderDesc.cuboid(x / 2, y / 2, z / 2);
+    const collider = world.createCollider(
+      shape
+        .setMass(parts[part].mass)
+        .setFriction(parts.friction)
+        .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max)
+        .setRestitution(restitution.contact)
+        .setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS)),
+      body,
+    );
+
+    const { parent } = node;
+    const [from, facing, scaled] = [
+      node.position.clone(),
+      node.quaternion.clone(),
+      node.scale.clone(),
+    ];
+    undo.push(() => {
+      parent?.add(node);
+      node.position.copy(from);
+      node.quaternion.copy(facing);
+      node.scale.copy(scaled);
+    });
+    scene.attach(node);
+    const half = [x / 2, y / 2, z / 2];
+    const offset = translation(middle.negate());
+    loose.push({
+      node,
+      body,
+      collider,
+      from: car,
+      clear: false,
+      half,
+      shift: new THREE.Vector3(),
+      offset,
+      size,
+    });
+
+    const hub = car.vehicle.lose(node);
+    if (hub) {
+      const ball = RAPIER.ColliderDesc.ball(build.hub * hub.radius);
+      world.createCollider(metal(ball).setTranslation(hub.at.x, hub.at.y, hub.at.z), car.body);
+    }
+  }
+
+  /**
+   * The parts torn off, after a step: rolling on the road they slow down (MINIGAME.crash.parts
+   * roll); clear of the car they came off, they hit it too.
+   */
+  function loosen() {
+    for (const piece of loose) {
+      const { body, collider } = piece;
+      if (!piece.clear && !overlap(boxOf(piece), boxOf(piece.from))) {
+        piece.clear = true;
+        collider.setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS | CARS));
+      }
+      let rolling = false;
+      world.contactPair(collider, road, (manifold) => {
+        rolling ||= manifold.numContacts() > 0;
+      });
+      if (!rolling) continue;
+      const v = vector(body.linvel());
+      const along = Math.hypot(v.x, v.z);
+      if (!along) continue;
+      const slower = Math.max(0, along - parts.roll * GRAVITY * STEP) / along;
+      body.setLinvel({ x: v.x * slower, y: v.y, z: v.z * slower }, false);
+    }
+  }
+
+  /** @type {ReturnType<typeof createCrushes<Party>>} */
+  const crushes = createCrushes(world, (a, b, crash) => {
+    const met = bodies.filter((body) => body === a || body === b);
+    for (const body of met) if (!wrecks.includes(body)) wrecks.push(body);
+    if (!crash) return undefined;
+    for (const body of met) {
+      if (endOn(body.body, crash.normal)) continue;
+      // hit on its side: where from, in its own frame
+      const facing = rotation(body.body.rotation()).invert();
+      const towards = crash.normal.clone().multiplyScalar(body === a ? 1 : -1);
+      body.driver.breakWheel(towards.applyQuaternion(facing).setY(0).normalize());
+    }
+    /** @type {typeof dents} */
+    const crushed = [];
+    for (const [i, solid] of [a, b].entries()) {
+      const hit = crash.hits[i];
+      const dent = solid.struck({ ...hit, point: inScene(hit.point) }, crash.speed, time);
+      if (!dent) continue;
+      undo.push(dent.undo);
+      crushed.push({ set: dent.set, progress: 0, shown: 0 });
+    }
+    dents.push(...crushed);
+
+    const { at, speed, energy } = crash;
+    const count = Math.round((spray.count * energy) / 1e4);
+    const { shard, spark } = spray;
+    for (const { color, body } of [a, b]) {
+      const velocity = vector(body.linvel());
+      const spread = shard.spread * speed;
+      debris.burst(at, { count, velocity, spread, size: shard.size, life: Infinity, color });
+    }
+    const [still, spread] = [new THREE.Vector3(), spark.spread * speed];
+    const { size, life } = spark;
+    debris.burst(at, { count, velocity: still, spread, size, life, color: SPARKS });
+    return (progress) => {
+      for (const dent of crushed) dent.progress = progress;
+    };
+  });
+
+  /**
+   * One physics step: the drivers and the wheels, the crush pushing the cars through it (forces,
+   * as gravity does: kicks at its start would lift a car standing on its springs), then the parts
+   * torn off and the snags.
+   */
+  function step() {
+    for (const { body } of [...bodies, ...loose]) {
+      before.set(body, { at: vector(body.translation()), turn: rotation(body.rotation()) });
+    }
+    for (const { body, driver, vehicle } of bodies) {
+      body.resetForces(false);
+      body.resetTorques(false);
+      driver.drive(time);
+      vehicle.update();
+    }
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < solids.length; j++) crushes.collide(solids[i], solids[j], time);
+    }
+    world.step();
+    time += STEP;
+    loosen();
+    crushes.release(time);
+  }
+
+  const [first, second] = cars;
+  let camera = -first.velocity.z; // speed along the road, forward
+
+  return {
+    /** How hard the first crash was: 1 at the first level's speed. */
+    impact: first.velocity.distanceTo(second.velocity) / SPEED.traffic,
+
+    /**
+     * @param {number} dt seconds of game time
+     * @param {number} [which] the car in view, by the order they crashed (0: the Bolones)
+     * @returns {number} the camera's speed forward along the road, units/s
+     */
+    update(dt, which = 0) {
+      solids = [...bodies, ...stands.sync()];
+      lag = Math.min(lag + dt, 30 * STEP); // further behind, the rest is dropped
+      for (; lag >= STEP; lag -= STEP) step();
+      camera += (-wrecks[which].body.linvel().z - camera) * (1 - Math.exp(-dt / cameraLag));
+      travel += Math.max(0, camera) * dt;
+
+      for (const { car, offset, body, vehicle } of bodies) {
+        put(car.object, offset, ...posed(body));
+        vehicle.show();
+      }
+      for (const tear of tearing.splice(0)) tearOff(tear);
+      for (const { node, body, offset, size } of loose) put(node, offset, ...posed(body), size);
+      stands.sway(time);
+      for (const dent of dents) {
+        if (dent.progress !== dent.shown) dent.set((dent.shown = dent.progress));
+      }
+      debris.update(dt);
+      inScene({ x: 0, y: 0, z: 0 }, debris.object.position);
+      return Math.max(0, camera);
+    },
+
+    /** The cars that crashed, in the order they did (the Bolones and the car it hit first). */
+    get wrecks() {
+      return wrecks.map(({ car }) => car);
+    },
+
+    /**
+     * The centre of mass of the car that crashed `which`th (0: the Bolones), in the scene, as it
+     * is shown.
+     *
+     * @param {THREE.Vector3} target
+     * @param {number} which
+     */
+    centre(target, which) {
+      return inScene(posed(wrecks[which].body)[0], target);
+    },
+
+    /** Removes the debris, takes the dents out, puts the parts torn off back, stands the palms up. */
+    dispose() {
+      for (const { vehicle } of bodies) vehicle.dispose();
+      undo.reverse().forEach((restore) => restore());
+      stands.dispose();
+      scene.remove(debris.object);
+      debris.dispose();
+      world.free();
+    },
+  };
+}
+
+/** @param {THREE.Vector3} v */
+const translation = (v) => new THREE.Matrix4().makeTranslation(v);
+
+/**
+ * How low a car's body comes (not its wheels, nor its bumpers), in its own frame.
+ *
+ * @param {THREE.Object3D} object upright on the road, its world matrices up to date
+ */
+function underside(object) {
+  const bounds = new THREE.Box3();
+  /** Whether a node is in a wheel or a bumper. @param {THREE.Object3D | null} node */
+  const inPart = (node) => {
+    for (let up = node; up && up !== object; up = up.parent) if (up.userData.part) return true;
+    return false;
+  };
+  object.traverse((node) => {
+    if (node instanceof THREE.Mesh && !node.userData.isWire && !inPart(node)) {
+      bounds.expandByObject(node);
+    }
+  });
+  return object.worldToLocal(new THREE.Vector3(0, bounds.min.y, 0)).y;
+}
+
+/**
+ * Gives an object a world pose, whatever its parent.
+ *
+ * @param {THREE.Object3D} object
+ * @param {THREE.Matrix4} world
+ */
+function place(object, world) {
+  const local = world.clone();
+  if (object.parent) {
+    object.parent.updateWorldMatrix(true, false);
+    local.premultiply(object.parent.matrixWorld.clone().invert());
+  }
+  local.decompose(object.position, object.quaternion, object.scale);
+}

@@ -385,6 +385,7 @@ export const SHADING = {
 export const CAR = {
   bodyX: -0.013,
   rollCenterY: 0.56, // the body rolls around the axle line, so the wheels stay on the road
+  mass: 1160, // kg, in a crash (game/crash.js): a Kredens and 150 kg, on the same floor pan
   lift: 0.04, // raises body and wheels: v1 tires sat a few mm into the road and looked sunk
   /**
    * Wheel model origins (v1 placement): back-left, front-left, back-right, front-right.
@@ -497,19 +498,102 @@ export const MINIGAME = {
   outerMargin: 0.5,
   safeZone: 0.1,
   /**
-   * The crash: the world brakes to a halt with the traffic still on the road, the camera shakes,
-   * the screen flashes; the game over panel shows up once keys and buttons unlock, so a key still
-   * held from steering or a quick ENTER does not restart by accident.
+   * The crash (game/crash.js, Rapier) by the laws of car crashes: the cars meet through their
+   * crumple zones, keeping their momentum, the energy going into the crush, so the faster the
+   * game goes, the deeper the dents and the more debris; the other drivers brake (or swerve) once
+   * they react, and run into the wreck if they cannot stop. The moment of impact freezes, then
+   * plays in slow motion; the camera follows the Bolones (Tab: each car of the wreck in turn) and
+   * shakes, can be turned round it and pulled back, the screen flashes and "Game Over" slams in.
+   * Once the wreck has about settled the score and the buttons show up, keys and buttons unlock
+   * (a key still held from steering or a quick ENTER does not restart by accident).
    */
   crash: {
-    stop: 0.35, // seconds to brake to a halt
+    /** Tyre-road friction coefficients (game/crash/vehicle.js): how hard a tyre grips at most,
+     * a driver braking hard, rolling. */
+    friction: { side: 0.8, brake: 0.5, roll: 0.015 },
+    reaction: [0.8, 1.5], // seconds a driver takes to act on a crash (ahead, or their own), at random
+    /** Of the drivers, `share` swerve (`angle` degrees one way for `swerve` seconds, as long back,
+     * then straight on: about a lane over) braking `gently` (of friction.brake), the others brake;
+     * until they act the wheels roll. A car hit on its side (not end on) has a broken wheel,
+     * pulling it `broken` degrees towards that side for good. */
+    drivers: { share: 0.5, angle: [1.5, 4], swerve: 0.6, gently: 0.4, broken: [2, 5] },
+    /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
+     * height up (unless the model says): cars are heavy low down, a hit pushes them more than it
+     * tips them. It rides springs bouncing `bounce` times a second, damped `damping` of critical,
+     * an anti-roll bar across each axle `antiRoll` times as stiff as a wheel's spring; down a
+     * wheel, that corner sinks onto the hub (`hub` of the wheel's radius). */
+    car: { box: 0.7, com: 0.4, springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 }, hub: 0.4 },
+    stiffness: 700, // N/m per kg of car: a front crushes about 0.5 m into a wall at 56 km/h
+    /** Coefficient of restitution falling off with the closing speed (m/s), as in crash tests:
+     * taps bounce, crashes barely. */
+    restitution: { atRest: 0.4, falloff: 10, contact: 0.2 }, // contact: a car's body or a part on the road
+    scrape: 0.5, // friction of sheet metal: crushing cars, a car's body on the road
+    nudge: 2, // m/s: cars closing slower only touch (no crumple zones, no dents, no debris)
+    /** A wheel or a bumper comes off a car crushed past it by `tear` of its size (the farthest of
+     * its points from its middle), flung on along the hit at `fling` of the closing speed (and up
+     * half as fast), on its own (`mass` kg, rubbing the road with `friction`), a wheel rolling
+     * on. */
+    parts: {
+      fling: 0.2,
+      friction: 0.7,
+      roll: 0.3, // rolling resistance of a wheel come off, buckled: it rolls a while and stops
+      wheel: { tear: 0.6, mass: 15 },
+      bumper: { tear: 0.5, mass: 10 },
+    },
+    /**
+     * How the sheet metal gives (scene/crumple.js), in units and in shares of how deep a crush
+     * went:
+     * - the crush runs out over `fade` beyond how wide it was hit, or `taper` times as far as it
+     *   went in (a deep dent pulls the panels round it in: a narrow front driven into a side
+     *   leaves a V, not a cut);
+     * - behind the crush of a front or a rear the bonnet (the boot lid) folds up into a ridge
+     *   across `bend` times as deep, `tent` of that high in its middle, as wide as it was hit (the
+     *   roof, the wings and the pillars hold), the sides below `bulge` out; hit off its middle,
+     *   the car `kink`s towards the side hit, over half its length. However deep, the fold stays
+     *   within `fold` of the car's length and of its height (a small car folds smaller);
+     * - a side hit only pushes the side in, buckling along it; at an angle, a blend of the two
+     *   (`ends`); the buckles are `buckle` apart;
+     * - a wheel pushed back by its size turns out (`toe`) and leans (`camber`), radians.
+     */
+    dents: {
+      fade: 0.3,
+      taper: 1.5,
+      bend: 3,
+      tent: 0.8,
+      bulge: 0.25,
+      kink: 0.35,
+      fold: [0.35, 0.15],
+      buckle: 0.25,
+      toe: 0.4,
+      camber: 0.25,
+    },
+    /** Degrees off a car's length: a hit closer than the second is on its end (the ends caught in
+     * each other turn as one), further than the first on its side; the dents blend between. */
+    ends: [60, 30],
+    interlock: 0.6, // seconds the crushed fronts stay caught in each other
+    /** A palm hit at `full` m/s or faster leans `lean` for good (bending over in `bend` seconds)
+     * and sways `swing` (radians) back and forth every `period` seconds, dying down over
+     * `settle`. */
+    palm: { lean: 0.12, bend: 0.1, swing: 0.2, full: 25, period: 0.9, settle: 0.8 },
+    /** Shards of each car's lines (they stay where they land) and sparks (gone in `life` s) fly
+     * off a crash: `count` per car (and as many sparks) per 10 kJ the crumple zones take up,
+     * `size` units long, at up to `spread` of the closing speed. */
+    debris: {
+      count: 8,
+      shard: { size: 0.7, spread: 0.3 },
+      spark: { size: 0.3, spread: 0.6, life: 0.6 },
+    },
+    cameraLag: 0.06, // seconds: the camera's speed follows the car in view's this slowly, closing in
+    follow: 0.25, // seconds: the orbit eases over to the car in view this slowly
+    slowMotion: { freeze: 0.1, scale: 0.2, recover: 1.5 }, // s frozen, time scale, s back to 1
     shake: 0.45, // seconds of camera shake, fading out
-    shakeAmount: 0.3, // largest camera offset, units
-    lock: 0.6, // seconds before game over takes keys and clicks (and its panel shows)
+    shakeAmount: 0.3, // largest camera offset at the first level, units
+    lock: 2.5, // seconds before game over takes keys and clicks (and shows its score and buttons)
+    orbit: 24, // units: how far the camera can be pulled back from the car in view
   },
   /** Holding ↑ speeds the game up by `factor`, easing in and out (time constants, seconds). */
   boost: { factor: 1.5, rise: 0.8, fall: 1.2 },
-  /** Game over score, arcade style: counts up once the panel is in, then flashes and pulses. */
+  /** Game over score, arcade style: counts up once it is in, then flashes and pulses. */
   scoreCount: {
     perPoint: 0.06, // seconds per point
     max: 1.2, // seconds at most, however big the score
@@ -525,12 +609,14 @@ export const CRT = {
   flickerIntensity: 0.4,
 };
 
-/** @typedef {"start" | "free" | "exit" | "left" | "right" | "faster" | "stats" | "menu" | "glow" | "randomize"} Action */
+/** @typedef {"start" | "free" | "exit" | "left" | "right" | "faster" | "next" | "stats" | "menu" | "glow" | "randomize"} Action */
 
 /**
  * @typedef {object} ActionKeys
  * @property {string[]} keys KeyboardEvent.code values that trigger the action
  * @property {string} [label] keycap text in the UI; actions without one are not advertised
+ * @property {boolean} [optional] its keys keep doing what they do in the browser (Tab moves the
+ *   focus) until the game arms the action (input.arm)
  * @property {"enter" | "arrowLeft" | "arrowRight" | "arrowUp"} [icon] drawn instead of the label (ui/icons.js):
  *   the UI font has no glyph for these keys; the label becomes the accessible name
  */
@@ -543,6 +629,7 @@ export const ACTIONS = {
   left: { keys: ["ArrowLeft"], label: "Left arrow", icon: "arrowLeft" },
   right: { keys: ["ArrowRight"], label: "Right arrow", icon: "arrowRight" },
   faster: { keys: ["ArrowUp", "KeyW"], label: "Up arrow", icon: "arrowUp" },
+  next: { keys: ["Tab"], label: "Tab", optional: true }, // the next car of a wreck
   stats: { keys: ["F10"] }, // developer overlay, not advertised in the UI
   menu: { keys: ["KeyH"], label: "H" },
   glow: { keys: ["KeyG"], label: "G" },
@@ -589,9 +676,9 @@ export const PICKER = {
     PALETTE.sunYellow,
     PALETTE.neonOrange,
     PALETTE.horizon,
-    PALETTE.nightBlue,
     PALETTE.starlight,
     PALETTE.bolonesBody,
+    PALETTE.nightBlue,
     PALETTE.dusk,
     PALETTE.void,
   ],
@@ -667,8 +754,11 @@ export const TEXT = {
   level: "LVL",
   newBest: "NEW BEST!",
   gameOver: "Game Over",
-  menuHide: "Hide menu",
-  menuShow: "Show menu",
+  lookAround: "Drag to look around, scroll to pull back",
+  nextCar: "Next car of the crash",
+  bolones: "Bolones",
+  menuHide: "Hide HUD",
+  menuShow: "Show HUD",
   hide: "HIDE",
   source: "SkorczanFFF",
   gui: {

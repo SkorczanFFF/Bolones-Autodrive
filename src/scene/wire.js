@@ -42,13 +42,11 @@ export function addWireframe(root, material, shadows = true) {
   });
 
   for (const mesh of meshes) {
+    const geometry = wireGeometry(mesh.geometry, material);
     const wire =
       material instanceof THREE.LineBasicMaterial
-        ? new THREE.LineSegments(edgesOf(mesh.geometry), material)
-        : new THREE.Mesh(
-            isLineMaterial(material) ? linesFor(mesh.geometry, material) : mesh.geometry,
-            material,
-          );
+        ? new THREE.LineSegments(geometry, material)
+        : new THREE.Mesh(geometry, material);
     wire.userData.isWire = true;
     wire.layers.enable(BLOOM.layer); // glows (core/bloom.js)
     wire.castShadow = false; // thin lines add no visible shadow, only shadow-pass draw calls
@@ -58,10 +56,15 @@ export function addWireframe(root, material, shadows = true) {
 }
 
 /**
+ * The line twin's geometry for a mesh geometry (see addWireframe), also when the mesh gets a new
+ * one (a dent, scene/crumple.js).
+ *
  * @param {THREE.BufferGeometry} geometry
- * @param {import("./lines.js").LineMaterial} material
+ * @param {THREE.Material} material the wireframe material
  */
-function linesFor(geometry, material) {
+export function wireGeometry(geometry, material) {
+  if (material instanceof THREE.LineBasicMaterial) return edgesOf(geometry);
+  if (!isLineMaterial(material)) return geometry;
   return material.userData.wirePolygons ? polygonLineGeometry(geometry) : lineGeometry(geometry);
 }
 

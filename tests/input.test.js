@@ -51,6 +51,23 @@ describe("input", () => {
     expect(other.defaultPrevented).toBe(false);
   });
 
+  it("leaves an optional action's keys to the browser until it is armed", () => {
+    const target = new EventTarget();
+    const input = createInput(target);
+    const pressed = vi.fn();
+    input.onPress(pressed);
+    const [TAB] = ACTIONS.next.keys;
+
+    expect(key(target, "keydown", TAB).defaultPrevented).toBe(false); // moves the focus
+    key(target, "keyup", TAB);
+    input.arm("next", true);
+    expect(key(target, "keydown", TAB).defaultPrevented).toBe(true);
+    key(target, "keyup", TAB);
+    input.arm("next", false);
+    key(target, "keydown", TAB);
+    expect(pressed.mock.calls).toEqual([["next"]]);
+  });
+
   it("releases held keys when the window loses focus", () => {
     const target = new EventTarget();
     const input = createInput(target);

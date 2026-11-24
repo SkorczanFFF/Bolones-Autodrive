@@ -1,9 +1,10 @@
 import * as THREE from "three";
-import { CAR, MINIGAME, SPEED, TRAFFIC, WORLD } from "../config.js";
+import { CAR, MINIGAME, SPEED, TEXT, TRAFFIC, WORLD } from "../config.js";
 import { createRandom, pick } from "../core/random.js";
 import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
 import { createTrafficModels, trafficHalfWidth } from "../scene/traffic.js";
+import { createCrash } from "./crash.js";
 
 /**
  * Obstacle x positions from v1: obstacles fill one lane (left or right of the centre safe zone)
@@ -45,19 +46,66 @@ export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.rand
 }
 
 /**
+ * A traffic car's hitbox, in its own frame (scene/traffic.js keeps it as arrays).
+ *
+ * @param {THREE.Object3D} car
+ * @param {THREE.Box3} target
+ */
+function hitboxOf(car, target) {
+  const { min, max } = car.userData.hitbox;
+  target.min.fromArray(min);
+  target.max.fromArray(max);
+  return target;
+}
+
+/**
  * How fast the traffic goes over the road (forward, +z), units/s.
  *
  * @param {number} speedMultiplier
  */
 const overRoad = (speedMultiplier) => (SPEED.traffic - WORLD.speed) * speedMultiplier;
 
+/** The heights a palm's trunk is measured at for a crash: where the cars hit it, units. */
+const TRUNK = [0.5, 1.8];
+
 /**
- * Minigame obstacles: oncoming traffic (scene/traffic.js), collision with the car and scoring.
- * Each car is a clone of a random model; its hitbox is the model's body and wheels.
+ * A palm's trunk where the cars hit it (TRUNK), in the palm's frame: the middle and half the
+ * width of what is there (the trunk, leaning a little).
  *
- * @param {{ scene: THREE.Scene, car: ReturnType<typeof import("../scene/car.js").createCar>, materials: import("../scene/materials.js").Materials }} deps
+ * @param {THREE.Object3D} palm
  */
-export function createMinigame({ scene, car, materials }) {
+function trunkOf(palm) {
+  palm.updateWorldMatrix(true, true);
+  const toPalm = palm.matrixWorld.clone().invert();
+  /** @type {THREE.Vector3[]} */
+  const points = [];
+  /** @type {THREE.Mesh[]} */
+  const meshes = [];
+  palm.traverse((o) => o instanceof THREE.Mesh && !o.userData.isWire && meshes.push(o));
+  for (const mesh of meshes) {
+    const position = mesh.geometry.getAttribute("position");
+    const matrix = toPalm.clone().multiply(mesh.matrixWorld);
+    for (let i = 0; i < position.count; i++) {
+      const v = new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix);
+      if (v.y > TRUNK[0] && v.y < TRUNK[1]) points.push(v);
+    }
+  }
+  const box = new THREE.Box3().setFromPoints(points);
+  const centre = box.getCenter(new THREE.Vector3()).setY(0);
+  const size = box.getSize(new THREE.Vector3());
+  return { centre, radius: (size.x + size.z) / 4 };
+}
+
+/**
+ * Minigame obstacles: oncoming traffic (scene/traffic.js), collision with the car, the crash that
+ * follows (the palms and the rocks by the road take part) and scoring. Each car is a clone of a random model;
+ * its hitbox is the model's bounds (scene/traffic.js).
+ *
+ * @param {{ scene: THREE.Scene, car: ReturnType<typeof import("../scene/car.js").createCar>, materials: import("../scene/materials.js").Materials, palms: THREE.Object3D[], rocks: THREE.Object3D[] }} deps
+ */
+export function createMinigame({ scene, car, materials, palms, rocks }) {
+  /** The colour of a wireframe material. @param {THREE.Material} material */
+  const colorOf = (material) => /** @type {THREE.MeshBasicMaterial} */ (material).color;
   const models = createTrafficModels(materials);
   const nextX = createLanePicker();
   const [minInterval, maxInterval] = MINIGAME.interval;
@@ -78,6 +126,98 @@ export function createMinigame({ scene, car, materials }) {
   const carBounds = new THREE.Box3();
   const obstacleBounds = new THREE.Box3();
   let score = 0;
+  /** @type {ReturnType<typeof createCrash> | null} */
+  let crash = null;
+
+  /**
+   * Puts out a car's lamps that a crash crushed: the body's colour, outlined like the body
+   * (scene/traffic.js).
+   *
+   * @param {THREE.Object3D} other
+   * @returns {(crushed: (point: THREE.Vector3) => boolean) => void}
+   */
+  const lampsOut = (other) => (crushed) => {
+    for (const lamp of /** @type {THREE.Mesh[]} */ (other.getObjectsByProperty("name", "lamp"))) {
+      if (!lamp.geometry.boundingSphere) lamp.geometry.computeBoundingSphere();
+      const middle = /** @type {THREE.Sphere} */ (lamp.geometry.boundingSphere).center;
+      if (!crushed(lamp.localToWorld(middle.clone()))) continue;
+      lamp.material = materials.solid.traffic;
+      lamp.children[0].visible = true;
+    }
+  };
+
+  /**
+   * The Bolones ran into a car: they and the rest of the traffic go over to the physics
+   * (game/crash.js), each with its speed over the road.
+   *
+   * @param {THREE.Object3D} obstacle
+   * @param {number} speedMultiplier
+   */
+  function hit(obstacle, speedMultiplier) {
+    spawner.spawning = false;
+    const road = WORLD.speed * speedMultiplier;
+    const oncoming = new THREE.Vector3(0, 0, overRoad(speedMultiplier));
+    const traffic = /** @param {THREE.Object3D} other */ (other) => ({
+      object: other,
+      box: hitboxOf(other, new THREE.Box3()),
+      mass: other.userData.mass,
+      velocity: oncoming,
+      color: colorOf(materials.wire.traffic),
+      onCrash: lampsOut(other),
+      label: other.userData.label,
+    });
+    // every palm and rock by the road, measured where it is when it comes up
+    /** @type {WeakMap<THREE.Object3D, import("./crash.js").Post>} */
+    const measured = new WeakMap();
+    /** @type {ReturnType<typeof trunkOf> | undefined} */
+    let trunk; // the palms are clones of one model: one trunk
+    /** @param {THREE.Object3D} palm */
+    const palmPost = (palm) => {
+      const { centre, radius } = (trunk ??= trunkOf(palm));
+      palm.updateWorldMatrix(true, false);
+      const at = palm.localToWorld(centre.clone()).setY(0);
+      const color = colorOf(materials.wire.palm);
+      return { object: palm, at, radius: radius * palm.scale.x, sways: true, color };
+    };
+    /** @param {THREE.Object3D} rock */
+    const rockPost = (rock) => {
+      const bounds = new THREE.Box3().setFromObject(rock);
+      const { x, z } = bounds.getCenter(new THREE.Vector3());
+      const size = bounds.getSize(new THREE.Vector3());
+      const at = new THREE.Vector3(x, bounds.min.y, z);
+      const color = colorOf(materials.wire.rock);
+      return { object: rock, at, radius: (size.x + size.z) / 4, height: size.y, color };
+    };
+    /**
+     * @param {THREE.Object3D} object
+     * @param {(object: THREE.Object3D) => import("./crash.js").Post} measure
+     */
+    const known = (object, measure) => {
+      const post = measured.get(object) ?? measure(object);
+      measured.set(object, post);
+      return post;
+    };
+    const posts = () => [
+      ...palms.map((palm) => known(palm, palmPost)),
+      ...rocks.map((rock) => known(rock, rockPost)),
+    ];
+    crash = createCrash(
+      scene,
+      [
+        {
+          object: car.wreck,
+          box: car.box,
+          mass: CAR.mass,
+          velocity: new THREE.Vector3(car.sideways, 0, -road), // where it went (its nose turns less)
+          color: colorOf(materials.wire.bolones),
+          label: TEXT.bolones,
+        },
+        traffic(obstacle),
+        ...spawner.objects.filter((other) => other !== obstacle).map(traffic),
+      ],
+      posts,
+    );
+  }
 
   return {
     get score() {
@@ -89,11 +229,18 @@ export function createMinigame({ scene, car, materials }) {
       spawner.spawning = value;
     },
 
-    /** Removes all traffic, stops spawning and zeroes the score. */
+    /** Removes all traffic and the crash, stops spawning and zeroes the score. */
     reset() {
+      crash?.dispose();
+      crash = null;
       spawner.clear();
       spawner.spawning = false;
       score = 0;
+    },
+
+    /** How hard the last crash was: 1 at the first level's speed. */
+    get impact() {
+      return crash?.impact ?? 1;
     },
 
     /**
@@ -116,10 +263,11 @@ export function createMinigame({ scene, car, materials }) {
       let scored = false;
 
       for (const obstacle of spawner.objects) {
-        const { min, max } = obstacle.userData.hitbox;
-        obstacleBounds.min.fromArray(min).add(obstacle.position);
-        obstacleBounds.max.fromArray(max).add(obstacle.position);
-        if (carBounds.intersectsBox(obstacleBounds)) return { crashed: true, scored };
+        hitboxOf(obstacle, obstacleBounds).translate(obstacle.position);
+        if (carBounds.intersectsBox(obstacleBounds)) {
+          hit(obstacle, speedMultiplier);
+          return { crashed: true, scored };
+        }
         if (!obstacle.userData.scored && obstacle.position.z > carZ) {
           obstacle.userData.scored = true;
           score++;
@@ -128,6 +276,34 @@ export function createMinigame({ scene, car, materials }) {
       }
 
       return { crashed: false, scored };
+    },
+
+    /**
+     * After a crash: plays it out (game/crash.js).
+     *
+     * @param {number} dt seconds of game time
+     * @param {number} which the car in view, by the order they crashed (0: the Bolones)
+     * @returns {number} the world's speed multiplier: the camera's forward along the road
+     */
+    wreck(dt, which) {
+      if (!crash) return 0;
+      spawner.update(dt, 0); // the physics moves the traffic now; the spawner still fades it
+      return crash.update(dt, which) / WORLD.speed;
+    },
+
+    /** What the cars that crashed are called, in the order they did (wreckCentre's numbers). */
+    get wrecks() {
+      return crash?.wrecks.map(({ label }) => label) ?? [];
+    },
+
+    /**
+     * The centre of the car that crashed `which`th (0: the Bolones), in the scene.
+     *
+     * @param {THREE.Vector3} target
+     * @param {number} which
+     */
+    wreckCentre(target, which) {
+      return crash ? crash.centre(target, which) : target;
     },
   };
 }

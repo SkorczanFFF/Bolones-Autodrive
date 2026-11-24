@@ -87,6 +87,15 @@ describe("car steering", () => {
     expect(Math.abs(car.chassis.rotation.z)).toBeLessThan(0.005);
   });
 
+  it("tells how fast it goes across the road, for a crash", () => {
+    const car = setup();
+    drive(car, 0.5, 1, 60);
+    const x = car.group.position.x;
+    car.update(1 / 60, 1, 1);
+    expect(car.sideways).toBeCloseTo((car.group.position.x - x) * 60, 6);
+    expect(car.sideways).toBeGreaterThan(0);
+  });
+
   it("points the nose towards where the car goes, part of the way", () => {
     const car = setup();
     drive(car, 0.8, 1, 60);
@@ -210,11 +219,31 @@ describe("car steering", () => {
     expect(car.chassis.rotation.z).toBeCloseTo(0);
     expect(car.group.rotation.y).toBeCloseTo(0, 2);
   });
+
+  it("reset also brings back a car a crash threw about (the wreck node)", () => {
+    const car = setup();
+    const tweens = createTweens();
+    car.wreck.position.set(1, 0.5, 3);
+    car.wreck.rotation.set(0.3, 2.5, -0.2);
+    car.reset(tweens);
+    car.steering = false;
+    for (let i = 0; i < 90; i++) {
+      tweens.update(1 / 60);
+      car.update(1 / 60, 1, 0);
+    }
+    expect(car.wreck.position.length()).toBeCloseTo(0);
+    expect(car.wreck.quaternion.angleTo(new THREE.Quaternion())).toBeCloseTo(0);
+  });
+
+  it("knows its body's box in the wreck node's frame", () => {
+    const size = setup().box.getSize(new THREE.Vector3());
+    expect([size.x, size.y, size.z]).toEqual([2, 1, 4].map((v) => expect.closeTo(v, 5)));
+  });
 });
 
 describe("car wheels", () => {
-  /** The wheel model inside pivot -> spin -> mirror. @param {THREE.Object3D} pivot */
-  const modelOf = (pivot) => pivot.children[0].children[0].children[0];
+  /** The wheel model inside mount -> steer -> spin -> mirror. @param {THREE.Object3D} mount */
+  const modelOf = (mount) => mount.children[0].children[0].children[0].children[0];
 
   /** World position of the modelled axle (the wheel model's origin). @param {THREE.Object3D} pivot */
   const axleOf = (pivot) => {
@@ -224,7 +253,7 @@ describe("car wheels", () => {
 
   it("keep the v1 placement (lifted by CAR.lift): axle at the v1 model origin, pivot mid-width", () => {
     const car = setup();
-    const [backLeft, , backRight] = car.group.children.slice(1);
+    const [backLeft, , backRight] = car.wreck.children.slice(1);
     const [lx, ly, lz] = CAR.wheels[0];
     const [rx, ry, rz] = CAR.wheels[2];
 
@@ -239,7 +268,7 @@ describe("car wheels", () => {
 
   it("spin around the modelled axle, not the off-axis bounding box (no wobble)", () => {
     const car = setup();
-    const back = car.group.children[1];
+    const back = car.wreck.children[1];
     const before = axleOf(back);
     for (let i = 0; i < 37; i++) car.update(1 / 60, 1, 0); // wheels spin, the car stays put
     expect(axleOf(back).distanceTo(before)).toBeLessThan(1e-6);
@@ -254,7 +283,8 @@ describe("car wheels", () => {
     car.group.rotation.set(0, 0, 0);
     expect(front.rotation.y).toBeGreaterThan(0);
     expect(front.getWorldPosition(new THREE.Vector3()).distanceTo(pivotBefore)).toBeLessThan(1e-6);
-    expect(axleOf(front).distanceTo(pivotBefore)).toBeCloseTo(WIDTH_OFFSET);
+    const mount = /** @type {THREE.Object3D} */ (front.parent);
+    expect(axleOf(mount).distanceTo(pivotBefore)).toBeCloseTo(WIDTH_OFFSET);
   });
 
   it("drops empty helper branches from the wheel model", () => {

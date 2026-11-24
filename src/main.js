@@ -12,6 +12,7 @@ import { createInput } from "./core/input.js";
 import { createMaterials } from "./scene/materials.js";
 import { createWorld } from "./scene/world.js";
 import { createCar } from "./scene/car.js";
+import { ready } from "./game/crash.js";
 import { createMinigame } from "./game/minigame.js";
 import { createGame } from "./game/game.js";
 import { applyTheme } from "./ui/theme.js";
@@ -39,7 +40,7 @@ async function main() {
 
   let assets;
   try {
-    assets = await loadAssets(ASSETS, loader.manager);
+    [assets] = await Promise.all([loadAssets(ASSETS, loader.manager), ready]); // crash physics
   } catch (error) {
     loader.fail(TEXT.loaderFailed);
     throw error;
@@ -49,7 +50,13 @@ async function main() {
   const materials = createMaterials(textures, view.renderer.capabilities.getMaxAnisotropy());
   const world = createWorld({ scene: view.scene, materials, models });
   const car = createCar({ scene: view.scene, materials, models });
-  const minigame = createMinigame({ scene: view.scene, car, materials });
+  const minigame = createMinigame({
+    scene: view.scene,
+    car,
+    materials,
+    palms: world.parts.scenery.palms.objects,
+    rocks: world.parts.scenery.rocks.objects,
+  });
 
   const tweens = createTweens();
   const input = createInput();
@@ -67,8 +74,8 @@ async function main() {
   const stats = createDevStats(view.renderer, input);
 
   loop.add(tweens.update);
+  loop.add(game.update); // sets the world's speed for this frame
   loop.add(world.update);
-  loop.add(game.update);
   loop.add(stats.update);
 
   loader.finish();

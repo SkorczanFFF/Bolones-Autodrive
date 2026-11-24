@@ -29,6 +29,8 @@ export function createInput(target = window) {
   const pressListeners = new Set();
   /** @type {Set<ActionListener>} */
   const releaseListeners = new Set();
+  /** @type {Set<Action>} optional actions (ACTIONS) whose keys the game takes at the moment */
+  const armed = new Set();
 
   /** @param {Action} action */
   function dispatch(action) {
@@ -65,7 +67,7 @@ export function createInput(target = window) {
   target.addEventListener("keydown", (event) => {
     const { code, repeat } = /** @type {KeyboardEvent} */ (event);
     const action = actionByCode.get(code);
-    if (!action) return;
+    if (!action || (ACTIONS[action].optional && !armed.has(action))) return;
     event.preventDefault();
     if (repeat) return; // OS auto-repeat must not restart presses (v1 bug)
     press(action, code);
@@ -101,6 +103,16 @@ export function createInput(target = window) {
     },
     /** @param {Action} action */
     isHeld: (action) => (holders.get(action)?.size ?? 0) > 0,
+    /**
+     * Takes the keys of an optional action from the browser, or gives them back.
+     *
+     * @param {Action} action
+     * @param {boolean} on
+     */
+    arm(action, on) {
+      if (on) armed.add(action);
+      else armed.delete(action);
+    },
     /** @param {ActionListener} listener */
     onPress: (listener) => pressListeners.add(listener),
     /** @param {ActionListener} listener */

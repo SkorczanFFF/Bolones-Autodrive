@@ -8,15 +8,26 @@ import { createGame } from "../src/game/game.js";
 /** A game with stand-ins for the scene, HUD and GUI; `crashNext` makes the next update crash. */
 function setup() {
   const camera = new THREE.PerspectiveCamera();
-  const controls = { enabled: true, target: new THREE.Vector3(), update() {} };
+  const controls = {
+    enabled: true,
+    target: new THREE.Vector3(),
+    maxDistance: SCENE.controls.maxDistance,
+    update() {},
+  };
   const world = { speedMultiplier: 1 };
-  const calls = { minigameReset: 0, menuShow: 0, menuRandomize: 0 };
-  const state = { crashNext: false };
+  const calls = { minigameReset: 0, menuShow: 0, menuRandomize: 0, hudToggle: 0, carUpdate: 0 };
+  // the wreck: three cars 5 apart, the Bolones (moved by `at`) where the orbit is at the crash
+  const state = { crashNext: false, wreckSpeed: 0.4, at: new THREE.Vector3(0, 1.8, 0) };
   const minigame = {
     score: 7,
     spawning: false,
     reset: () => calls.minigameReset++,
     update: () => ({ crashed: state.crashNext, scored: false }),
+    wreck: () => state.wreckSpeed,
+    wrecks: ["Bolones", "Polakito", "Kredens"],
+    wreckCentre: (/** @type {THREE.Vector3} */ target, /** @type {number} */ which) =>
+      target.copy(state.at).setX(state.at.x + 5 * which),
+    impact: 1,
   };
   const group = new THREE.Group();
   const car = {
@@ -24,7 +35,7 @@ function setup() {
     softEdges: false,
     group,
     reset() {},
-    update() {},
+    update: () => calls.carUpdate++,
     release() {},
     // a body 1.8 wide, 1.4 high and 4.2 long, centred on the group
     getBounds: (/** @type {THREE.Box3} */ box) =>
@@ -32,12 +43,16 @@ function setup() {
   };
   /** @type {number[]} progress of every countGameOver call */
   const counts = [];
-  // every HUD call is a no-op, but the game over count is recorded
+  // every HUD call is a no-op, but the game over count and the toggle are recorded
   const hud = new Proxy(
     {},
     {
       get: (_, name) =>
-        name === "countGameOver" ? (/** @type {number} */ p) => counts.push(p) : () => {},
+        name === "countGameOver"
+          ? (/** @type {number} */ p) => counts.push(p)
+          : name === "toggleMenu"
+            ? () => calls.hudToggle++
+            : () => {},
     },
   );
   const menu = { show: () => calls.menuShow++, hide() {}, randomize: () => calls.menuRandomize++ };
@@ -64,7 +79,7 @@ function setup() {
     state.crashNext = false;
   };
 
-  return { game, input, world, camera, controls, car, calls, counts, minigame, run, crash };
+  return { game, input, world, camera, controls, car, calls, counts, minigame, run, crash, state };
 }
 
 describe("keys outside the state machine", () => {
@@ -212,7 +227,7 @@ describe("free ride camera", () => {
   it("ends the move from game over pinned to the car", () => {
     const { input, camera, controls, car, run, crash } = setup();
     crash();
-    run(MINIGAME.crash.lock);
+    run(MINIGAME.crash.lock + 1 / 60);
     car.group.position.x = 2.5; // where it crashed
     input.dispatch("free");
     run(SCENE.camera.transition + 1 / 60);
@@ -244,31 +259,74 @@ describe("crash", () => {
     expect(world.speedMultiplier).toBeCloseTo(1, 2);
   });
 
-  it("brakes the world to a halt and keeps the traffic and the game camera", () => {
-    const { game, world, camera, calls, run, crash } = setup();
+  it("follows the car in view, from the Bolones on Tab to each car of the wreck and round", () => {
+    const { input, controls, camera, run, crash, state } = setup();
+    crash();
+    run(MINIGAME.crash.shake);
+    const view = camera.position.clone().sub(controls.target);
+    for (const x of [5, 10, 0]) {
+      input.dispatch("next"); // at once, as the camera is
+      run(2);
+      expect(controls.target.distanceTo(new THREE.Vector3(x, 1.8, 0))).toBeLessThan(0.01);
+      expect(camera.position.clone().sub(controls.target).distanceTo(view)).toBeLessThan(1e-9);
+    }
+    state.at.set(2, 1.8, 3); // the Bolones going on, or thrown back
+    run(2);
+    expect(controls.target.distanceTo(state.at)).toBeLessThan(0.01);
+    expect(camera.position.clone().sub(controls.target).distanceTo(view)).toBeLessThan(1e-9);
+  });
+
+  it("freezes the impact, then plays the wreck in slow motion back to full speed", () => {
+    const { game, world, calls, run, crash, state } = setup();
     crash();
     expect(game.state).toBe("gameover");
+    expect(world.speedMultiplier).toBe(0); // the road stops with the crash, not a frame later
     const resets = calls.minigameReset;
     const shows = calls.menuShow;
-    const cameraAt = camera.position.clone();
+    const { freeze, scale, recover } = MINIGAME.crash.slowMotion;
 
-    run(MINIGAME.crash.stop / 2);
-    expect(world.speedMultiplier).toBeGreaterThan(0);
-    expect(world.speedMultiplier).toBeLessThan(1.3 / 2); // hard at first
-    run(MINIGAME.crash.shake);
-    expect(world.speedMultiplier).toBe(0);
-    expect(camera.position.distanceTo(cameraAt)).toBeCloseTo(0); // shake over, back in place
-    expect(calls.minigameReset).toBe(resets); // traffic stays where it hit
+    run(freeze / 2);
+    expect(world.speedMultiplier).toBe(0); // frozen
+    run(freeze / 2 + 1 / 60);
+    expect(world.speedMultiplier).toBeCloseTo(state.wreckSpeed * scale, 2); // slow motion
+    run(recover);
+    expect(world.speedMultiplier).toBe(state.wreckSpeed); // the road under the camera, full speed
+    expect(calls.minigameReset).toBe(resets); // the wreck stays on the road
     expect(calls.menuShow).toBe(shows); // the scene GUI waits
   });
 
-  it("shakes the camera, fading out", () => {
-    const { camera, run, crash } = setup();
+  it("hands the camera over at once: turn it round and pull it back, H hides the HUD", () => {
+    const { input, controls, run, crash, calls } = setup();
     crash();
-    const cameraAt = camera.position.clone();
+    expect(controls.enabled).toBe(true);
+    expect(controls.maxDistance).toBe(MINIGAME.crash.orbit);
+    input.dispatch("menu");
+    expect(calls.hudToggle).toBe(1);
+    run(MINIGAME.crash.lock + 1 / 60);
+    input.dispatch("start");
+    run(SCENE.camera.transition + 1 / 60);
+    expect(controls.maxDistance).toBe(SCENE.controls.maxDistance);
+  });
+
+  it("shakes the camera with its target, fading out", () => {
+    const { camera, controls, run, crash } = setup();
+    crash();
+    const [cameraAt, targetAt] = [camera.position.clone(), controls.target.clone()];
     run(0.05);
-    expect(camera.position.distanceTo(cameraAt)).toBeGreaterThan(0);
-    expect(camera.position.distanceTo(cameraAt)).toBeLessThan(MINIGAME.crash.shakeAmount * 2);
+    const moved = camera.position.clone().sub(cameraAt);
+    expect(moved.length()).toBeGreaterThan(0);
+    expect(moved.length()).toBeLessThan(MINIGAME.crash.shakeAmount * 2);
+    expect(controls.target.clone().sub(targetAt).distanceTo(moved)).toBeLessThan(1e-9);
+    run(MINIGAME.crash.shake);
+    expect(camera.position.distanceTo(cameraAt)).toBeLessThan(1e-9);
+  });
+
+  it("leaves the Bolones to the crash: its wheels stand still, dented as they are", () => {
+    const { calls, run, crash } = setup();
+    crash();
+    const updates = calls.carUpdate;
+    run(1);
+    expect(calls.carUpdate).toBe(updates);
   });
 
   it("ignores keys and buttons until the lock is over", () => {
@@ -277,7 +335,7 @@ describe("crash", () => {
     input.dispatch("start");
     input.dispatch("exit");
     expect(game.state).toBe("gameover");
-    run(MINIGAME.crash.lock);
+    run(MINIGAME.crash.lock + 1 / 60);
     input.dispatch("start");
     expect(game.state).toBe("countdown");
   });
@@ -285,7 +343,7 @@ describe("crash", () => {
   it("brings the camera, speed and scene GUI back on leaving to the menu", () => {
     const { game, input, world, calls, run, crash } = setup();
     crash();
-    run(MINIGAME.crash.lock);
+    run(MINIGAME.crash.lock + 1 / 60);
     const resets = calls.minigameReset;
     input.dispatch("exit");
     expect(game.state).toBe("idle");
@@ -294,7 +352,7 @@ describe("crash", () => {
     expect(calls.menuShow).toBe(1);
   });
 
-  it("counts the score up once the panel is in, then holds it", () => {
+  it("counts the score up once it is in, then holds it", () => {
     const { counts, minigame, run, crash } = setup();
     crash();
     counts.length = 0;
@@ -314,7 +372,7 @@ describe("crash", () => {
   it("leaves the minigame for free ride too", () => {
     const { game, input, world, calls, run, crash } = setup();
     crash();
-    run(MINIGAME.crash.lock);
+    run(MINIGAME.crash.lock + 1 / 60);
     input.dispatch("free");
     expect(game.state).toBe("free");
     expect(world.speedMultiplier).toBe(1);

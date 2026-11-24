@@ -31,6 +31,18 @@ const tierForScore = (score) => Math.floor(score / SPEED.tierEvery);
 const speedForScore = (score) => 1 + tierForScore(score) * SPEED.tierStep;
 
 /**
+ * Game time per real second after a crash: a moment frozen at the impact, then slow motion easing
+ * back to full speed (MINIGAME.crash.slowMotion).
+ *
+ * @param {number} time real seconds since the crash
+ */
+function slowMotion(time) {
+  const { freeze, scale, recover } = MINIGAME.crash.slowMotion;
+  if (time < freeze) return 0;
+  return THREE.MathUtils.lerp(scale, 1, THREE.MathUtils.smootherstep(time - freeze, 0, recover));
+}
+
+/**
  * Orchestrates the game: maps input to state events (and gates the menu, glow and randomize keys),
  * runs per-state timers inside update(dt) and performs the enter actions of each state (camera,
  * car, minigame, HUD, menu).
@@ -45,11 +57,10 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
 
   /** @type {import("../core/tween.js").TweenHandle | null} */
   let cameraTween = null;
-  /** @type {import("../core/tween.js").TweenHandle | null} */
-  let brakeTween = null;
-  /** @type {THREE.Vector3 | null} camera position the crash shake jitters around */
-  let shakeFrom = null;
+  /** Which car of the wreck the orbit follows, by the order they crashed (0: the Bolones). */
+  let wreckFocus = 0;
   const shakeOffset = new THREE.Vector3();
+  const aim = new THREE.Vector3();
   let followX = 0; // sideways camera offset that keeps the car in frame
   let pinned = false; // free ride: the orbit rides along with the car (followX = car x)
   const carBounds = new THREE.Box3();
@@ -85,6 +96,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     controls.enabled = false;
     const from = camera.position.clone();
     const fromTarget = controls.target.clone();
+    const fromMax = controls.maxDistance; // a wreck's, pulled back further
     cameraTween = tweens.add({
       duration: SCENE.camera.transition,
       onUpdate: (t) => {
@@ -93,42 +105,35 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         moveTarget.copy(cameraTarget).x += followX;
         camera.position.lerpVectors(from, moveTo, t);
         controls.target.lerpVectors(fromTarget, moveTarget, t);
+        controls.maxDistance = THREE.MathUtils.lerp(fromMax, SCENE.controls.maxDistance, t);
         controls.update();
       },
       onComplete: onDone,
     });
   }
 
-  /** Ends the crash effects (brake, shake) early, e.g. AGAIN right after the lock. */
-  function stopCrash() {
-    brakeTween?.cancel();
-    if (shakeFrom) camera.position.copy(shakeFrom);
-    shakeFrom = null;
-  }
-
-  /** The world brakes to a halt (traffic stays where it hit) and the camera starts shaking. */
-  function crash() {
-    const from = world.speedMultiplier;
-    brakeTween = tweens.add({
-      duration: MINIGAME.crash.stop,
-      ease: (t) => 1 - (1 - t) ** 2, // hard at first, settling softly
-      onUpdate: (t) => (world.speedMultiplier = from * (1 - t)),
-    });
-    shakeFrom = camera.position.clone();
-  }
-
-  /** @param {number} time seconds since the crash */
-  function shake(time) {
-    if (!shakeFrom) return;
-    const { shake: duration, shakeAmount } = MINIGAME.crash;
-    const left = 1 - time / duration;
-    if (left <= 0) {
-      stopCrash();
-      return;
-    }
+  /**
+   * After a crash the orbit follows the car in view (the Bolones first, Tab: the next one),
+   * easing over to it (MINIGAME.crash.follow) with the camera keeping its place around it; at
+   * first the whole of it shakes, fading out, the harder the hit the more.
+   *
+   * @param {number} dt real seconds
+   */
+  function followWreck(dt) {
+    const { follow, shake, shakeAmount } = MINIGAME.crash;
+    controls.target.sub(shakeOffset);
+    camera.position.sub(shakeOffset);
+    minigame.wreckCentre(aim, wreckFocus).sub(controls.target);
+    aim.multiplyScalar(1 - Math.exp(-dt / follow));
+    const left = Math.max(0, 1 - stateTime / shake);
     const random = () => Math.random() * 2 - 1;
-    shakeOffset.set(random(), random(), 0).multiplyScalar(shakeAmount * left * left);
-    camera.position.copy(shakeFrom).add(shakeOffset);
+    shakeOffset
+      .set(random(), random(), 0)
+      .multiplyScalar(shakeAmount * minigame.impact * left ** 2);
+    aim.add(shakeOffset);
+    controls.target.add(aim);
+    camera.position.add(aim);
+    controls.update();
   }
 
   /**
@@ -148,7 +153,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
    * in the middle of the road.
    */
   function followCar() {
-    if (cameraTween?.isActive()) return; // the move sets followX itself
+    // the move sets followX itself; after a crash the camera follows the wreck (followWreck)
+    if (cameraTween?.isActive() || machine.state === "gameover") return;
     if (pinned && machine.state !== "free" && car.group.position.x === 0) pinned = false;
     const portrait = camera.aspect < 1;
     if (!pinned && !portrait && followX === 0) return; // landscape: nothing to measure every frame
@@ -174,12 +180,10 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     if (dx === 0) return;
     camera.position.x += dx;
     controls.target.x += dx;
-    if (shakeFrom) shakeFrom.x += dx; // shake() rebuilds camera.position from it every frame
     followX = offset;
   }
 
   function leaveMinigame() {
-    stopCrash();
     minigame.reset();
     world.speedMultiplier = 1;
     moveCamera(homePosition, () => (controls.enabled = true));
@@ -197,10 +201,10 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     car.softEdges = next === "free";
     // ESC from free ride keeps the pin while the car eases back to the middle (see followCar)
     pinned = next === "free" || (next === "idle" && previous === "free");
+    input.arm("next", false); // Tab is the browser's again, but over a wreck
 
     switch (next) {
       case "countdown":
-        stopCrash();
         boost = 1;
         car.reset(tweens);
         minigame.reset();
@@ -217,9 +221,16 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         break;
 
       case "gameover":
-        // the scene stays as it was hit; the camera and the scene GUI return on leaving
+        // the wreck stays on the road, the camera can be turned round it and pulled back at
+        // once; the camera and the scene GUI return on leaving
         hud.showGameOver(minigame.score, recordScore());
-        crash();
+        world.speedMultiplier = 0; // the road stops with the crash: the palms stay where it found them
+        wreckFocus = 0;
+        shakeOffset.set(0, 0, 0);
+        cameraTween?.cancel();
+        controls.maxDistance = MINIGAME.crash.orbit;
+        controls.enabled = true;
+        input.arm("next", true);
         break;
 
       case "idle":
@@ -229,7 +240,10 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         break;
 
       case "free":
-        if (previous === "gameover") leaveMinigame();
+        if (previous === "gameover") {
+          car.reset(tweens);
+          leaveMinigame();
+        }
         break;
     }
   }
@@ -245,7 +259,12 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         machine.send(action);
         break;
       case "menu":
-        if (machine.state === "idle") hud.toggleMenu(); // only where the toggle is shown
+        if (machine.state === "idle" || machine.state === "gameover") hud.toggleMenu(); // shown there
+        break;
+      case "next":
+        if (machine.state === "gameover") {
+          wreckFocus = (wreckFocus + 1) % minigame.wrecks.length;
+        }
         break;
       case "glow":
         view.bloom.enabled = !view.bloom.enabled;
@@ -277,7 +296,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     /** @param {number} dt */
     update(dt) {
       stateTime += dt;
-      car.update(dt, world.speedMultiplier, steerInput());
+      // a wreck is the crash's: its wheels stand still, dented as they are (scene/crumple.js)
+      if (machine.state !== "gameover") car.update(dt, world.speedMultiplier, steerInput());
       followCar();
 
       switch (machine.state) {
@@ -314,8 +334,12 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         }
 
         case "gameover": {
-          shake(stateTime);
-          // the score counts up once the panel is in (after the lock)
+          const scale = slowMotion(stateTime);
+          // the road under the camera, which rides along with the car in view
+          world.speedMultiplier = minigame.wreck(dt * scale, wreckFocus) * scale;
+          followWreck(dt);
+          hud.setWreck(minigame.wrecks, wreckFocus);
+          // the score counts up once it is in (after the lock)
           const { perPoint, max } = MINIGAME.scoreCount;
           const duration = Math.min(minigame.score * perPoint, max);
           const counting = stateTime - MINIGAME.crash.lock;

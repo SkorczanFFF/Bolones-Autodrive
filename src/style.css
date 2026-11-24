@@ -275,6 +275,8 @@ body:is([data-state="idle"], [data-state="free"]) canvas[data-grabbing] {
 }
 
 [data-state="idle"] .hud__menu,
+[data-state="idle"] .hud__toggle,
+[data-state="gameover"] .hud__toggle,
 [data-state="gameover"] .hud__gameover,
 [data-state="playing"] .hud__scoreboard:not([hidden]) {
   display: flex !important;
@@ -559,7 +561,6 @@ kbd {
 
 .button-grid--3 {
   --columns: 3;
-  width: 100%;
 }
 
 .button-grid > .button:not(.button--small) {
@@ -605,7 +606,8 @@ kbd {
   font-size: 18px;
 }
 
-/* the menu toggle sits in the corner and hides everything else; hidden, only its icon stays */
+/* the toggle sits in the corner and hides everything else (the menu, game over); hidden, only
+   its icon stays */
 .hud__fade {
   transition:
     opacity 0.3s,
@@ -619,6 +621,7 @@ kbd {
 
 .hud__toggle {
   position: fixed;
+  z-index: calc(var(--z-hud) + 1);
   top: calc(var(--corner-gap) + var(--safe-top));
   left: calc(var(--corner-gap) + var(--safe-left));
   transition:
@@ -741,15 +744,20 @@ kbd {
 }
 
 /* scoreboard */
+/* best, score and level: in the game, and frozen on game over */
+.scoreboard {
+  display: flex;
+  align-items: flex-end;
+  gap: 28px;
+  padding: 6px 22px;
+}
+
 .hud__scoreboard {
   position: fixed;
   top: calc(12px + var(--safe-top));
   left: 50%;
   z-index: var(--z-hud);
   transform: translateX(-50%);
-  align-items: flex-end;
-  gap: 28px;
-  padding: 6px 22px;
   pointer-events: none;
 }
 
@@ -787,25 +795,57 @@ kbd {
   animation: flash 0.3s steps(1) 4;
 }
 
-/* game over */
+/* game over: the result under the title over the sky, what next at the bottom, the wreck in
+   view between them */
 .hud__gameover {
   position: fixed;
-  top: 14%;
-  left: 50%;
+  inset: 0;
   z-index: var(--z-hud);
-  transform: translateX(-50%);
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(8px + var(--safe-top)) 16px calc(20px + var(--safe-bottom));
+  text-align: center;
+  pointer-events: none;
+}
+
+.hud__gameover-head {
+  display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  width: min(92vw, 600px);
-  box-sizing: border-box;
-  padding: 12px 24px 22px;
-  text-align: center;
-  /* the crash scene stays behind the panel: frost it, so the score reads at a glance */
-  background-color: color-mix(in srgb, var(--ui-deep) 90%, transparent);
-  backdrop-filter: blur(6px);
-  /* shows up once game over takes keys and clicks (--crash-lock, set by ui/hud.js) */
+}
+
+/* the result and what next show up once game over takes keys and clicks (--crash-lock, set by
+   ui/hud.js); the title and the car in view are in from the crash */
+.hud__result,
+.hud__gameover-buttons {
   animation: panel-in 0.3s ease-out var(--crash-lock, 0s) backwards;
+}
+
+.hud__gameover-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+/* the car in view: its name and number, Tab for the next */
+.hud__wreck {
+  color: var(--yellow);
+}
+
+.hud__wreck-count {
+  opacity: 0.7;
+}
+
+.hud__gameover-hint {
+  margin: 0;
+  font-size: 18px;
+  opacity: 0.85;
+  text-shadow:
+    2px 2px 0 var(--ui-deep),
+    0 0 6px var(--aqua);
 }
 
 @keyframes panel-in {
@@ -859,29 +899,14 @@ kbd {
      back up, so swashes like the tail of the "G" (and their shadow) are never cut off */
   margin: 0 0 -0.25em;
   padding: 0.05em 0.5em 0.4em;
-  font-size: clamp(44px, 5vw, 64px);
+  font-size: clamp(64px, 9vw, 120px);
   line-height: 1.3;
   white-space: nowrap;
+  animation: pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1); /* slams in with the crash */
 }
 
-/* score as the headline, the record (or NEW BEST!) under it */
-.hud__final {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 8px;
-  line-height: 1;
-}
-
-.hud__final-label {
-  padding-left: 0.4em; /* balances the trailing letter-spacing */
-  font-size: 18px;
-  letter-spacing: 0.4em;
-  opacity: 0.85;
-}
-
-.hud__final-score {
-  font-size: clamp(88px, 11vw, 128px);
+.stat__value.hud__final-score {
+  font-size: clamp(64px, 6vw, 80px);
   color: var(--white);
   text-shadow:
     3px 3px 0 var(--ui-deep),
@@ -929,25 +954,16 @@ kbd {
   }
 }
 
-.hud__final-best,
+/* the record beaten: blinks, once the result is in */
 .hud__new-best {
-  margin: 2px 0 0;
-  padding-left: 0.25em;
+  margin: 6px 0 0;
+  padding-left: 0.25em; /* balances the trailing letter-spacing */
   letter-spacing: 0.25em;
-}
-
-.hud__final-best {
-  text-shadow: 0 0 8px var(--aqua);
-}
-
-.hud__final-best-value {
-  color: var(--white);
-}
-
-.hud__new-best {
   color: var(--yellow);
   text-shadow: 0 0 10px var(--yellow);
-  animation: blink 0.8s step-end infinite;
+  animation:
+    panel-in 0.3s ease-out var(--crash-lock, 0s) backwards,
+    blink 0.8s step-end var(--crash-lock, 0s) infinite;
 }
 
 @keyframes pop {

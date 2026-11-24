@@ -37,12 +37,12 @@
       </div>
     </div>
     <div class="hud" id="hud">
+      <!-- Like the DISPLAY/OSD button of an 80s remote: hides the menu or game over, keeps the scene. -->
+      <button class="button button--small hud__toggle" type="button" data-action="menu">
+        <span class="hud__toggle-icon" data-icon="eye"></span>
+        <span data-text="hide"></span><kbd data-key="menu"></kbd>
+      </button>
       <section class="hud__menu" data-label="menu">
-        <!-- Like the DISPLAY/OSD button of an 80s remote: hides the menu, keeps the scene. -->
-        <button class="button button--small hud__toggle" type="button" data-action="menu">
-          <span class="hud__toggle-icon" data-icon="eye"></span>
-          <span data-text="hide"></span><kbd data-key="menu"></kbd>
-        </button>
         <h1 class="logo hud__fade">
           <span class="logo__script sunset-text" data-text="logoScript"></span>
           <span class="logo__caps" data-text="logoCaps"></span>
@@ -98,7 +98,7 @@
 
       <div class="hud__countdown sunset-text" hidden></div>
 
-      <div class="hud__scoreboard panel" aria-live="polite" hidden>
+      <div class="hud__scoreboard scoreboard panel" aria-live="polite" hidden>
         <div class="stat">
           <span class="stat__label" data-text="best"></span
           ><span class="stat__value" data-best></span>
@@ -115,28 +115,46 @@
 
       <div class="hud__flash" aria-hidden="true"></div>
 
-      <section class="hud__gameover panel" data-label="gameOver" aria-live="assertive">
-        <h2 class="hud__gameover-title sunset-text" data-text="gameOver"></h2>
-        <!-- the score is the headline; the record sits under it, or NEW BEST! when it was beaten -->
-        <div class="hud__final">
-          <span class="hud__final-label" data-text="score"></span>
-          <span class="hud__final-score" data-final-score></span>
+      <!-- the result with the title over the sky, what next at the bottom: the wreck stays in view -->
+      <section class="hud__gameover" data-label="gameOver" aria-live="assertive">
+        <header class="hud__gameover-head hud__fade">
+          <h2 class="hud__gameover-title sunset-text" data-text="gameOver"></h2>
+          <!-- the game's own scoreboard, frozen; NEW BEST! under it in place of the record -->
+          <div class="hud__result scoreboard panel">
+            <div class="stat hud__final-best">
+              <span class="stat__label" data-text="best"></span>
+              <span class="stat__value" data-best></span>
+            </div>
+            <div class="stat stat--main">
+              <span class="stat__label" data-text="score"></span>
+              <span class="stat__value hud__final-score" data-final-score></span>
+            </div>
+            <div class="stat">
+              <span class="stat__label" data-text="level"></span>
+              <span class="stat__value" data-level></span>
+            </div>
+          </div>
           <p class="hud__new-best" data-text="newBest" hidden></p>
-          <p class="hud__final-best">
-            <span data-text="best"></span> <span class="hud__final-best-value" data-best></span>
-          </p>
-        </div>
-        <div class="button-grid button-grid--3">
-          <button class="button button--primary" type="button" data-action="start">
-            <span data-text="again"></span><kbd data-key="start"></kbd>
+        </header>
+        <footer class="hud__gameover-actions hud__fade">
+          <!-- the car the camera follows (the Bolones first), from the crash on -->
+          <button class="button button--small hud__wreck" type="button" data-action="next">
+            <span data-wreck></span><span class="hud__wreck-count" data-wreck-count></span>
+            <kbd data-key="next"></kbd>
           </button>
-          <button class="button" type="button" data-action="free">
-            <span data-text="freeRide"></span><kbd data-key="free"></kbd>
-          </button>
-          <button class="button" type="button" data-action="exit">
-            <span data-text="menu"></span><kbd data-key="exit"></kbd>
-          </button>
-        </div>
+          <p class="hud__gameover-hint" data-text="lookAround"></p>
+          <div class="button-grid button-grid--3 hud__gameover-buttons">
+            <button class="button button--primary" type="button" data-action="start">
+              <span data-text="again"></span><kbd data-key="start"></kbd>
+            </button>
+            <button class="button" type="button" data-action="free">
+              <span data-text="freeRide"></span><kbd data-key="free"></kbd>
+            </button>
+            <button class="button" type="button" data-action="exit">
+              <span data-text="menu"></span><kbd data-key="exit"></kbd>
+            </button>
+          </div>
+        </footer>
       </section>
     </div>
     <!-- F10 developer stats (ui/devstats.js fills the texts and values) -->

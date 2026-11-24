@@ -1,11 +1,14 @@
 import * as THREE from "three";
 import { CAR, SPEED, WORLD } from "../config.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
+import { mountWheel, wheelsOf } from "./rig.js";
 import { dress } from "./wire.js";
 
 /** @typedef {-1 | 0 | 1} SteerInput left, none, right */
 
 const UP = new THREE.Vector3(0, 1, 0);
+const ORIGIN = new THREE.Vector3();
+const UPRIGHT = new THREE.Quaternion();
 
 /**
  * The share of the way to a target covered in dt when approaching it exponentially with time
@@ -20,12 +23,12 @@ const settle = (tau, dt) => 1 - Math.exp(-dt / tau);
 /**
  * The Bolones. Each part of the motion lives on its own node, so nothing has to be synced:
  *
- *   group        lateral position (x) + yaw: the nose turns towards the lane change; CAR.lift (y)
- *   ├ chassis    body roll around the axle line (CAR.rollCenterY)
- *   │ └ body
- *   └ 4× pivot   on the axle, mid-width; front pivots steer (y)
- *       └ spin   rolls the wheel around its axle (x)
- *         └ mirror → wheel model, offset so its axle and mid-width sit on the pivot
+ *   group          lateral position (x) + yaw: the nose turns towards the lane change; CAR.lift (y)
+ *   └ wreck        where a crash threw the car (game/crash.js), at rest otherwise
+ *     ├ chassis    body roll around the axle line (CAR.rollCenterY)
+ *     │ └ body
+ *     └ 4× wheel   on its rig (scene/rig.js): the mount on the axle, mid-width; front ones steer
+ *       └ … spin → mirror → wheel model, offset so its axle and mid-width sit on the mount
  *
  * The wheels never roll with the body, which gives the suspension feel of v1. Speeds are per
  * second and easings time constants (settle), so 60 Hz and 144 Hz feel the same.
@@ -47,10 +50,11 @@ export function createCar({ scene, models, materials }) {
   // the wheel's width, which is off the origin in wheel.fbx.
   const wheelModel = dress(pruneEmpty(models.wheel), solid, wire);
   const center = wheelCenter(wheelModel);
+  const radius = new THREE.Box3().setFromObject(wheelModel).getSize(new THREE.Vector3()).y / 2;
 
-  /** @type {THREE.Group[]} */
+  /** @type {THREE.Object3D[]} */
   const spins = [];
-  /** @type {THREE.Group[]} */
+  /** @type {THREE.Object3D[]} the front wheels' steer nodes */
   const frontWheels = [];
 
   const wheels = CAR.wheels.map(([x, y, z]) => {
@@ -62,29 +66,29 @@ export function createCar({ scene, models, materials }) {
     if (mirrored) mirror.rotation.y = Math.PI;
     mirror.add(wheel);
 
-    const spin = new THREE.Group();
-    spin.add(mirror);
-    spins.push(spin);
-
-    // (x, y, z) is where v1 put the model origin; the pivot moves to the middle of the width.
-    const pivot = new THREE.Group();
+    // (x, y, z) is where v1 put the model origin; the mount sits in the middle of the width
     const centerOffset = center.clone().applyAxisAngle(UP, mirrored ? Math.PI : 0);
-    pivot.position.set(x, y, z).add(centerOffset);
-    pivot.add(spin);
-    if (z < 0) frontWheels.push(pivot);
-    return pivot;
+    const at = new THREE.Vector3(x, y, z).add(centerOffset);
+    const mount = mountWheel(mirror, at, radius, z < 0); // the nose is towards -z
+    const [{ steer, spin }] = wheelsOf(mount);
+    spins.push(spin);
+    if (z < 0) frontWheels.push(steer);
+    return mount;
   });
 
-  const group = new THREE.Group();
+  const wreck = new THREE.Group().add(chassis, ...wheels);
+  const group = new THREE.Group().add(wreck);
   group.position.y = CAR.lift;
-  group.add(chassis, ...wheels);
   scene.add(group);
+  group.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(body).translate(group.position.clone().negate());
 
   const s = CAR.steer;
   const { roll, yaw, wheelSteer } = CAR.handling;
   const rollSign = roll.outward ? 1 : -1;
 
   let speed = 0; // lateral speed, units/s
+  let sideways = 0; // how fast the car went across the road last frame, units/s (+x)
   let direction = 0; // last steering direction, used for momentum
   let holdTime = 0; // seconds the current direction has been held
   /** @type {SteerInput} */
@@ -159,17 +163,21 @@ export function createCar({ scene, models, materials }) {
     const { max } = wheelSteer;
     const steerTarget = clamp(-input * max + yawRate * wheelSteer.perYawRate, -max, max);
     steerAngle += (steerTarget - steerAngle) * settle(wheelSteer.easing, dt);
-    for (const pivot of frontWheels) pivot.rotation.y = steerAngle;
+    for (const steer of frontWheels) steer.rotation.y = steerAngle;
   }
 
   function stop() {
     speed = 0;
+    sideways = 0;
     holdTime = 0;
     lastInput = 0;
   }
 
   return {
     group,
+    wreck,
+    /** The body (wheels excluded) in the wreck node's frame. */
+    box,
     chassis,
     frontWheels,
     /** Steering is only active in free ride and while playing. */
@@ -190,8 +198,13 @@ export function createCar({ scene, models, materials }) {
       const startX = group.position.x;
       const blocked = active && steer(dt, input, this.softEdges);
 
-      const lateralVelocity = dt > 0 ? (group.position.x - startX) / dt : 0;
-      handle(dt, active && !blocked ? input : 0, lateralVelocity, speedMultiplier);
+      sideways = dt > 0 ? (group.position.x - startX) / dt : 0;
+      handle(dt, active && !blocked ? input : 0, sideways, speedMultiplier);
+    },
+
+    /** How fast the car went across the road last frame, units/s (+x): it crashes at that. */
+    get sideways() {
+      return sideways;
     },
 
     /** A steering key was released (v1: speed drops right away). */
@@ -200,17 +213,21 @@ export function createCar({ scene, models, materials }) {
     },
 
     /**
-     * Eases the car back to the start position; roll, yaw and wheels settle on their own.
+     * Eases the car back to the start position (also from where a crash pushed it); roll, yaw and
+     * wheels settle on their own.
      *
      * @param {import("../core/tween.js").Tweens} tweens
      */
     reset(tweens) {
       resetTween?.cancel();
       const fromX = group.position.x;
+      const [fromPosition, fromTurn] = [wreck.position.clone(), wreck.quaternion.clone()];
       resetTween = tweens.add({
         duration: CAR.resetDuration,
         onUpdate: (t) => {
           group.position.x = fromX * (1 - t);
+          wreck.position.lerpVectors(fromPosition, ORIGIN, t);
+          wreck.quaternion.slerpQuaternions(fromTurn, UPRIGHT, t);
         },
         onComplete: stop,
       });

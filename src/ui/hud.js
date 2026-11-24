@@ -61,7 +61,7 @@ export function createHud(
   for (const element of $$("[data-icon]")) {
     element.innerHTML = ICONS[/** @type {keyof typeof ICONS} */ (element.dataset.icon)];
   }
-  root.style.setProperty("--crash-lock", `${MINIGAME.crash.lock}s`); // game over panel delay
+  root.style.setProperty("--crash-lock", `${MINIGAME.crash.lock}s`); // game over score and buttons
   root.style.setProperty("--crash-shake", `${MINIGAME.crash.shake}s`); // the flash lasts as long
   for (const element of $$("[data-key]")) {
     const { label = "", icon } = ACTIONS[/** @type {Action} */ (element.dataset.key)];
@@ -101,7 +101,7 @@ export function createHud(
   const countdown = $(".hud__countdown");
   const scoreboard = $(".hud__scoreboard");
   const score = $("[data-score]");
-  const level = $("[data-level]");
+  const levels = $$("[data-level]");
   const finalScore = $("[data-final-score]");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let gameOverScore = 0;
@@ -110,6 +110,9 @@ export function createHud(
   const menuBest = $(".hud__best");
   const bestValues = $$("[data-best]");
   const menuToggle = $(".hud__toggle");
+  const wreck = $("[data-wreck]");
+  const wreckCount = $("[data-wreck-count]");
+  wreck.parentElement?.setAttribute("title", withKey(TEXT.nextCar, "next"));
 
   /** @param {boolean} visible */
   function setMenuVisible(visible) {
@@ -122,7 +125,10 @@ export function createHud(
   setMenuVisible(true);
 
   return {
-    /** Hides or shows the start menu; the scene and the scene GUI stay usable. */
+    /**
+     * Hides or shows the menu or game over, all but the toggle: the scene and the scene GUI stay
+     * usable. Every state starts with it shown.
+     */
     toggleMenu() {
       setMenuVisible(document.body.dataset.menu === "hidden");
     },
@@ -130,6 +136,18 @@ export function createHud(
     /** @param {import("../game/state.js").GameState} state */
     setState(state) {
       document.body.dataset.state = state;
+      setMenuVisible(true);
+    },
+
+    /**
+     * The car of the wreck the camera follows, of how many (game over).
+     *
+     * @param {string[]} labels the cars that crashed, in the order they did
+     * @param {number} which
+     */
+    setWreck(labels, which) {
+      show(wreck, labels[which]);
+      show(wreckCount, `${which + 1}/${labels.length}`);
     },
 
     /** @param {string | null} text null hides the countdown */
@@ -145,7 +163,9 @@ export function createHud(
 
     /** @param {number} value */
     setLevel(value) {
-      if (show(level, String(value)) && value > 1) replay(level, "is-flash");
+      for (const level of levels) {
+        if (show(level, String(value)) && value > 1) replay(level, "is-flash");
+      }
     },
 
     /** @param {number} value 0 = no record yet */

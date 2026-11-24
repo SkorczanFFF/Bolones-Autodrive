@@ -105,3 +105,29 @@ export function createRidged(seed) {
     return total > 0 ? sum / total : 0;
   };
 }
+
+/**
+ * 3D value noise: a smooth 0..1 value over space, per seed, from values on a lattice `cell` apart
+ * blended in between (points close together get close values).
+ *
+ * @param {{ x: number, y: number, z: number }} p
+ * @param {number} seed
+ * @param {number} cell
+ */
+export function valueNoise({ x, y, z }, seed, cell) {
+  const at = [x, y, z].map((v) => v / cell);
+  const corner = at.map(Math.floor);
+  const [tx, ty, tz] = at.map((v, k) => {
+    const t = v - corner[k];
+    return t * t * (3 - 2 * t);
+  });
+  let sum = 0;
+  for (let k = 0; k < 8; k++) {
+    const [dx, dy, dz] = [k & 1, (k >> 1) & 1, (k >> 2) & 1];
+    const weight = (dx ? tx : 1 - tx) * (dy ? ty : 1 - ty) * (dz ? tz : 1 - tz);
+    const [i, j, l] = [corner[0] + dx, corner[1] + dy, corner[2] + dz];
+    const s = Math.sin(i * 127.1 + j * 311.7 + l * 74.7 + seed * 19.19) * 43758.5453;
+    sum += weight * (s - Math.floor(s));
+  }
+  return sum;
+}

@@ -1,0 +1,156 @@
+import * as THREE from "three";
+import { ENDS } from "../../scene/crumple.js";
+import { ACROSS, AHEAD, UP, rotation, vector } from "./physics.js";
+
+/**
+ * A box in the world: its centre, axes and half sizes along them.
+ *
+ * @typedef {{ centre: THREE.Vector3, axes: THREE.Vector3[], half: number[] }} Box
+ * @typedef {import("@dimforge/rapier3d-compat").RigidBody} Body
+ */
+
+const AXES = [ACROSS, UP, AHEAD];
+
+/**
+ * A body's box in the world, turned as the body is, or as `turn` says.
+ *
+ * @param {{ body: Body, half: number[], shift: THREE.Vector3 }} solid
+ * @param {THREE.Quaternion} [turn]
+ * @returns {Box}
+ */
+export function boxOf({ body, half, shift }, turn = rotation(body.rotation())) {
+  return {
+    centre: shift.clone().applyQuaternion(turn).add(vector(body.translation())),
+    axes: AXES.map((axis) => axis.clone().applyQuaternion(turn)),
+    half,
+  };
+}
+
+/**
+ * Half the extent of a box along a unit axis.
+ *
+ * @param {Box} box
+ * @param {THREE.Vector3} n
+ */
+const extent = (box, n) =>
+  box.axes.reduce((sum, axis, k) => sum + box.half[k] * Math.abs(axis.dot(n)), 0);
+
+/**
+ * How deep two boxes overlap along a unit normal (from a to b); 0 or less: apart along it.
+ *
+ * @param {Box} a
+ * @param {Box} b
+ * @param {THREE.Vector3} n
+ */
+export const penetration = (a, b, n) =>
+  extent(a, n) + extent(b, n) - Math.abs(new THREE.Vector3().subVectors(b.centre, a.centre).dot(n));
+
+/**
+ * Whether a car's body meets along its length (its front or its rear), not its side.
+ *
+ * @param {Body} body
+ * @param {THREE.Vector3} normal
+ */
+export function endOn(body, normal) {
+  return Math.abs(AHEAD.clone().applyQuaternion(rotation(body.rotation())).dot(normal)) > ENDS[1];
+}
+
+/**
+ * A normal made level: cars meet on the road (tilted with a rolling car, it would take in a tall
+ * palm's height and push harder the more it rolls).
+ *
+ * @param {THREE.Vector3} normal
+ */
+export function level(normal) {
+  normal.y = 0;
+  return normal.normalize();
+}
+
+/**
+ * The middle of where two boxes overlap: along a unit normal, across it and up.
+ *
+ * @param {Box} a
+ * @param {Box} b
+ * @param {THREE.Vector3} normal
+ */
+export function middleOf(a, b, normal) {
+  const side = new THREE.Vector3().crossVectors(normal, UP);
+  if (side.lengthSq() < 1e-6) side.crossVectors(normal, AHEAD); // one on top of the other
+  side.normalize();
+  const third = new THREE.Vector3().crossVectors(side, normal);
+  return [normal, side, third].reduce(
+    (point, axis) => point.addScaledVector(axis, middle(a, b, axis)),
+    new THREE.Vector3(),
+  );
+}
+
+/**
+ * The middle of where two boxes overlap along a unit axis, as a distance along it.
+ *
+ * @param {Box} a
+ * @param {Box} b
+ * @param {THREE.Vector3} n
+ */
+function middle(a, b, n) {
+  const [ca, cb] = [a.centre.dot(n), b.centre.dot(n)];
+  const [ea, eb] = [extent(a, n), extent(b, n)];
+  return (Math.max(ca - ea, cb - eb) + Math.min(ca + ea, cb + eb)) / 2;
+}
+
+/**
+ * Whether two boxes overlap (separating axis test) and if so, the depth along each face normal
+ * (from a to b) and the point between them: the corners of each inside the other, or the middle
+ * of their nearest points.
+ *
+ * @param {Box} a
+ * @param {Box} b
+ * @returns {{ faces: { normal: THREE.Vector3, depth: number }[], point: THREE.Vector3 } | null}
+ */
+export function overlap(a, b) {
+  const apart = new THREE.Vector3().subVectors(b.centre, a.centre);
+  const reach = a.half[0] + a.half[1] + a.half[2] + b.half[0] + b.half[1] + b.half[2];
+  if (apart.length() > reach) return null;
+  for (const p of a.axes) {
+    for (const q of b.axes) {
+      const axis = new THREE.Vector3().crossVectors(p, q);
+      const length = axis.length();
+      if (length > 1e-6 && penetration(a, b, axis.divideScalar(length)) < 0) return null;
+    }
+  }
+  const faces = [...a.axes, ...b.axes].map((axis) => {
+    const normal = apart.dot(axis) < 0 ? axis.clone().negate() : axis.clone();
+    return { normal, depth: penetration(a, b, normal) };
+  });
+  if (faces.some(({ depth }) => depth < 0)) return null;
+  const normal = faces.reduce((best, f) => (f.depth < best.depth ? f : best)).normal;
+
+  const inside = (/** @type {Box} */ box, /** @type {THREE.Vector3} */ p) => {
+    const d = new THREE.Vector3().subVectors(p, box.centre);
+    return box.axes.every((axis, k) => Math.abs(d.dot(axis)) <= box.half[k] + 1e-6);
+  };
+  const corners = (/** @type {Box} */ box) =>
+    [-1, 1].flatMap((x) =>
+      [-1, 1].flatMap((y) =>
+        [-1, 1].map((z) =>
+          box.centre
+            .clone()
+            .addScaledVector(box.axes[0], x * box.half[0])
+            .addScaledVector(box.axes[1], y * box.half[1])
+            .addScaledVector(box.axes[2], z * box.half[2]),
+        ),
+      ),
+    );
+  const touching = [
+    ...corners(a).filter((p) => inside(b, p)),
+    ...corners(b).filter((p) => inside(a, p)),
+  ];
+  const support = (/** @type {Box} */ box, /** @type {THREE.Vector3} */ n) =>
+    box.axes.reduce(
+      (p, axis, k) => p.addScaledVector(axis, Math.sign(axis.dot(n)) * box.half[k]),
+      box.centre.clone(),
+    );
+  const point = touching.length
+    ? touching.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(touching.length)
+    : support(a, normal).add(support(b, normal.clone().negate())).multiplyScalar(0.5);
+  return { faces, point };
+}

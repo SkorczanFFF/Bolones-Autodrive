@@ -164,7 +164,12 @@ export function createBloom(renderer, scene, camera) {
       scene.background = null;
       if (fog) (fogColor.copy(fog.color), fog.color.set(0x000000));
 
+      // black and lines: no shadows to draw (five suns' maps each frame), the normal pass does
+      const { shadowMap } = renderer;
+      const updating = shadowMap.autoUpdate;
+      shadowMap.autoUpdate = false;
       glowComposer.render();
+      shadowMap.autoUpdate = updating;
 
       for (const [object, material] of swapped) object.material = material;
       swapped.clear();

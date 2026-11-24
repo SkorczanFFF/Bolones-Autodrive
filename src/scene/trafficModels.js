@@ -170,7 +170,7 @@ export const TRAFFIC_MODELS = {
   polakito: {
     label: "Polakito",
     mass: 600,
-    // traced from the 126p Komfort's drawings (side, front, rear and top views): its big plastic
+    // traced from blueprints (side, front, rear and top views): the later one, its big plastic
     // bumpers
     length: 3.129,
     width: 1.382,
@@ -415,8 +415,8 @@ export const TRAFFIC_MODELS = {
   kredens: {
     label: "Kredens",
     mass: 1010,
-    // traced from the FSO 125p's drawings (side, front and rear views; the top view's plan from
-    // the 1967 Fiat 125 Special's drawings): the later one, its tail lamps across the rear
+    // traced from blueprints (side, front and rear views; the top view's plan from an earlier
+    // one's): the later one, its tail lamps across the rear
     length: 4.226,
     width: 1.63,
     wheel: {
@@ -661,8 +661,7 @@ export const TRAFFIC_MODELS = {
   ramses: {
     label: "Ramses",
     mass: 1600,
-    // traced from the Żuk A15M's drawings (Modelarz 3/1980: side, top, front and rear views),
-    // without the gear on its roof
+    // traced from blueprints (side, top, front and rear views), without the gear on its roof
     length: 4.39,
     width: 1.79,
     wheel: {
@@ -750,7 +749,7 @@ export const TRAFFIC_MODELS = {
       frame: { x: [1.5, 3.3], half: 0.42, y: [0.36, 0.465] },
     },
     // a lorry's: tall heads well out on two arms from each front door's front edge, beside the
-    // corner windows (232 x 145 mm, as the Żuk's)
+    // corner windows (232 x 145 mm, as drawn)
     mirrors: {
       sides: [-1, 1],
       head: [0.145, 0.232],

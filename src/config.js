@@ -397,7 +397,7 @@ export const CAR = {
     [1.227, 0.56, 1.975],
     [1.227, 0.56, -2.55],
   ],
-  /** The fuel cap, round, on the right rear wing as the Polonez had it: how far back (z) and up
+  /** The fuel cap, round, on the right rear wing, as the real car had it: how far back (z) and up
    * (y), in the car's frame like the wheels, and its radius; it sits on the body where a ray from
    * the right meets it. */
   fuelCap: { at: [2.18, 1.39], radius: 0.08 },
@@ -788,9 +788,9 @@ export const SCREEN = {
 export const STORAGE = {
   /** localStorage keys of the best scores, by the minigame's mode */
   best: {
-    dodge: "polonez-autodrive:best",
-    crash: "polonez-autodrive:best-crash",
-    overtake: "polonez-autodrive:best-overtake",
+    dodge: "bolones-autodrive:best",
+    crash: "bolones-autodrive:best-crash",
+    overtake: "bolones-autodrive:best-overtake",
   },
 };
 

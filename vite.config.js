@@ -2,7 +2,7 @@ import { loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig(({ mode }) => ({
-  // Relative base: the same build works on Vercel (/) and GitHub Pages (/Polonez-Autodrive/).
+  // Relative base: the same build works on Vercel (/) and GitHub Pages (/Bolones-Autodrive/).
   base: "./",
   define: {
     // Vercel builds run with VERCEL=1; Web Analytics lives only there (GitHub Pages has no

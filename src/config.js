@@ -49,8 +49,8 @@ export const PALETTE = {
  * @property {"phong" | "basic"} [wireType] wireframe material type (default phong)
  * @property {"roadline"} [wireMap] textured overlay instead of a wireframe
  * @property {boolean} [wireGrid] procedural line grid overlay instead of a wireframe
- * @property {import("./scene/lines.js").WirePolygons} [wirePolygons] FBX models: lines along the
- *   modelled polygons (quads) instead of every triangle
+ * @property {boolean} [wirePolygons] FBX models: lines along the modelled polygons (quads) instead
+ *   of every triangle
  * @property {number} [lineFade] WIRE.fade for this layer (lower: lines stay visible further)
  * @property {number} [lineMin] visibility (0..1) lines fade down to on tiny triangles (default WIRE.min)
  * @property {number} [glow] bloom on this layer's lines, 0..1 (default WIRE.glow)
@@ -69,7 +69,7 @@ export const LAYERS = {
     wirePolygons: true, // body and wheels (they share these materials)
     lineFade: 1.5,
     lineMin: 0.2, // the far end of the car keeps a hint of its lines
-    glow: 0.3, // its dense lines would blow out to white at full bloom
+    glow: 0.6, // contour lines only; at full bloom they would still blow out to white
   },
   hills: {
     label: "Horizon range",
@@ -91,8 +91,8 @@ export const LAYERS = {
     wire: PALETTE.neonOrange,
     toggleSolid: true,
     wireType: "basic",
-    wirePolygons: { parts: [0] }, // the trunk; the leaves keep their triangles
-    lineFade: 0.6, // dense leaves: lines faint where palms spawn, full from mid-distance
+    wirePolygons: true,
+    lineFade: 0.6, // leaves: lines faint where palms spawn, full from mid-distance
     glow: 0.5,
     density: "palms",
   },

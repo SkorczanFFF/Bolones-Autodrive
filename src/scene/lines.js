@@ -14,6 +14,7 @@ import { WIRE } from "../config.js";
  * `wireEdge` xyz: each vertex's distance to the opposite edge of its triangle (zero for the two
  * edges through it); interpolated, the distance of a fragment to the three edges. w: the
  * triangle's inradius (its polygon's size for polygonLineGeometry). All in object units.
+ * Polygon lines also draw neighbouring edges: `wireNear`, `wireNearEnd` (nearDistances).
  */
 
 /** Shared by all line materials, so one GUI slider sets the width everywhere. */
@@ -119,67 +120,37 @@ function edgeDistances(position, { hidden = 0, sizes }, target) {
 }
 
 /**
- * Layer.wirePolygons: polygon outlines on the whole mesh, or on these connected parts of it
- * (numbered in file order; the rest keeps every triangle edge).
- *
- * @typedef {true | { parts: number[] }} WirePolygons
- */
-
-/** @type {Map<string, (geometry: THREE.BufferGeometry) => THREE.BufferGeometry>} */
-const polygonLines = new Map();
-
-/**
  * Lines along the modelled polygons (`userData.polygons`, core/fbx.js) instead of every
- * triangle; other geometries get triangle lines. One per source geometry and options, sharing
- * the source's attributes.
+ * triangle; other geometries get every triangle edge, still with the wireNear attributes their
+ * material reads. One per source geometry, sharing its attributes.
  *
- * @param {THREE.BufferGeometry} geometry
- * @param {WirePolygons} [options]
+ * @type {(geometry: THREE.BufferGeometry) => THREE.BufferGeometry}
  */
-export function polygonLineGeometry(geometry, options = true) {
-  const key = options === true ? "all" : options.parts.join();
-  let lines = polygonLines.get(key);
-  if (!lines) {
-    polygonLines.set(key, (lines = memoByGeometry((source) => buildPolygonLines(source, options))));
-  }
-  return lines(geometry);
-}
-
-/**
- * @param {THREE.BufferGeometry} geometry
- * @param {WirePolygons} options
- */
-function buildPolygonLines(geometry, options) {
-  /** @type {import("../core/fbx.js").Polygons | undefined} */
-  const polygons = geometry.userData.polygons;
-  if (!polygons) return lineGeometry(geometry);
-
-  const { inner, polygon, part } = polygons;
-  const count = inner.length;
-  // a triangle outside the listed parts keeps its edges and is a polygon of its own
-  /** @param {number} t */
-  const own = (t) => options !== true && !options.parts.includes(part[t]);
-  const hidden = inner.map((mask, t) => (own(t) ? 0 : mask));
-  /** @param {number} t */
-  const id = (t) => (own(t) ? count + t : polygon[t]);
+export const polygonLineGeometry = memoByGeometry((geometry) => {
+  const position = geometry.getAttribute("position");
+  const count = position.count / 3;
+  /** @type {import("../core/fbx.js").Polygons} */
+  const { inner: hidden, polygon } = geometry.userData.polygons ?? {
+    inner: new Uint8Array(count),
+    polygon: Uint32Array.from({ length: count }, (_, t) => t),
+  };
 
   // line fading measures the whole polygon: 2 * area / perimeter, as the inradius of a triangle
-  const position = geometry.getAttribute("position");
-  const area = new Float64Array(2 * count);
-  const perimeter = new Float64Array(2 * count);
+  const area = new Float64Array(count);
+  const perimeter = new Float64Array(count);
   const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   for (let t = 0; t < count; t++) {
     a.fromBufferAttribute(position, 3 * t);
     b.fromBufferAttribute(position, 3 * t + 1);
     c.fromBufferAttribute(position, 3 * t + 2);
-    area[id(t)] += b.clone().sub(a).cross(c.clone().sub(a)).length() / 2;
+    area[polygon[t]] += b.clone().sub(a).cross(c.clone().sub(a)).length() / 2;
     [b.distanceTo(c), c.distanceTo(a), a.distanceTo(b)].forEach((edge, k) => {
-      if (!(hidden[t] & (1 << k))) perimeter[id(t)] += edge;
+      if (!(hidden[t] & (1 << k))) perimeter[polygon[t]] += edge;
     });
   }
   const sizes = Float32Array.from(
     { length: count },
-    (_, t) => (2 * area[id(t)]) / perimeter[id(t)] || 0,
+    (_, t) => (2 * area[polygon[t]]) / perimeter[polygon[t]] || 0,
   );
 
   const lines = new THREE.BufferGeometry();
@@ -188,7 +159,84 @@ function buildPolygonLines(geometry, options) {
   }
   const distances = edgeDistances(position, { hidden, sizes });
   lines.setAttribute("wireEdge", new THREE.BufferAttribute(distances, 4));
+  const { near, end } = nearDistances(position, hidden, polygon);
+  lines.setAttribute("wireNear", new THREE.BufferAttribute(near, 3));
+  lines.setAttribute("wireNearEnd", new THREE.BufferAttribute(end, 3));
   return lines;
+});
+
+/**
+ * A polygon's outline edges through a triangle's corners, drawn by that triangle too: at a thin
+ * corner (a quad's hidden diagonal leaves two) the line is wider than the triangle that owns the
+ * edge. Up to 3 per triangle, those it lies alongside first. Per vertex and edge, `wireNear`: the
+ * signed distance to the edge's line in the triangle's plane; `wireNearEnd`: the distance past
+ * the edge's end at that corner, so the line stops there. Both are linear in the triangle, so they
+ * interpolate exactly. Spare slots stay HIDDEN.
+ *
+ * @param {THREE.BufferAttribute | THREE.InterleavedBufferAttribute} position
+ * @param {Uint8Array} hidden per triangle
+ * @param {Uint32Array} polygon per triangle
+ */
+function nearDistances(position, hidden, polygon) {
+  const count = hidden.length;
+  /** @param {number} i */
+  const at = (i) => new THREE.Vector3().fromBufferAttribute(position, i);
+  /** @param {number} t @param {number} v */
+  const corner = (t, v) => `${polygon[t]} ${at(3 * t + v).toArray()}`;
+
+  /** @type {Map<string, number[]>} polygon corner -> its visible edges (3 * triangle + k) */
+  const through = new Map();
+  for (let t = 0; t < count; t++) {
+    for (let k = 0; k < 3; k++) {
+      if (hidden[t] & (1 << k)) continue;
+      for (const v of [(k + 1) % 3, (k + 2) % 3]) {
+        const key = corner(t, v);
+        let edges = through.get(key);
+        if (!edges) through.set(key, (edges = []));
+        edges.push(3 * t + k);
+      }
+    }
+  }
+
+  const near = new Float32Array(count * 9).fill(HIDDEN);
+  const end = new Float32Array(count * 9);
+  const normal = new THREE.Vector3();
+  for (let t = 0; t < count; t++) {
+    const points = [0, 1, 2].map((v) => at(3 * t + v));
+    normal.subVectors(points[1], points[0]).cross(points[2].clone().sub(points[0]));
+    if (normal.lengthSq() === 0) continue;
+    normal.normalize();
+
+    /** @type {Set<number>} */
+    const seen = new Set();
+    const lines = [];
+    for (let v = 0; v < 3; v++) {
+      for (const edge of through.get(corner(t, v)) ?? []) {
+        // its own edges are in wireEdge
+        if (Math.floor(edge / 3) === t || seen.has(edge)) continue;
+        seen.add(edge);
+        const from = points[v];
+        const [a, b] = [1, 2].map((s) => at(edge - (edge % 3) + ((edge + s) % 3)));
+        const along = (a.equals(from) ? b : a).sub(from);
+        const length = along.length();
+        along.addScaledVector(normal, -along.dot(normal)); // in the triangle's plane
+        if (along.length() <= 0.7 * length) continue; // over 45° off this face: no line on it
+        along.normalize();
+        const across = normal.clone().cross(along);
+        const past = Math.max(...points.map((p) => -p.clone().sub(from).dot(along)));
+        lines.push({ from, along, across, past });
+      }
+    }
+    lines.sort((p, q) => p.past - q.past);
+    lines.slice(0, 3).forEach(({ from, along, across }, j) => {
+      points.forEach((p, v) => {
+        const offset = p.clone().sub(from);
+        near[(3 * t + v) * 3 + j] = offset.dot(across);
+        end[(3 * t + v) * 3 + j] = -offset.dot(along);
+      });
+    });
+  }
+  return { near, end };
 }
 
 /**
@@ -198,52 +246,77 @@ function buildPolygonLines(geometry, options) {
  * @typedef {{ fade: { value: number }, min: { value: number } }} LineUniforms
  */
 
+const LINE_VERTEX = /* glsl */ `
+  attribute vec4 wireEdge;
+  varying vec4 vWireEdge;
+  #ifdef WIRE_NEAR
+  attribute vec3 wireNear, wireNearEnd;
+  varying vec3 vWireNear, vWireNearEnd;
+  #endif`;
+
+// object space -> world units (instances are scaled, e.g. rocks)
+const LINE_VERTEX_MAIN = /* glsl */ `
+  float wireScale = pow(abs(determinant(mat3(modelMatrix))), 1.0 / 3.0);
+  vWireEdge = wireEdge * wireScale;
+  #ifdef WIRE_NEAR
+  vWireNear = wireNear * wireScale;
+  vWireNearEnd = wireNearEnd * wireScale;
+  #endif`;
+
+const LINE_FRAGMENT = /* glsl */ `
+  uniform float uLineWidth;
+  uniform float uLineFade;
+  uniform float uLineMin;
+  varying vec4 vWireEdge;
+  #ifdef WIRE_NEAR
+  varying vec3 vWireNear, vWireNearEnd;
+  #endif
+
+  // world units per pixel across each line (never 0: a spare nearDistances slot is constant)
+  vec3 linePixel(vec3 distance) {
+    vec3 dx = dFdx(distance);
+    vec3 dy = dFdy(distance);
+    return max(sqrt(dx * dx + dy * dy), vec3(1e-9));
+  }
+
+  // pixel coverage of the lines at these distances, at least a pixel wide
+  vec3 lineAt(vec3 distance, vec3 pixel) {
+    vec3 halfWidth = max(uLineWidth * 0.5 / pixel, vec3(0.5));
+    return clamp(halfWidth + 0.5 - distance / pixel, 0.0, 1.0);
+  }
+
+  // Each triangle draws its half of its edges' lines; the neighbour draws the other half.
+  float lineCoverage() {
+    vec3 pixel = linePixel(vWireEdge.xyz);
+    vec3 line = lineAt(vWireEdge.xyz, pixel);
+    #ifdef WIRE_NEAR
+    // the polygon's edges through this triangle's corners, up to half a line width past their end
+    vec3 near = lineAt(abs(vWireNear), linePixel(vWireNear));
+    line = max(line, near * lineAt(vWireNearEnd, linePixel(vWireNearEnd)));
+    #endif
+    float inradius = vWireEdge.w / max(pixel.x, max(pixel.y, pixel.z));
+    float dense = uLineFade > 0.0 ? 1.0 - smoothstep(uLineFade * 0.25, uLineFade, inradius) : 0.0;
+    float visible = 1.0 - dense * (1.0 - uLineMin);
+    return max(line.x, max(line.y, line.z)) * visible;
+  }`;
+
 /**
  * @param {THREE.WebGLProgramParametersWithUniforms} shader
  * @param {LineUniforms} uniforms the material's own
+ * @param {boolean} near polygon lines: the geometry has wireNear (polygonLineGeometry)
  */
-function injectLines(shader, uniforms) {
+function injectLines(shader, uniforms, near) {
   shader.uniforms.uLineWidth = lineWidth;
   shader.uniforms.uLineFade = uniforms.fade;
   shader.uniforms.uLineMin = uniforms.min;
+  const define = near ? "#define WIRE_NEAR" : "";
 
   shader.vertexShader = shader.vertexShader
-    .replace(
-      "#include <common>",
-      `#include <common>
-      attribute vec4 wireEdge;
-      varying vec4 vWireEdge;`,
-    )
-    .replace(
-      "#include <begin_vertex>",
-      `#include <begin_vertex>
-      // object space -> world units (instances are scaled, e.g. rocks)
-      vWireEdge = wireEdge * pow(abs(determinant(mat3(modelMatrix))), 1.0 / 3.0);`,
-    );
+    .replace("#include <common>", `${define}\n#include <common>\n${LINE_VERTEX}`)
+    .replace("#include <begin_vertex>", `#include <begin_vertex>\n${LINE_VERTEX_MAIN}`);
 
   shader.fragmentShader = shader.fragmentShader
-    .replace(
-      "#include <common>",
-      `#include <common>
-      uniform float uLineWidth;
-      uniform float uLineFade;
-      uniform float uLineMin;
-      varying vec4 vWireEdge;
-
-      // Each triangle draws its half of the line; the neighbour draws the other half.
-      float lineCoverage() {
-        vec3 dx = dFdx(vWireEdge.xyz);
-        vec3 dy = dFdy(vWireEdge.xyz);
-        vec3 pixel = sqrt(dx * dx + dy * dy); // world units per pixel across each edge
-        vec3 distance = vWireEdge.xyz / pixel; // to each edge, in pixels
-        vec3 halfWidth = max(uLineWidth * 0.5 / pixel, vec3(0.5)); // at least a pixel wide
-        vec3 line = clamp(halfWidth + 0.5 - distance, 0.0, 1.0); // pixel coverage
-        float inradius = vWireEdge.w / max(pixel.x, max(pixel.y, pixel.z));
-        float dense = uLineFade > 0.0 ? 1.0 - smoothstep(uLineFade * 0.25, uLineFade, inradius) : 0.0;
-        float visible = 1.0 - dense * (1.0 - uLineMin);
-        return max(line.x, max(line.y, line.z)) * visible;
-      }`,
-    )
+    .replace("#include <common>", `${define}\n#include <common>\n${LINE_FRAGMENT}`)
     .replace(
       "#include <color_fragment>",
       `#include <color_fragment>
@@ -275,7 +348,12 @@ function withLines(Base) {
 
     /** @param {THREE.WebGLProgramParametersWithUniforms} shader */
     onBeforeCompile(shader) {
-      injectLines(shader, this.lineUniforms);
+      injectLines(shader, this.lineUniforms, Boolean(this.userData.wirePolygons));
+    }
+
+    /** Polygon lines (scene/wire.js) read wireNear too: a program of their own. */
+    customProgramCacheKey() {
+      return this.userData.wirePolygons ? "polygon lines" : "lines";
     }
 
     /** @param {this} source */

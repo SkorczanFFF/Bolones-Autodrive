@@ -21,7 +21,7 @@ function triangle() {
 
 /**
  * Unit squares in the xy plane at these corners, as the FBX loader gives them: each one a fan
- * (0, 1, 2), (0, 2, 3) whose diagonal 0-2 lies inside the polygon, each one a part of its own.
+ * (0, 1, 2), (0, 2, 3) whose diagonal 0-2 lies inside the polygon.
  *
  * @param {number[][]} corners
  */
@@ -40,7 +40,6 @@ function quads(corners) {
   geometry.userData.polygons = {
     inner: Uint8Array.from(corners.flatMap(() => [0b010, 0b100])), // c-a, then a-b
     polygon: Uint32Array.from(corners.flatMap((_, i) => [i, i])),
-    part: Uint32Array.from(corners.flatMap((_, i) => [i, i])),
   };
   return geometry;
 }
@@ -66,20 +65,69 @@ describe("polygon lines", () => {
     expect(polygonLineGeometry(geometry)).toBe(lines);
   });
 
-  it("apply to the listed parts only, the others keep their triangles", () => {
-    const geometry = quads([
-      [0, 0],
-      [5, 0],
-    ]);
-    const edge = polygonLineGeometry(geometry, { parts: [1] }).getAttribute("wireEdge");
-    expect(edge.getY(0)).toBeLessThan(HIDDEN); // part 0: the diagonal stays
-    expect(edge.getW(0)).toBeCloseTo((2 - Math.SQRT2) / 2); // as does the triangle's inradius
-    expect(edge.getY(6)).toBeGreaterThanOrEqual(HIDDEN); // part 1: a quad
+  it("also draw the outline edges through a triangle's thin corners", () => {
+    // first triangle (0,0) (1,0) (1,1): its corner at (0,0) meets the left side, at (1,1) the top
+    const lines = polygonLineGeometry(quads([[0, 0]]));
+    const near = lines.getAttribute("wireNear");
+    const end = lines.getAttribute("wireNearEnd");
+    const at = (/** @type {typeof near} */ a, /** @type {number} */ slot) =>
+      [0, 1, 2].map((v) => Math.abs(a.getComponent(v, slot)));
+    expect(at(near, 0)).toEqual([0, 1, 1]); // to x = 0
+    expect(at(near, 1)).toEqual([1, 1, 0]); // to y = 1
+    for (const slot of [0, 1])
+      for (let v = 0; v < 3; v++) expect(end.getComponent(v, slot)).toBeLessThanOrEqual(0);
   });
 
-  it("fall back to triangle lines without polygons", () => {
-    const geometry = triangle();
-    expect(polygonLineGeometry(geometry)).toBe(lineGeometry(geometry));
+  it("draw no spike along an outline edge's extension", () => {
+    // one polygon: (0,0) (1,0) (0,1) and a sliver (1,0) (5,0.2) (0,1) along the bottom edge's
+    // extension; for the sliver, the bottom (y = 0, x 0..1) ends at (1, 0)
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 5, 0.2, 0, 0, 1, 0], 3),
+    );
+    geometry.userData.polygons = {
+      inner: Uint8Array.from([0b001, 0b010]), // the shared diagonal (1,0)-(0,1)
+      polygon: Uint32Array.from([0, 0]),
+    };
+    const lines = polygonLineGeometry(geometry);
+    const near = lines.getAttribute("wireNear");
+    const end = lines.getAttribute("wireNearEnd");
+    // the left side first (the sliver lies alongside it), then the bottom
+    expect([3, 4, 5].map((i) => Math.abs(near.getX(i)))).toEqual([1, 5, 0]);
+    expect(Math.abs(near.getY(4))).toBeCloseTo(0.2); // near the bottom's line...
+    expect(end.getY(4)).toBeCloseTo(4); // ...but 4 past its end: not drawn
+  });
+
+  it("leave out an edge leaving the triangle's face steeply", () => {
+    // one polygon folded by 90°: (0,0,0) (1,0,0) (0,1,0) and (0,0,0) (0,1,0) (0,0,1); for the
+    // first triangle, the edge (0,0,0)-(0,0,1) is perpendicular (it would fill the triangle)
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1], 3),
+    );
+    geometry.userData.polygons = {
+      inner: Uint8Array.from([0b010, 0b100]), // the fold (0,0,0)-(0,1,0)
+      polygon: Uint32Array.from([0, 0]),
+    };
+    const near = polygonLineGeometry(geometry).getAttribute("wireNear");
+    expect([0, 1, 2].map((v) => Math.abs(near.getX(v)))).toEqual([0, 1, 0]); // the 45° edge
+    expect([0, 1, 2].map((v) => near.getY(v))).toEqual([HIDDEN, HIDDEN, HIDDEN]);
+  });
+
+  it("draw every triangle edge without polygons", () => {
+    const edge = polygonLineGeometry(triangle()).getAttribute("wireEdge");
+    const triangleEdge = lineGeometry(triangle()).getAttribute("wireEdge");
+    expect(Array.from(edge.array)).toEqual(Array.from(triangleEdge.array));
+  });
+
+  it("compile a program of their own (it reads wireNear)", () => {
+    const polygons = new BasicLineMaterial();
+    polygons.userData.wirePolygons = true;
+    expect(polygons.customProgramCacheKey()).not.toBe(
+      new BasicLineMaterial().customProgramCacheKey(),
+    );
   });
 });
 

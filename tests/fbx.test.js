@@ -14,8 +14,8 @@ const indices = (polygons) =>
   polygons.flatMap((polygon) => polygon.map((v, i) => (i === polygon.length - 1 ? ~v : v)));
 
 describe("polygonsOf", () => {
-  it("marks the fan diagonals of a polygon, one polygon and part per mesh piece", () => {
-    const { inner, polygon, part } = polygonsOf(
+  it("marks the fan diagonals of a polygon, one polygon per FBX polygon", () => {
+    const { inner, polygon } = polygonsOf(
       indices([
         [0, 1, 2, 3, 4],
         [5, 6, 7],
@@ -24,7 +24,6 @@ describe("polygonsOf", () => {
     // fan (0, 1, 2), (0, 2, 3), (0, 3, 4); bit k is the edge opposite corner k
     expect([...inner]).toEqual([0b010, 0b110, 0b100, 0]);
     expect([...polygon]).toEqual([0, 0, 0, 1]);
-    expect([...part]).toEqual([0, 0, 0, 1]);
   });
 
   it("joins triangles over the edges 3ds Max exported as hidden", () => {

@@ -62,9 +62,7 @@ export function addWireframe(root, material, shadows = true) {
  * @param {import("./lines.js").LineMaterial} material
  */
 function linesFor(geometry, material) {
-  /** @type {import("./lines.js").WirePolygons | undefined} */
-  const polygons = material.userData.wirePolygons;
-  return polygons ? polygonLineGeometry(geometry, polygons) : lineGeometry(geometry);
+  return material.userData.wirePolygons ? polygonLineGeometry(geometry) : lineGeometry(geometry);
 }
 
 /**

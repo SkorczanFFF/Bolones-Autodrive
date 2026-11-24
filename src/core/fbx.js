@@ -11,7 +11,6 @@ import { unzlibSync } from "three/addons/libs/fflate.module.js";
  *   diagonals and edges hidden in 3ds Max (an Editable Mesh exports triangles, its quads survive
  *   as edge visibility)
  * @property {Uint32Array} polygon its polygon
- * @property {Uint32Array} part its connected part of the mesh, numbered in file order
  */
 
 /**
@@ -79,11 +78,9 @@ export function polygonsOf(polygonVertices, edges = [], visibility = []) {
   /** @type {number[]} */
   const starts = []; // each FBX polygon's first polygon vertex
   const owner = new Int32Array(polygonVertices.length); // polygon vertex -> FBX polygon
-  let vertices = 0;
   for (let i = 0; i < polygonVertices.length; i++) {
     if (i === 0 || polygonVertices[i - 1] < 0) starts.push(i);
     owner[i] = starts.length - 1;
-    vertices = Math.max(vertices, vertex(i) + 1);
   }
   /** @param {number} f */
   const sizeOf = (f) => (starts[f + 1] ?? polygonVertices.length) - starts[f];
@@ -95,13 +92,11 @@ export function polygonsOf(polygonVertices, edges = [], visibility = []) {
     if (visibility[e] === 0) hidden.add(key(vertex(edges[e]), vertex(next(edges[e]))));
   }
 
-  // polygons: FBX polygons joined over hidden edges; parts: control points joined by polygons
+  // polygons: FBX polygons joined over hidden edges
   const polygons = unionFind(starts.length);
-  const parts = unionFind(vertices);
   /** @type {Map<number, number>} hidden edge -> the first FBX polygon on it */
   const across = new Map();
   for (let i = 0; i < polygonVertices.length; i++) {
-    parts.union(vertex(i), vertex(starts[owner[i]]));
     const edge = key(vertex(i), vertex(next(i)));
     if (!hidden.has(edge)) continue;
     const other = across.get(edge);
@@ -109,14 +104,10 @@ export function polygonsOf(polygonVertices, edges = [], visibility = []) {
     else polygons.union(owner[i], other);
   }
 
-  /** @type {Map<number, number>} */
-  const partNumbers = new Map();
-  /** @type {{ inner: number[], polygon: number[], part: number[] }} */
-  const triangles = { inner: [], polygon: [], part: [] };
+  /** @type {{ inner: number[], polygon: number[] }} */
+  const triangles = { inner: [], polygon: [] };
   starts.forEach((start, f) => {
     const size = sizeOf(f);
-    const root = parts.find(vertex(start));
-    if (!partNumbers.has(root)) partNumbers.set(root, partNumbers.size);
     for (const corners of fan(size)) {
       let inner = 0;
       for (let k = 0; k < 3; k++) {
@@ -126,14 +117,9 @@ export function polygonsOf(polygonVertices, edges = [], visibility = []) {
       }
       triangles.inner.push(inner);
       triangles.polygon.push(polygons.find(f));
-      triangles.part.push(/** @type {number} */ (partNumbers.get(root)));
     }
   });
-  return {
-    inner: Uint8Array.from(triangles.inner),
-    polygon: Uint32Array.from(triangles.polygon),
-    part: Uint32Array.from(triangles.part),
-  };
+  return { inner: Uint8Array.from(triangles.inner), polygon: Uint32Array.from(triangles.polygon) };
 }
 
 /** @param {number} size */

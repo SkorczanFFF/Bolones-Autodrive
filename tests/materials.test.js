@@ -26,9 +26,9 @@ describe("solid materials", () => {
 describe("line materials", () => {
   it("carry the layer's glow for the bloom (default 1)", () => {
     const { wire } = materials();
-    expect(wire.polonez.userData.glow).toBe(LAYERS.polonez.glow);
+    expect(wire.bolones.userData.glow).toBe(LAYERS.bolones.glow);
     expect(wire.hills.userData.glow).toBe(1);
-    expect(wire.polonez.clone().userData.glow).toBe(LAYERS.polonez.glow); // fade-in copies
+    expect(wire.bolones.clone().userData.glow).toBe(LAYERS.bolones.glow); // fade-in copies
   });
 
   it("carry the layer's wirePolygons", () => {

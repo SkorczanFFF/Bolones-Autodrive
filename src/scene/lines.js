@@ -3,7 +3,7 @@ import { WIRE } from "../config.js";
 
 /**
  * Triangle wireframe drawn by the fragment shader instead of GL lines. GL lines are always one
- * pixel wide, so a dense mesh far away (palms, the Polonez' nose) turns into a solid block of
+ * pixel wide, so a dense mesh far away (palms, the Bolones' nose) turns into a solid block of
  * line color. Here:
  * - lines have a width in world units, so they thin out with distance like the model (but stay
  *   at least a pixel wide, no shimmer);

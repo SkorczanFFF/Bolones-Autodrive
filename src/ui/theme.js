@@ -20,8 +20,8 @@ const SCENE_DEFAULTS = Object.fromEntries([
 ]);
 
 /**
- * Exposes a scene color to CSS (`polonezWire` -> `--scene-polonez-wire`), with how far its hue
- * has turned from its default (`--scene-polonez-wire-turn`, oklch degrees), so the UI can wear
+ * Exposes a scene color to CSS (`bolonesWire` -> `--scene-bolones-wire`), with how far its hue
+ * has turned from its default (`--scene-bolones-wire-turn`, oklch degrees), so the UI can wear
  * the scene's current colors: the logo, and the UI tints that take a scene color's hue while
  * keeping their own lightness and chroma (`oklch(from …)` in style.css). The scene GUI calls it
  * on every color change.

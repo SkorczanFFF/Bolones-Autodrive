@@ -18,8 +18,8 @@
 
 /** @type {Record<string, TrafficModel>} */
 export const TRAFFIC_MODELS = {
-  fiat126p: {
-    label: "Fiat 126p",
+  polakito: {
+    label: "Polakito",
     width: 1.38,
     wheel: { radius: 0.27, axles: [0.6, 2.44] },
     profile: [

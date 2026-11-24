@@ -12,17 +12,17 @@ const WIDTH_OFFSET = 0.06;
 
 function setup() {
   const mesh = () => new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshBasicMaterial());
-  const polonez = new THREE.Group().add(mesh());
+  const bolones = new THREE.Group().add(mesh());
   const tire = new THREE.CylinderGeometry(0.55, 0.55, 0.47, 7).rotateZ(Math.PI / 2); // axle on x
   const wheelMesh = new THREE.Mesh(tire, new THREE.MeshBasicMaterial());
   wheelMesh.position.x = WIDTH_OFFSET;
   const wheel = new THREE.Group().add(wheelMesh, new THREE.Group()); // + an empty "camera" branch
   const material = new THREE.MeshBasicMaterial();
   const materials = /** @type {any} */ ({
-    solid: { polonez: material },
-    wire: { polonez: material },
+    solid: { bolones: material },
+    wire: { bolones: material },
   });
-  const car = createCar({ scene: new THREE.Scene(), models: { polonez, wheel }, materials });
+  const car = createCar({ scene: new THREE.Scene(), models: { bolones, wheel }, materials });
   car.steering = true;
   return car;
 }

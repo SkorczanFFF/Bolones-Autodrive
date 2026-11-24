@@ -4,7 +4,7 @@
 
 A synthwave-styled Three.js "coloring book"-like animation with a minigame: dodge the oncoming communist-era traffic. A built-in GUI lets you experiment with the scene's models and colors. See [CHANGELOG.md](CHANGELOG.md) for what the app does and how it got here.
 
-The Polonez, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, updated in 3Ds Max 2023, and exported as `.fbx` files. The minigame traffic (Fiat 126p, Škoda 120) and the mountains are built in code.
+The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, updated in 3Ds Max 2023, and exported as `.fbx` files. The minigame traffic (Polakito, Škoda 120) and the mountains are built in code.
 
 ---
 
@@ -70,7 +70,7 @@ src/
                    side mountains (side hills), scenery, city
   game/            state machine, minigame, game orchestration
   ui/              theme, loader, HUD, scene GUI, CRT overlay, F10 stats
-public/            FBX models (Polonez, wheel, palm, rocks) and textures
+public/            FBX models (Bolones, wheel, palm, rocks) and textures
 tests/             Vitest unit tests
 ```
 

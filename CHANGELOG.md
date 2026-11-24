@@ -1,26 +1,26 @@
 # Changelog
 
-All notable changes to Polonez Autodrive. The format follows
+All notable changes to Bolones Autodrive. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); new entries go to **Unreleased** first.
 Entries describe what changes for someone using the app, compared with the previous version.
 
 ## What the app is
 
-A synthwave "coloring book" scene in three.js: a Polonez drives towards a striped sunset sun on an
+A synthwave "coloring book" scene in three.js: a Bolones drives towards a striped sunset sun on an
 endless road. Every model is drawn as a flat-colored solid with a neon wireframe, and a side panel
 lets you recolor and tweak everything.
 
 - **Menu (idle):** the scene runs, the camera can be orbited with the mouse, the menu can be hidden
   (**H**) to enjoy or recolor the view.
-- **Free ride (F):** steer the Polonez with **← / →**, no obstacles.
-- **Minigame (ENTER):** a 3-2-1 countdown, then oncoming communist-era traffic (Fiat 126p, Škoda
+- **Free ride (F):** steer the Bolones with **← / →**, no obstacles.
+- **Minigame (ENTER):** a 3-2-1 countdown, then oncoming communist-era traffic (Polakito, Škoda
   120). Dodge it: every car that passes scores a point, and every few points the world speeds up
   (`SPEED` in `src/config.js`). A crash ends the game; the best score is kept in the browser.
 - **Scene:** road and scrolling terrain grid that rises into endless procedural mountains on both
   sides and a range in front of the sun, palms and rocks appearing out of the haze, a sky that
   glows crimson at the horizon, soft sunset shadows, glowing
   wireframes, a CRT overlay and an intentionally half-resolution, slightly blurry 80s look.
-- **Side panel:** per layer (Polonez, traffic, road, terrain, palms, rocks, horizon range, side
+- **Side panel:** per layer (Bolones, traffic, road, terrain, palms, rocks, horizon range, side
   mountains, city) the fill and line colors and visibility, line fading and glow, palm and rock
   density; sun colors and stripes, mountain height / roughness / start / seed, the city's layout
   and haze, the night sky, sky and fog, bloom, CRT, line width, and "Randomize all".
@@ -34,7 +34,7 @@ Everything after the 2.0 parity rebuild.
 
 ### Added
 
-- New start menu: neon logo in the scene's live colors (the Polonez over the sun, Commodore-style
+- New start menu: neon logo in the scene's live colors (the Bolones over the sun, Commodore-style
   stripes of the scene around AUTODRIVE; recolored by the side panel and "Randomize all"), equal
   MINI GAME / FREE RIDE buttons with keycaps, steering hint, best score, and a HIDE button (**H**)
   that leaves only a faint eye icon in the corner.
@@ -47,7 +47,7 @@ Everything after the 2.0 parity rebuild.
   body leans out on its own pivot (wheels stay on the road) on the way in and rocks the other way
   when the car straightens out; the front wheels steer (12°) and counter-steer as the nose swings
   back.
-- Minigame traffic instead of boxes: low-poly Fiat 126p and Škoda 120 built in code from real
+- Minigame traffic instead of boxes: low-poly Polakito and Škoda 120 built in code from real
   dimensions (wheel arches, cabin, side windows, chrome bumpers, headlights), burnt-orange bodies
   with yellow lines.
 - Visuals:
@@ -82,7 +82,7 @@ Everything after the 2.0 parity rebuild.
 
 ### Changed
 
-- The Polonez with its wheels, the rocks and the palm trunks show their lines as quads, the way
+- The Bolones with its wheels, the rocks and the palm trunks show their lines as quads, the way
   they were modelled (read from the FBX files: 3ds Max edge visibility, Blender quads), instead
   of every triangle; the palm leaves keep their triangles. Lines fade by the size of the whole
   polygon, so long thin panels no longer lose their outline early.
@@ -94,17 +94,17 @@ Everything after the 2.0 parity rebuild.
   screens it is a compact bottom sheet with OK and CANCEL.
 - The scene shows a grab cursor only where it can be orbited (menu, free ride) and a grabbing one
   while the left button holds it; the minigame keeps the plain cursor.
-- Free ride: the camera rides along with the Polonez (you can still orbit around it) and comes
+- Free ride: the camera rides along with the Bolones (you can still orbit around it) and comes
   back with it on ESC; the minigame and the menu keep their fixed camera.
-- Free ride: the Polonez brakes into the road edge instead of stopping dead (which jolted the
+- Free ride: the Bolones brakes into the road edge instead of stopping dead (which jolted the
   whole view, worst on phones), stops before turning back, and no longer shows steering while it
   pushes against the edge. The minigame keeps its handling.
-- The Polonez sits 4 cm higher (`CAR.lift`), so its tyres no longer look sunk into the road.
+- The Bolones sits 4 cm higher (`CAR.lift`), so its tyres no longer look sunk into the road.
 - The UI tints that follow the scene colors (panels, buttons, titles after "Randomize all") are
   now mixed by the stylesheet in oklch: the same hue turn, lightness and chroma kept perceptually.
 - Performance: the city is drawn in bands, so it costs nothing while it is behind the camera (it
   used to be drawn every frame: about a quarter of the frame's triangles).
-- Side panel: sky and fog in an Environment folder, line width in the Polonez folder, CRT Effect
+- Side panel: sky and fog in an Environment folder, line width in the Bolones folder, CRT Effect
   starts closed.
 - The game over panel stays until you pick AGAIN, FREE RIDE or MENU (it used to return to the
   menu after 3 s). The score is its headline, a big centered number with the record (or
@@ -121,7 +121,7 @@ Everything after the 2.0 parity rebuild.
   back only when you leave game over.
 - Menu, game over and the loading screen fit phone screens: the buttons stack, the loader's
   terminal and text shrink to the width, and the logo shrinks smoothly with narrow screens
-  ("Polonez" never under ~300 px) instead of jumping between sizes.
+  ("Bolones" never under ~300 px) instead of jumping between sizes.
 - Touch screens (phones, tablets without a keyboard) get the scene to look at: a bigger logo,
   HIDE, the side panel (starting folded) and the camera orbiting with one finger, pinch to zoom.
   Pinching the scene zooms the scene, never the page.
@@ -133,7 +133,7 @@ Everything after the 2.0 parity rebuild.
   lines, dark sky, glowing fog), day (pastel fills, dark lines, light sky) and mixed, where every
   layer goes dark or light on its own.
 - The interface wears the scene's palette: panels, buttons, the loader, the HUD and the side
-  panel take their hue from the ground grid, the Polonez lines and the sun, keeping their
+  panel take their hue from the ground grid, the Bolones lines and the sun, keeping their
   brightness, so a recolored or randomized scene no longer sits under a blue UI and every text
   stays as readable as with the default colors.
 - No flash of unstyled buttons on a white page before the app loads: the page stays dark and

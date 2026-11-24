@@ -18,7 +18,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const settle = (tau, dt) => 1 - Math.exp(-dt / tau);
 
 /**
- * The Polonez. Each part of the motion lives on its own node, so nothing has to be synced:
+ * The Bolones. Each part of the motion lives on its own node, so nothing has to be synced:
  *
  *   group        lateral position (x) + yaw: the nose turns towards the lane change; CAR.lift (y)
  *   ├ chassis    body roll around the axle line (CAR.rollCenterY)
@@ -33,10 +33,10 @@ const settle = (tau, dt) => 1 - Math.exp(-dt / tau);
  * @param {{ scene: THREE.Scene, models: Record<string, THREE.Group>, materials: import("./materials.js").Materials }} deps
  */
 export function createCar({ scene, models, materials }) {
-  const solid = materials.solid.polonez;
-  const wire = materials.wire.polonez;
+  const solid = materials.solid.bolones;
+  const wire = materials.wire.bolones;
 
-  const body = dress(models.polonez, solid, wire);
+  const body = dress(models.bolones, solid, wire);
   body.position.set(CAR.bodyX, -CAR.rollCenterY, 0);
 
   const chassis = new THREE.Group();

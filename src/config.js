@@ -23,7 +23,7 @@ export const PALETTE = {
   void: "#0d0221", // ground, palm silhouettes
   dusk: "#261447", // road
   deepTeal: "#13304a", // rocks
-  polonezBody: "#420d59", // the star: stands apart from the road; neon pink lines are its own
+  bolonesBody: "#420d59", // the star: stands apart from the road; neon pink lines are its own
   grape: "#2a0a4a", // horizon range
   plum: "#1e0f4f", // side mountains
   horizon: "#c70050", // fog: distant things sink into a crimson-magenta glow
@@ -61,9 +61,9 @@ export const PALETTE = {
 
 /** @type {Record<string, Layer>} */
 export const LAYERS = {
-  polonez: {
-    label: "Polonez",
-    solid: PALETTE.polonezBody,
+  bolones: {
+    label: "Bolones",
+    solid: PALETTE.bolonesBody,
     wire: PALETTE.neonPink,
     toggleSolid: true,
     wirePolygons: true, // body and wheels (they share these materials)
@@ -479,8 +479,8 @@ export const SPAWN = {
  * (scene/traffic.js) from real dimensions in metres (scene/trafficModels.js).
  */
 export const TRAFFIC = {
-  scale: 1.8, // metres -> scene units (the Polonez model is about 1.8x life size)
-  /** Above the road, like the Polonez. */
+  scale: 1.8, // metres -> scene units (the Bolones model is about 1.8x life size)
+  /** Above the road, like the Bolones. */
   get y() {
     return CAR.lift;
   },
@@ -589,7 +589,7 @@ export const PICKER = {
     PALETTE.horizon,
     PALETTE.sunset,
     PALETTE.starlight,
-    PALETTE.polonezBody,
+    PALETTE.bolonesBody,
     PALETTE.dusk,
     PALETTE.void,
   ],
@@ -625,7 +625,7 @@ export const LOADER = {
 
 export const ASSETS = {
   models: {
-    polonez: "models/polonez.fbx",
+    bolones: "models/bolones.fbx",
     wheel: "models/wheel.fbx",
     palm: "models/palm.fbx",
     rockmd: "models/rockmd.fbx",
@@ -638,7 +638,7 @@ export const ASSETS = {
 
 export const TEXT = {
   loaderHeader: "AUTODRIVE.SYS",
-  loaderIntro: "INITIALIZING POLONEZ AUTODRIVE SYSTEM...",
+  loaderIntro: "INITIALIZING BOLONES AUTODRIVE SYSTEM...",
   loaderMessages: [
     "BOOTING SYSTEM...",
     "INITIALIZING GRAPHICS...",
@@ -650,7 +650,7 @@ export const TEXT = {
   loaderError: "ERROR",
   loaderFailed: "SYSTEM FAILURE: REFRESH TO RETRY",
   loading: "LOADING",
-  logoScript: "Polonez",
+  logoScript: "Bolones",
   logoCaps: "AUTODRIVE",
   menuStart: "MINI GAME", // same length as freeRide, so both buttons match
   again: "AGAIN",

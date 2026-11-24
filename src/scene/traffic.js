@@ -30,7 +30,7 @@ export function trafficHalfWidth() {
 }
 
 /**
- * Low-poly oncoming cars of the communist era (Fiat 126p, Škoda 120), one template per
+ * Low-poly oncoming cars of the communist era (Polakito, Škoda 120), one template per
  * TRAFFIC_MODELS entry. Each car is a side profile with wheel arches, extruded across its width, a
  * cabin narrowing towards the roof, wheels and headlights; the front faces +z (towards the
  * camera). Body, cabin and wheels are one geometry (one draw call plus its wireframe twin).

@@ -106,7 +106,7 @@ export function createSceneGui({ scene, materials, world, crt, tweens, bloom, de
       setSceneColor(`${key}Wire`, v);
     });
     folder.add(wire, "visible").name(L.showWire);
-    if (key === "polonez") {
+    if (key === "bolones") {
       folder.add(lineWidth, "value", ...RANGES.lineWidth).name(L.lineWidth); // a shared uniform
     }
     if (isLineMaterial(wire)) {
@@ -267,7 +267,7 @@ export function createSceneGui({ scene, materials, world, crt, tweens, bloom, de
 
   // Thematic order: the cars and the sun ahead, the road and its sides, the landscape, the night
   // and the air, the effects; the global switches last.
-  layer("polonez");
+  layer("bolones");
   layer("traffic");
   addSun();
   for (const key of ["road", "terrain", "palm", "rock"]) layer(key);

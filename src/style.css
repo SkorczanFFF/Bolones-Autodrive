@@ -47,8 +47,8 @@
     --ui-loader-bg: oklch(
       from var(--palette-ui-loader-bg) l c calc(h + var(--scene-terrain-wire-turn, 0))
     );
-    --red: oklch(from var(--palette-red) l c calc(h + var(--scene-polonez-wire-turn, 0)));
-    --pink: oklch(from var(--palette-pink) l c calc(h + var(--scene-polonez-wire-turn, 0)));
+    --red: oklch(from var(--palette-red) l c calc(h + var(--scene-bolones-wire-turn, 0)));
+    --pink: oklch(from var(--palette-pink) l c calc(h + var(--scene-bolones-wire-turn, 0)));
     --yellow: oklch(from var(--palette-yellow) l c calc(h + var(--scene-sun-top-turn, 0)));
   }
 }
@@ -405,19 +405,19 @@ kbd {
 }
 
 /* The logo wears the scene's live colors (--scene-*, kept in sync by the scene GUI):
-   "Polonez" is the car over the sun, the stripes around AUTODRIVE a cross-section of the
+   "Bolones" is the car over the sun, the stripes around AUTODRIVE a cross-section of the
    scene from the sun down to the ground grid. Randomize all recolors it along. */
 .logo__script {
   --logo-shine: hsl(from var(--scene-sun-top) h s min(l * 1.5, 100)); /* sun, +50% brightness */
-  --logo-neon: var(--scene-polonez-wire);
-  --logo-body: var(--scene-polonez-solid);
+  --logo-neon: var(--scene-bolones-wire);
+  --logo-body: var(--scene-bolones-solid);
   /* background-clip: text paints only inside the box: pad it around the letters (room for the
      glow and the sheen) and pull it back. Bottom: AUTODRIVE tucks in close; the -6° turn drops
-     the "P" ~0.16em towards it, which still clears it. */
+     the "B" ~0.16em towards it, which still clears it. */
   margin: -0.3em 0 -0.08em;
   padding: 0.3em 0.2em 0.15em;
-  /* full size on wide screens, shrinking with narrow ones; "Polonez" (2.78em wide) never gets
-     narrower than ~300px */
+  /* full size on wide screens, shrinking with narrow ones; "Bolones" (2.87em wide) never gets
+     narrower than ~310px */
   font-size: clamp(108px, 28.5vw, 152px);
   transform: rotate(-6deg);
   /* Layers, top first: a chrome sheen sweeping by now and then; body-colored stripes through

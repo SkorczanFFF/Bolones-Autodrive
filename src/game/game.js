@@ -254,7 +254,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     car.steering = next === "free" || next === "playing";
     car.softEdges = next === "free";
     // leaving free ride for the menu keeps the pin while the car eases back (see followCar)
-    pinned = next === "free" || (previous === "free" && (next === "idle" || next === "select"));
+    pinned = next === "free" || (pinned && (next === "idle" || next === "select"));
     input.arm("next", false); // Tab is the browser's again, but over a wreck
 
     switch (next) {
@@ -318,17 +318,17 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   const locked = () => machine.state === "gameover" && stateTime < MINIGAME.crash.lock;
 
   input.onPress((action) => {
+    const chosen = MODES.find((of) => of === action);
+    if (chosen) {
+      if (machine.state !== "select") return; // a minigame clicked in the list
+      mode = chosen;
+      machine.send("start");
+      return;
+    }
     switch (action) {
       case "start":
         // the menu, free ride: the minigames; their list: the one chosen; game over: again
         if (locked()) return;
-        machine.send("start");
-        break;
-      case "dodge":
-      case "crash":
-      case "overtake":
-        if (machine.state !== "select") return; // a minigame clicked in the list
-        mode = action;
         machine.send("start");
         break;
       case "left":

@@ -577,6 +577,7 @@ describe("crash", () => {
       before = count();
     };
     for (let t = 0; t < 4 && before < 0; t += 1 / 60) crash.update(1 / 60);
+    expect(before).toBeGreaterThanOrEqual(0); // the third car was hit
     crash.update(1 / 60); // the frame that shows the new shards
 
     const position = debris.geometry.getAttribute("position");

@@ -135,7 +135,7 @@ export function dent(meshes, move) {
 
 /**
  * Moves nodes whole, as far as set() says, from where they are; a node moved again goes on from
- * where it got to.
+ * where it got to, one torn off since (in another parent) stays where it is.
  *
  * @param {Move[]} moves
  * @returns {Dent} starting at 0
@@ -144,12 +144,16 @@ export function moveNodes(moves) {
   const token = {};
   const from = moves.map(({ node }) => {
     moverOf.set(node, token);
-    return { position: node.position.clone(), quaternion: node.quaternion.clone() };
+    return {
+      parent: node.parent,
+      position: node.position.clone(),
+      quaternion: node.quaternion.clone(),
+    };
   });
   return {
     set(progress) {
       moves.forEach(({ node, position, quaternion }, i) => {
-        if (moverOf.get(node) !== token) return;
+        if (moverOf.get(node) !== token || node.parent !== from[i].parent) return;
         node.position.lerpVectors(from[i].position, position, progress);
         node.quaternion.slerpQuaternions(from[i].quaternion, quaternion, progress);
       });

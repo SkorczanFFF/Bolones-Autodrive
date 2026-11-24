@@ -17,7 +17,7 @@ import { WIRE } from "../config.js";
 export const CORNER_STEPS = 4;
 /** Stations along and round a car's body at least this close, metres (a crash bends them). */
 export const STATION = 0.15;
-/** Windows, lamps and marks sit this far off the body, so they draw their own outline, metres. */
+/** Lamps and marks sit this far off the body, so they draw their own outline, metres. */
 export const OFFSET = 0.005;
 /** Segments of a round lamp (rectangle() with `round` 0.5). */
 const LAMP_SEGMENTS = 12;
@@ -491,12 +491,12 @@ export function glassTriangles(rim, step) {
 }
 
 /**
- * Sets one normal for all the triangles of each polygon marked even (\`userData.even\`, a flag a
+ * Sets one normal for all the triangles of each polygon marked even (`userData.even`, a flag a
  * triangle): their average, as if flat. A decal's triangles follow the facets under it; shaded
  * each by its own, they would stripe. Called again after anything recomputes the normals (a
  * dent, scene/dents.js).
  *
- * @param {THREE.BufferGeometry} geometry with \`userData.polygons\`
+ * @param {THREE.BufferGeometry} geometry with `userData.polygons`
  */
 export function evenNormals(geometry) {
   /** @type {Uint8Array | undefined} */

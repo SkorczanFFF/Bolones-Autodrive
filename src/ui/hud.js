@@ -166,7 +166,7 @@ export function createHud(
     /**
      * The car of the wreck the camera follows, of how many (game over).
      *
-     * @param {string[]} labels the cars that crashed, in the order they did
+     * @param {string[]} labels the cars of the wreck, in the order they joined it
      * @param {number} which
      */
     setWreck(labels, which) {

@@ -69,6 +69,7 @@ describe("crumple", () => {
     const position = meshOf(root).geometry.getAttribute("position");
     /** @type {Map<string, string>} original corner -> where it went */
     const moved = new Map();
+    let changed = 0;
     const original = new THREE.BoxGeometry(2, 1, 4, 4, 2, 8)
       .toNonIndexed()
       .getAttribute("position");
@@ -81,7 +82,9 @@ describe("crumple", () => {
         .join();
       expect(moved.get(from) ?? to).toBe(to);
       moved.set(from, to);
+      if (from !== to) changed++;
     }
+    expect(changed).toBeGreaterThan(0); // dented
   });
 
   it("tents the bonnet up in its middle behind the crush, not its wings, nor the roof", () => {
@@ -129,11 +132,14 @@ describe("crumple", () => {
     const before = meshOf(root).geometry.getAttribute("position").clone();
     crumple(root, { ...hit, point: new THREE.Vector3(0.8, 0, -2) }).set(1);
     const after = meshOf(root).geometry.getAttribute("position");
+    let checked = 0;
     for (let i = 0; i < after.count; i++) {
       // the left side, just behind the crush, moves right (+x), where the car was hit
-      if (before.getX(i) === -1 && before.getZ(i) === -1.5)
-        expect(after.getX(i)).toBeGreaterThan(-1);
+      if (before.getX(i) !== -1 || before.getZ(i) !== -1.5) continue;
+      expect(after.getX(i)).toBeGreaterThan(-1);
+      checked++;
     }
+    expect(checked).toBeGreaterThan(0);
   });
 
   /**

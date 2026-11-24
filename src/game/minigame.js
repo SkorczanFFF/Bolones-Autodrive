@@ -134,6 +134,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   /** @type {Mode} */
   let mode = "dodge";
   let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
+  /** @type {ReturnType<typeof trunkOf> | undefined} */
+  let trunk; // the palms are clones of one model: one trunk, measured at the first crash
   let pileup = 0; // crash mode: the share of the late traffic that runs in, rolled each game
   let keepComing = MINIGAME.crash.keepComing; // s, this game
   let forward = 0; // after a crash: how fast the camera goes on along the road, of WORLD.speed
@@ -311,8 +313,6 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     // every palm and rock by the road, measured where it is when it comes up
     /** @type {WeakMap<THREE.Object3D, import("./crash.js").Post>} */
     const measured = new WeakMap();
-    /** @type {ReturnType<typeof trunkOf> | undefined} */
-    let trunk; // the palms are clones of one model: one trunk
     /** @param {THREE.Object3D} palm */
     const palmPost = (palm) => {
       const { centre, radius } = (trunk ??= trunkOf(palm));
@@ -334,8 +334,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
      * @param {(object: THREE.Object3D) => import("./crash.js").Post} measure
      */
     const known = (object, measure) => {
-      const post = measured.get(object) ?? measure(object);
-      measured.set(object, post);
+      let post = measured.get(object);
+      if (!post) measured.set(object, (post = measure(object)));
       return post;
     };
     const posts = () => [
@@ -452,7 +452,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       };
     },
 
-    /** How hard the last crash was: 1 at the first level's speed. */
+    /** How hard the last crash was: 1 at SPEED.traffic (the speed multiplier 1). */
     get impact() {
       return crash?.impact ?? 1;
     },
@@ -528,7 +528,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       return forward;
     },
 
-    /** What the cars that crashed are called, in the order they did (wreckCentre's numbers). */
+    /** What the cars of the wreck are called (touched too), in the order they joined it. */
     get wrecks() {
       return crash?.wrecks.map(({ label }) => label) ?? [];
     },

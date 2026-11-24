@@ -16,8 +16,6 @@
  * @property {Point[]} plan the outer edge in the top view, [across, back from the car's end],
  *   from the centre to one end (mirrored to the other)
  * @property {number} [depth] how thick the bar is (scene/traffic.js BUMPER_DEPTH unless it says)
- * @property {{ x: number, width: number, y: [number, number] }} [guards] vertical overriders at
- *   ±x, from y[0] to y[1], from the car's end back through the bar
  *
  * @typedef {object} Rim the wheel's face, in shares of the tyre's radius
  * @property {number} radius

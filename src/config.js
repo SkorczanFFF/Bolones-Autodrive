@@ -513,7 +513,7 @@ export const MINIGAME = {
    * they react, and run into the wreck if they cannot stop. The moment of impact freezes, then
    * plays in slow motion; the camera follows the Bolones (Tab: each car of the wreck in turn) and
    * shakes, can be turned round it and pulled back, the screen flashes and "Game Over" slams in.
-   * Once the wreck has about settled the score and the buttons show up, keys and buttons unlock
+   * `lock` seconds on, the score and the buttons show up, keys and buttons unlock
    * (a key still held from steering or a quick ENTER does not restart by accident).
    */
   crash: {
@@ -544,10 +544,10 @@ export const MINIGAME = {
     player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
     keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
-     * height up (unless the model says): cars are heavy low down, a hit pushes them more than it
-     * tips them. It rides springs bouncing `bounce` times a second, damped `damping` of critical,
-     * an anti-roll bar across each axle `antiRoll` times as stiff as a wheel's spring; down a
-     * wheel, that corner sinks onto the hub (`hub` of the wheel's radius). */
+     * height up: cars are heavy low down, a hit pushes them more than it tips them. It rides
+     * springs bouncing `bounce` times a second, damped `damping` of critical, an anti-roll bar
+     * across each axle `antiRoll` times as stiff as a wheel's spring; down a wheel, that corner
+     * sinks onto the hub (`hub` of the wheel's radius). */
     car: { box: 0.7, com: 0.4, springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 }, hub: 0.4 },
     stiffness: 700, // N/m per kg of car: a front crushes about 0.5 m into a wall at 56 km/h
     /** Coefficient of restitution falling off with the closing speed (m/s), as in crash tests:

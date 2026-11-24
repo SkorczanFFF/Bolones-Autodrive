@@ -50,8 +50,17 @@ const SLACK = 0.1; // units: how much deeper the old faces must overlap than the
 /** Whether a solid is a post (a palm's trunk, a rock): it does not give. @param {Solid} solid */
 const isPost = ({ stiffness }) => stiffness === Infinity;
 
+/** @type {WeakMap<Solid, number>} a solid's box does not change: its reach, measured once */
+const reaches = new WeakMap();
 /** How far from its body's middle a solid's box reaches at most. @param {Solid} solid */
-export const reachOf = ({ half, shift }) => Math.hypot(half[0], half[1], half[2]) + shift.length();
+export const reachOf = (solid) => {
+  let reach = reaches.get(solid);
+  if (reach === undefined) {
+    const { half, shift } = solid;
+    reaches.set(solid, (reach = Math.hypot(half[0], half[1], half[2]) + shift.length()));
+  }
+  return reach;
+};
 
 /**
  * Cars meet through their crumple zones, not as rigid boxes: a front is a spring as stiff as the

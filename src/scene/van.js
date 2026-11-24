@@ -36,7 +36,6 @@ import {
  * along, every other one up; the stations round it do the rest.
  */
 const SPARSE = /** @type {const} */ ([STATION, 0.03, 2 * STATION]);
-/** Marks sit OFFSET off the body, lamps twice as far. */
 /** The roof's corners, rounded in plan, keep at least this radius, metres. */
 const MIN_RADIUS = 0.02;
 /** Points closer than this are one, metres; a band is closed off where an arch gets this near. */

@@ -35,8 +35,6 @@ export { ready } from "./crash/physics.js";
  * @property {THREE.Object3D} object posed by the crash; upright on the road when it starts
  * @property {THREE.Box3} box the car in the object's frame
  * @property {number} mass kg
- * @property {number} [com] how high its centre of mass is, a share of its height (else
- *   MINIGAME.crash.car.com)
  * @property {THREE.Vector3} velocity over the road, units/s
  * @property {THREE.Color} color its lines: the colour of its shards
  * @property {(crushed: (point: THREE.Vector3) => boolean) => void} [onCrash] told what each crash
@@ -143,7 +141,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    * @param {boolean} [joined] it came along after the crash began
    */
   function board(car, swerves, joined = false) {
-    const { object, box, mass, velocity, com = build.com } = car;
+    const { object, box, mass, velocity } = car;
+    const { com } = build;
     object.updateWorldMatrix(true, true);
     const size = box.getSize(new THREE.Vector3());
     const floor = -object.matrixWorld.elements[13]; // the road, in the object's frame
@@ -224,7 +223,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   const bodies = cars.map((car, i) => board(car, i > 0));
   /** @typedef {(typeof bodies)[number]} Body */
   /**
-   * Parts torn off in a physics step, taken away after it.
+   * Parts torn off in a frame's physics steps, taken away after them.
    *
    * @type {{ car: Body, node: THREE.Object3D, into: THREE.Vector3, speed: number }[]}
    */
@@ -473,7 +472,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   let camera = -first.velocity.z; // speed along the road, forward
 
   return {
-    /** How hard the first crash was: 1 at the first level's speed. */
+    /** How hard the first crash was: 1 at SPEED.traffic (the speed multiplier 1). */
     impact: first.velocity.distanceTo(second.velocity) / SPEED.traffic,
 
     /**

@@ -94,10 +94,11 @@ export function widestReach(models) {
 }
 
 /**
- * The minigames' low-poly traffic of the communist era (Polakito, Kredens), traced from blueprints,
- * one template per TRAFFIC_MODELS entry; the front faces +z (towards the camera). The body is one
- * geometry (one draw call plus its wireframe twin), with `userData.polygons` like the FBX models
- * (core/fbx.js), so its lines follow the designed outlines, not every triangle. Each wheel and
+ * The minigames' low-poly traffic of the communist era (Polakito, Kredens, the Ramses: van.js),
+ * traced from blueprints, one template per TRAFFIC_MODELS entry; the front faces +z (towards the
+ * camera). The body is one geometry (one draw call plus its wireframe twin), with
+ * `userData.polygons` like the FBX models (core/fbx.js), so its lines follow the designed
+ * outlines, not every triangle. Each wheel and
  * bumper is a node of its own (`userData.part`), so a crash can move a wheel whole and tear either
  * off; each headlamp is a mesh of its own ("lamp"), so a crash can put out just the ones it
  * crushes.
@@ -140,9 +141,11 @@ export function createTrafficModels(materials) {
     }
     dress(car, materials.solid.traffic, materials.wire.traffic);
     for (const lamp of car.getObjectsByProperty("name", "lamp")) {
-      // lit, its outline waiting for a crash to put it out (game/minigame.js)
+      // lit, its outline waiting for a crash to put it out (game/minigame.js); flush on the body,
+      // its shadow falls in the body's: five sun shadow passes saved
       /** @type {THREE.Mesh} */ (lamp).material = materials.headlight;
       lamp.children[0].visible = false;
+      lamp.castShadow = false;
     }
 
     car.updateMatrixWorld(true);
@@ -1147,7 +1150,7 @@ function wheelParts({ radius, width, rim }, [x, y, z], side) {
     face(ring(radius), on(width), facing.clone().negate()), // the inner side
     // the sidewall: quads between the rings (earcut would cut thin slivers, their lines spikes)
     surface(ladderRing(ring(radius), ring(inner)), on(0), facing),
-    tube(inner, RIM_DEPTH, [outside - (side * RIM_DEPTH) / 2, y, z]), // the rim's lip
+    tube(inner, RIM_DEPTH, [outside - (side * RIM_DEPTH) / 2, y, z], true), // the rim's lip
     face(ring(inner), on(RIM_DEPTH), facing), // the rim
     ...holes,
     cylinder(rim.hub * radius, HUBCAP, [outside - side * (RIM_DEPTH - HUBCAP / 2), y, z]),
@@ -1174,7 +1177,7 @@ function ladderRing(outer, inner) {
 
 /**
  * A bumper: a bar `depth` thick (BUMPER_DEPTH unless it says) and `height` tall around y, its
- * outer edge along `plan` (mirrored to the other side) from z = end into the car, and its guards.
+ * outer edge along `plan` (mirrored to the other side) from z = end into the car.
  * The bar's top and bottom are one polygon each, the faces around it one per run between creases.
  *
  * @param {Bumper} bumper
@@ -1182,7 +1185,7 @@ function ladderRing(outer, inner) {
  * @param {number} back 1 or -1: the direction into the car
  * @returns {Part}
  */
-function bumper({ y, height, plan, guards, depth: thick = BUMPER_DEPTH }, end, back) {
+function bumper({ y, height, plan, depth: thick = BUMPER_DEPTH }, end, back) {
   /** @type {Point[]} [across, back], from one end round to the other, a point every STATION */
   const outer = densifyLine(
     [
@@ -1207,16 +1210,7 @@ function bumper({ y, height, plan, guards, depth: thick = BUMPER_DEPTH }, end, b
   const bar = prism(outline, () => height / 2);
   // prism: (±height / 2, across, z) -> (across, ∓height / 2, z)
   bar.geometry.rotateZ(-Math.PI / 2).translate(0, y, 0);
-  const parts = [bar];
-  if (guards) {
-    const depth = sample(plan, guards.x) + thick; // from the car's end back through the bar
-    for (const side of [-1, 1]) {
-      const box = new THREE.BoxGeometry(guards.width, guards.y[1] - guards.y[0], depth);
-      box.translate(side * guards.x, (guards.y[0] + guards.y[1]) / 2, end + (back * depth) / 2);
-      parts.push(byFaces(box));
-    }
-  }
-  return mergeParts(parts);
+  return bar;
 }
 
 /**
@@ -1242,10 +1236,22 @@ function cylinder(radius, width, [x, y, z]) {
  * @param {number} radius
  * @param {number} length
  * @param {number[]} centre
+ * @param {boolean} [inward] facing the axle: the inside of a cup (the rim set into the tyre)
  * @returns {Part}
  */
-function tube(radius, length, [x, y, z]) {
+function tube(radius, length, [x, y, z], inward = false) {
   const shape = new THREE.CylinderGeometry(radius, radius, length, WHEEL_SEGMENTS, 1, true);
+  if (inward) {
+    const index = /** @type {THREE.BufferAttribute} */ (shape.getIndex());
+    for (let i = 0; i < index.count; i += 3) {
+      const second = index.getX(i + 1);
+      index.setX(i + 1, index.getX(i + 2)).setX(i + 2, second);
+    }
+    const normal = shape.getAttribute("normal");
+    for (let i = 0; i < normal.count; i++) {
+      normal.setXYZ(i, -normal.getX(i), -normal.getY(i), -normal.getZ(i));
+    }
+  }
   return builtIn(shape.rotateZ(Math.PI / 2).translate(x, y, z), () => 0);
 }
 

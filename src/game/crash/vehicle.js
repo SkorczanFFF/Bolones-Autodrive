@@ -53,7 +53,8 @@ export function createVehicle(world, body, rig, centre, groups) {
     const load = share(along[i]);
     const travel = radius; // how far the wheel can rise to where its spring is fixed
     const at = mount.position.clone().sub(centre);
-    const above = height + at.y - radius; // over the road: its weight presses it as long, just
+    // the wheel's bottom over the road, the car upright: its spring takes that up
+    const above = height + at.y - radius;
     controller.addWheel(
       { x: at.x, y: at.y + travel, z: at.z },
       DOWN,

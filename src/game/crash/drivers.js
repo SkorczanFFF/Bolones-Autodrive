@@ -152,7 +152,7 @@ export function createDriver(vehicle, swerves, random, joined, driving) {
       const gas = (hands?.gas ?? false) && power > 0;
       let braking = friction.roll * GRAVITY; // rolling, until they react
       if (time < reactAt || gas) {
-        // on
+        // not yet: rolling on
       } else if (hands) {
         braking = drivers.gently * hard;
       } else {

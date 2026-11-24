@@ -46,7 +46,7 @@ export function createPosts(world, posts, onRoad) {
           RAPIER.RigidBodyDesc.fixed().setTranslation(x, y + height / 2, z),
         );
         const round = RAPIER.ColliderDesc.cylinder(height / 2, radius);
-        // no mass: the crush takes a fixed body's for nothing, so it must not weigh it
+        // no mass: a fixed body's would count in the crush as if the palm weighed it
         world.createCollider(round.setDensity(0).setCollisionGroups(groups(POSTS, PARTS)), body);
         stands.set(object, {
           body,

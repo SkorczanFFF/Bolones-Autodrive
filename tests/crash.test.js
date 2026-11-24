@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
-import { MINIGAME, PALETTE, TRAFFIC } from "../src/config.js";
+import { MINIGAME, MOUNTAINS, PALETTE, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
 import { createCrash as create, ready, roofOf } from "../src/game/crash.js";
 import { meeting, penetration } from "../src/game/crash/boxes.js";
@@ -126,6 +126,17 @@ describe("crash", () => {
     const from = relative();
     run(crash, 0.3);
     expect(Math.abs(relative() - from)).toBeLessThan(0.01);
+  });
+
+  it("stops a car thrown off the road at the side hills, not in them", () => {
+    const scene = new THREE.Scene();
+    const bolones = car(0, 0, BOLONES, 1160, 0);
+    // far out and fast sideways, as if thrown
+    const thrown = { ...car(MOUNTAINS.start - 10, -60, POLAKITO, 580, 0) };
+    thrown.velocity = new THREE.Vector3(60, 0, 0);
+    scene.add(bolones.object, thrown.object);
+    run(createCrash(scene, [bolones, thrown]), 3);
+    expect(thrown.object.position.x).toBeLessThan(MOUNTAINS.start);
   });
 
   it("puts out the lamps where the cars were hit, not the others", () => {

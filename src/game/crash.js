@@ -1,6 +1,6 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
-import { MINIGAME, PALETTE, SPEED } from "../config.js";
+import { MINIGAME, MOUNTAINS, PALETTE, SPEED } from "../config.js";
 import { settle } from "../core/tween.js";
 import { crumple, reaches } from "../scene/crumple.js";
 import { createDebris } from "../scene/debris.js";
@@ -100,6 +100,16 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       .setCollisionGroups(groups(ROAD, CARS | PARTS)),
     world.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
   );
+  // the side hills (MOUNTAINS.start) stop what slides off the road: walls the hills rise behind
+  for (const side of [-1, 1]) {
+    world.createCollider(
+      new RAPIER.ColliderDesc(new RAPIER.HalfSpace({ x: -side, y: 0, z: 0 }))
+        .setTranslation(side * MOUNTAINS.start, 0, 0)
+        .setFriction(0)
+        .setRestitution(restitution.contact)
+        .setCollisionGroups(groups(ROAD, CARS | PARTS)),
+    );
+  }
   /**
    * A car's sheet metal (its body, its hubs): it scrapes the road.
    *

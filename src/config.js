@@ -859,7 +859,6 @@ export const TEXT = {
   level: "LVL",
   newBest: "NEW BEST!",
   gameOver: "Game Over",
-  wrecked: "Wrecked", // crash mode's game over
   speed: "KM/H", // the Bolones' speedometer
   impact: "IMPACT", // crash mode: how fast the traffic comes at the Bolones, km/h
   cars: "CARS",

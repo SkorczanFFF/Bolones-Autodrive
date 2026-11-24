@@ -921,7 +921,8 @@ kbd {
 /* the result and what next show up once game over takes keys and clicks (--crash-lock, set by
    ui/hud.js); the title and the car in view are in from the crash */
 .hud__result,
-.hud__tally,
+.hud__facts,
+.hud__final-best,
 .hud__gameover-buttons {
   animation: panel-in 0.3s ease-out var(--crash-lock, 0s) backwards;
 }
@@ -1058,14 +1059,26 @@ kbd {
   }
 }
 
-/* crash mode: what the crash wrecked, under the result */
-.hud__tally {
+/* the score alone, as wide for 1 as for 9999 */
+.hud__result {
+  min-width: 200px;
+  justify-content: center;
+}
+
+/* under the score, one line each: what made it, then the record (or NEW BEST!) */
+.hud__facts,
+.hud__final-best {
   margin: 8px 0 0;
   font-size: 18px;
   letter-spacing: 0.1em;
   text-shadow:
     2px 2px 0 var(--ui-deep),
     0 0 6px var(--aqua);
+}
+
+.hud__final-best {
+  margin-top: 4px;
+  opacity: 0.7;
 }
 
 /* the record beaten: blinks, once the count passes it */

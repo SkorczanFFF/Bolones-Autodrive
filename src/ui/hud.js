@@ -110,8 +110,6 @@ export function createHud(
   const menuBest = $(".hud__best");
   const bestValues = $$("[data-best]");
   const scoreLabel = $(".hud__scoreboard .stat--main .stat__label");
-  const title = $(".hud__gameover-title");
-  const cars = $("[data-cars]");
   const tally = $(".hud__tally");
   const games = $$(".hud__game");
   const driveOn = $(".hud__drive-on");
@@ -202,7 +200,6 @@ export function createHud(
       mode = value;
       const crash = mode === "crash";
       scoreLabel.textContent = crash ? TEXT.impact : TEXT.score;
-      title.textContent = crash ? TEXT.wrecked : TEXT.gameOver;
       // what only some modes have (data-modes, index.html)
       for (const element of $$("[data-modes]")) {
         element.hidden = !(element.dataset.modes ?? "").split(" ").includes(mode);
@@ -286,9 +283,8 @@ export function createHud(
      * @param {import("../game/minigame.js").Damage} damage
      */
     setDamage({ kJ, parts, posts, others }) {
-      show(cars, `×${others}`);
       const { crush, parts: off, posts: hit } = TEXT.tally;
-      const items = [`${crush} ${kJ} kJ`];
+      const items = [`${TEXT.cars} ×${others}`, `${crush} ${kJ} kJ`];
       if (parts) items.push(`${off} ${parts}`);
       if (posts) items.push(`${hit} ${posts}`);
       show(tally, items.join(" · "));

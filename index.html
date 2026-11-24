@@ -174,29 +174,27 @@
            view -->
       <section class="hud__gameover" data-label="gameOver" aria-live="assertive">
         <header class="hud__gameover-head hud__fade">
-          <h2 class="hud__gameover-title sunset-text" data-text="gameOver"></h2>
-          <!-- the game's own scoreboard, frozen; NEW BEST! under it in place of the record -->
+          <!-- a crash is crash mode's goal: no game over there, the score alone -->
+          <h2
+            class="hud__gameover-title sunset-text"
+            data-text="gameOver"
+            data-modes="dodge overtake"
+          ></h2>
           <div class="hud__result scoreboard panel">
-            <div class="stat hud__final-best">
-              <span class="stat__label" data-text="best"></span>
-              <span class="stat__value" data-best></span>
-            </div>
             <div class="stat stat--main">
               <span class="stat__label" data-text="score"></span>
               <span class="stat__value hud__final-score" data-final-score></span>
             </div>
-            <div class="stat hud__final-level" data-modes="dodge overtake">
-              <span class="stat__label" data-text="level"></span>
-              <span class="stat__value" data-level></span>
-            </div>
-            <!-- the other cars in the wreck, the score's multiplier -->
-            <div class="stat hud__final-cars" data-modes="crash" hidden>
-              <span class="stat__label" data-text="cars"></span>
-              <span class="stat__value" data-cars></span>
-            </div>
           </div>
-          <!-- what the crash wrecked -->
-          <p class="hud__tally" data-modes="crash" hidden></p>
+          <!-- what made it: the level reached, or what the crash wrecked -->
+          <p class="hud__facts">
+            <span data-modes="dodge overtake"
+              ><span data-text="level"></span> <span data-level></span
+            ></span>
+            <span class="hud__tally" data-modes="crash" hidden></span>
+          </p>
+          <!-- the record to beat; NEW BEST! in its place once the count passes it -->
+          <p class="hud__final-best"><span data-text="best"></span> <span data-best></span></p>
           <p class="hud__new-best" data-text="newBest" hidden></p>
         </header>
         <footer class="hud__gameover-actions hud__fade">

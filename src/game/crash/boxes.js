@@ -98,6 +98,59 @@ function middle(a, b, n) {
 }
 
 /**
+ * Where two boxes' footprints (level) overlap once a has come `further` on along a level unit
+ * normal (from a to b): the middle and half the width of it across the normal (as a distance
+ * along UP × normal's other side, -normal.z, normal.x). Their extents across overlap far wider
+ * than they meet when a corner goes into a side at an angle: over most of a car's length.
+ *
+ * @param {Box} a
+ * @param {Box} b
+ * @param {THREE.Vector3} normal
+ * @param {number} further
+ * @returns {{ middle: number, half: number } | null} null: they would not overlap
+ */
+export function meeting(a, b, normal, further) {
+  const footprint = (/** @type {Box} */ box, /** @type {number} */ shift) => {
+    const [u, , w] = box.axes.map((axis, k) =>
+      new THREE.Vector2(axis.x, axis.z).multiplyScalar(box.half[k]),
+    );
+    const centre = new THREE.Vector2(
+      box.centre.x + normal.x * shift,
+      box.centre.z + normal.z * shift,
+    );
+    return [
+      [1, 1],
+      [-1, 1],
+      [-1, -1],
+      [1, -1],
+    ].map(([s, t]) => centre.clone().addScaledVector(u, s).addScaledVector(w, t));
+  };
+  // a's footprint clipped by each side of b's (Sutherland-Hodgman)
+  let region = footprint(a, further);
+  const fence = footprint(b, 0);
+  const inner = new THREE.Vector2(b.centre.x, b.centre.z);
+  fence.forEach((p, k) => {
+    const q = fence[(k + 1) % fence.length];
+    const sideOf = (/** @type {THREE.Vector2} */ v) =>
+      (q.x - p.x) * (v.y - p.y) - (q.y - p.y) * (v.x - p.x);
+    const inward = Math.sign(sideOf(inner)) || 1;
+    /** @type {THREE.Vector2[]} */
+    const kept = [];
+    region.forEach((v, i) => {
+      const next = region[(i + 1) % region.length];
+      const [sv, sn] = [sideOf(v) * inward, sideOf(next) * inward];
+      if (sv >= 0) kept.push(v);
+      if (sv * sn < 0) kept.push(v.clone().lerp(next, sv / (sv - sn)));
+    });
+    region = kept;
+  });
+  if (!region.length) return null;
+  const across = region.map((v) => -normal.z * v.x + normal.x * v.y);
+  const [low, high] = [Math.min(...across), Math.max(...across)];
+  return { middle: (low + high) / 2, half: (high - low) / 2 };
+}
+
+/**
  * Whether two boxes overlap (separating axis test) and if so, the depth along each face normal
  * (from a to b) and the point between them: the corners of each inside the other, or the middle
  * of their nearest points.

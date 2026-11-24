@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { MINIGAME, PALETTE, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
 import { createCrash as create, ready } from "../src/game/crash.js";
+import { meeting, penetration } from "../src/game/crash/boxes.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
 import { testCar as car, testMaterials } from "./helpers.js";
 
@@ -561,5 +562,41 @@ describe("crash", () => {
     crash.dispose();
     expect(scene.children).toHaveLength(2);
     expect(mesh.geometry).toBe(geometry);
+  });
+});
+
+describe("where two cars meet", () => {
+  /** A car's box, level, its front along `ahead` (x, z). @param {number[]} centre @param {number[]} ahead */
+  const carBox = ([x, z], [fx, fz]) => {
+    const front = new THREE.Vector3(fx, 0, fz).normalize();
+    return {
+      centre: new THREE.Vector3(x, 0, z),
+      axes: [new THREE.Vector3(front.z, 0, -front.x), new THREE.Vector3(0, 1, 0), front],
+      half: [1.45, 0.75, 3.8],
+    };
+  };
+
+  it("is as wide as a front driven straight into a side", () => {
+    const side = carBox([0, 0], [0, 1]);
+    const front = carBox([1.35 + 3.8, 0.5], [-1, 0]); // its front 10 cm into the side
+    const met = /** @type {{ middle: number, half: number }} */ (
+      meeting(front, side, new THREE.Vector3(-1, 0, 0), 0.5)
+    );
+    expect(met.half).toBeCloseTo(1.45, 5);
+    expect(-met.middle).toBeCloseTo(0.5, 5); // across is (-normal.z, normal.x): -z here
+  });
+
+  it("is short where a corner goes into a side at an angle, not the side's whole length", () => {
+    const side = carBox([0, 0], [0, 1]);
+    const front = [-1, 1].map((v) => v / Math.SQRT2);
+    // 45° off: its front's middle 10 cm into the side, at z 0
+    const corner = carBox([1.35 - front[0] * 3.8, -front[1] * 3.8], front);
+    const normal = new THREE.Vector3(-1, 0, 0);
+    const met = /** @type {{ middle: number, half: number }} */ (
+      meeting(corner, side, normal, 0.5)
+    );
+    const across = new THREE.Vector3(0, 0, 1);
+    expect(met.half).toBeLessThan(0.75 * (penetration(corner, side, across) / 2));
+    expect(met.half).toBeLessThan(2);
   });
 });

@@ -1,7 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME } from "../../config.js";
-import { boxOf, endOn, level, middleOf, overlap, penetration } from "./boxes.js";
+import { boxOf, endOn, level, meeting, middleOf, overlap, penetration } from "./boxes.js";
 import {
   AHEAD,
   IDENTITY,
@@ -99,8 +99,11 @@ export function createCrushes(world, met) {
     const expected = Math.sqrt(depth ** 2 + (mass * speed ** 2) / k); // all the closing energy
     const ahead = new THREE.Vector3(normal.x, 0, normal.z).normalize(); // from a to b, level
     const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
-    const reach = penetration(boxA, boxB, across) / 2; // half the width they overlap
+    // as wide as they overlap halfway through the crush (where the dent is half as deep), there
+    const stretch = meeting(boxA, boxB, ahead, (expected - depth) / 2);
+    const reach = stretch?.half ?? penetration(boxA, boxB, across) / 2;
     const at = middleOf(boxA, boxB, ahead);
+    if (stretch) at.addScaledVector(across, stretch.middle - at.dot(across));
     // each takes its share of the crush (the stiffer front gives less), from its face, half the
     // first overlap away from the middle
     const hits = [a, b].map((solid, i) => ({

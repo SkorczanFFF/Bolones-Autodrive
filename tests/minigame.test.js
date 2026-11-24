@@ -126,7 +126,7 @@ describe("overtake", () => {
     /** @type {number[]} how far apart the cars towards it come, every second */
     const gaps = [];
     for (let frame = 0; frame < 60 * 30; frame++) {
-      minigame.update(1 / 60, speed.top / SPEED.kmh / WORLD.speed, 1);
+      minigame.update(1 / 60, MINIGAME.top / SPEED.kmh / WORLD.speed, 1);
       for (const other of cars()) {
         expect(other.position.x > 0).toBe(other.userData.sameWay); // its way on the right
         if (other.position.z > 0) passed.add(other);

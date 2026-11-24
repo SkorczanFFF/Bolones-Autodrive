@@ -103,8 +103,9 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   const scoreOf = () => (mode === "crash" ? (minigame.damage?.score ?? 0) : minigame.score);
 
   /**
-   * Sets the Bolones' speed and returns the traffic's: in overtake ↑ ↓ drive the Bolones and the
-   * score the traffic, otherwise the score drives both and ↑ speeds them up (MINIGAME.boost).
+   * Sets the Bolones' speed, up to MINIGAME.top, and returns the traffic's: in overtake ↑ ↓ drive
+   * the Bolones and the score the traffic, otherwise the score drives both and ↑ speeds them up
+   * (MINIGAME.boost).
    *
    * @param {number} dt 0 to set it as it is (the countdown)
    */
@@ -115,15 +116,18 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       const { slow, speed } = MINIGAME.modes.overtake;
       const gas = input.isHeld("faster") ? speed.gas : 0;
       const brake = input.isHeld("slower") ? speed.brake : 0;
-      own = THREE.MathUtils.clamp(own + (gas - brake) * dt, slow, speed.top);
+      own = THREE.MathUtils.clamp(own + (gas - brake) * dt, slow, MINIGAME.top);
       world.speedMultiplier = worldAt(own);
       return level;
     }
     const { factor, rise, fall } = MINIGAME.boost;
     const target = input.isHeld("faster") ? factor : 1;
     boost += (target - boost) * settle(target > boost ? rise : fall, dt);
-    return (world.speedMultiplier = level * boost);
+    return (world.speedMultiplier = Math.min(level * boost, worldAt(MINIGAME.top)));
   }
+
+  /** The Bolones' speed, km/h, for the speedometer. */
+  const kmh = () => Math.round(WORLD.speed * world.speedMultiplier * SPEED.kmh);
 
   /** Keeps the mode's best score (also when leaving mid-game with ESC). */
   function recordScore() {
@@ -386,6 +390,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         case "countdown": {
           minigame.spawning = stateTime >= MINIGAME.trafficStartsAt;
           minigame.update(dt, world.speedMultiplier, pace(0));
+          hud.setSpeed(kmh());
           if (stateTime >= MINIGAME.countdown) {
             machine.send("timeout");
             break;
@@ -396,6 +401,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
 
         case "playing": {
           const level = pace(dt);
+          hud.setSpeed(kmh());
           const { crashed, scored } = minigame.update(dt, world.speedMultiplier, level);
           if (crashed) {
             machine.send("crash");
@@ -408,7 +414,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
           if (mode === "crash") {
             hud.setScore(Math.round(SPEED.traffic * world.speedMultiplier * SPEED.kmh), false);
           } else hud.setScore(minigame.score);
-          if (mode === "overtake") hud.setSpeed(Math.round(own));
+
           break;
         }
 

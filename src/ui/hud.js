@@ -201,7 +201,7 @@ export function createHud(
     setMode(value) {
       mode = value;
       const crash = mode === "crash";
-      scoreLabel.textContent = crash ? TEXT.speed : TEXT.score;
+      scoreLabel.textContent = crash ? TEXT.impact : TEXT.score;
       title.textContent = crash ? TEXT.wrecked : TEXT.gameOver;
       // what only some modes have (data-modes, index.html)
       for (const element of $$("[data-modes]")) {
@@ -266,7 +266,7 @@ export function createHud(
       finalBest.hidden = shown > record; // the record is this score
     },
 
-    /** The Bolones' speedometer (overtake), km/h. @param {number} value */
+    /** The Bolones' speedometer, km/h. @param {number} value */
     setSpeed(value) {
       show(speed, String(value));
     },

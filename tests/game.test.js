@@ -530,6 +530,19 @@ describe("crash mode", () => {
     expect(hudCalls.setLevel.at(-1)).toEqual([2]);
   });
 
+  it("lets the Bolones go MINIGAME.top at most, however far the game has gone, ↑ held too", () => {
+    const { world, minigame, run, play, input, hudCalls } = setup();
+    play("dodge");
+    run(MINIGAME.countdown + 0.1);
+    minigame.score = 10000;
+    minigame.update = () => ({ crashed: false, scored: true });
+    input.hold("faster", true);
+    run(3);
+    const kmh = WORLD.speed * world.speedMultiplier * SPEED.kmh;
+    expect(kmh).toBeCloseTo(MINIGAME.top, 5);
+    expect(hudCalls.setSpeed.at(-1)).toEqual([MINIGAME.top]); // the speedometer, in every mode
+  });
+
   it("hides the hint to drive the wreck on once its engine stalls", () => {
     const { minigame, run, crash, hudCalls } = setup();
     crash("crash");
@@ -561,8 +574,8 @@ describe("overtake", () => {
     input.hold("faster", true);
     run(10);
     input.hold("faster", false);
-    expect(kmh()).toBeCloseTo(speed.top, 5);
-    expect(hudCalls.setSpeed.at(-1)).toEqual([speed.top]);
+    expect(kmh()).toBeCloseTo(MINIGAME.top, 5);
+    expect(hudCalls.setSpeed.at(-1)).toEqual([MINIGAME.top]);
     input.hold("slower", true);
     run(10);
     input.hold("slower", false);

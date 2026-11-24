@@ -654,9 +654,9 @@ export const MINIGAME = {
      * (the first reaches it after the countdown); in the left lane the traffic towards it,
      * `oncoming`, in groups of `group` cars `platoon` units apart, `window` units between the
      * groups: room to overtake. The Bolones starts at `speed.start`; ↑ adds `gas` a second up to
-     * `top`, ↓ takes `brake` a second down to theirs (it can wait behind one for a gap), let go it
-     * holds. Its drivers are slow to see a crash and slow to stop: the ones overtaken run into
-     * the wreck, or try to swerve round it.
+     * MINIGAME.top, ↓ takes `brake` a second down to theirs (it can wait behind one for a gap),
+     * let go it holds. Its drivers are slow to see a crash and slow to stop: the ones overtaken
+     * run into the wreck, or try to swerve round it.
      */
     overtake: {
       every: 20,
@@ -668,12 +668,13 @@ export const MINIGAME = {
       group: [1, 4],
       platoon: [25, 50],
       window: [120, 260],
-      speed: { start: 70, top: 120, gas: 15, brake: 40 },
+      speed: { start: 50, gas: 15, brake: 40 },
       drivers: { reaction: [1.5, 2.8], brake: 0.5 },
     },
   },
   /** Holding ↑ speeds the game up by `factor`, easing in and out (time constants, seconds). */
   boost: { factor: 1.5, rise: 0.8, fall: 1.2 },
+  top: 150, // km/h: the Bolones at most, in every minigame
   /** Game over score, arcade style: counts up once it is in (and on as a crash in crash mode adds
    * to it), then flashes and pulses. */
   scoreCount: {
@@ -859,7 +860,8 @@ export const TEXT = {
   newBest: "NEW BEST!",
   gameOver: "Game Over",
   wrecked: "Wrecked", // crash mode's game over
-  speed: "KM/H", // crash mode: how fast the traffic comes at the Bolones; overtake: its own
+  speed: "KM/H", // the Bolones' speedometer
+  impact: "IMPACT", // crash mode: how fast the traffic comes at the Bolones, km/h
   cars: "CARS",
   tally: { crush: "CRUSH", parts: "PARTS OFF", posts: "PALMS & ROCKS" },
   lookAround: "Drag to look around, scroll to pull back",

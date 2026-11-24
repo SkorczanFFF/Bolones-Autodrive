@@ -280,7 +280,9 @@ body:is([data-state="idle"], [data-state="select"], [data-state="free"]) canvas[
 [data-state="select"] .hud__toggle,
 [data-state="gameover"] .hud__toggle,
 [data-state="gameover"] .hud__gameover,
-[data-state="playing"] .hud__scoreboard:not([hidden]) {
+[data-state="playing"] .hud__scoreboard:not([hidden]),
+[data-state="countdown"] .hud__speedometer,
+[data-state="playing"] .hud__speedometer {
   display: flex !important;
 }
 
@@ -804,6 +806,44 @@ kbd {
 
 .hud__countdown.is-pop {
   animation: pop 0.4s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+/* the speedometer: digits over their unlit segments, in the bottom right corner while racing */
+.hud__speedometer {
+  position: fixed;
+  right: calc(var(--corner-gap) + var(--safe-right));
+  bottom: calc(var(--corner-gap) + var(--safe-bottom));
+  z-index: var(--z-hud);
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.hud__speed-value {
+  position: relative;
+  min-width: 3ch;
+  font-size: 64px;
+  text-align: right;
+  color: var(--white);
+  text-shadow:
+    0 0 8px var(--aqua),
+    0 0 16px var(--aqua);
+}
+
+.hud__speed-value::before {
+  content: "888";
+  position: absolute;
+  right: 0;
+  color: var(--aqua);
+  text-shadow: none;
+  opacity: 0.12;
+}
+
+.hud__speed-unit {
+  font-size: 16px;
+  letter-spacing: 0.2em;
+  opacity: 0.8;
 }
 
 /* scoreboard */

@@ -8,3 +8,6 @@ Zrzut ekranu *.png
 # review notes, kept local
 RV.md
 docs/history/
+
+# car blueprints (third-party drawings), kept local
+blueprints/

@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { CAR, MINIGAME, SPEED, TRAFFIC } from "../config.js";
+import { CAR, MINIGAME, SPEED, TRAFFIC, WORLD } from "../config.js";
 import { createRandom, pick } from "../core/random.js";
+import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
 import { createTrafficModels, trafficHalfWidth } from "../scene/traffic.js";
 
@@ -42,6 +43,13 @@ export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.rand
     return x;
   };
 }
+
+/**
+ * How fast the traffic goes over the road (forward, +z), units/s.
+ *
+ * @param {number} speedMultiplier
+ */
+const overRoad = (speedMultiplier) => (SPEED.traffic - WORLD.speed) * speedMultiplier;
 
 /**
  * Minigame obstacles: oncoming traffic (scene/traffic.js), collision with the car and scoring.
@@ -97,6 +105,10 @@ export function createMinigame({ scene, car, materials }) {
      */
     update(dt, speedMultiplier) {
       spawner.update(dt, speedMultiplier);
+      const rolled = overRoad(speedMultiplier) * dt; // their wheels roll as far as they go
+      for (const other of spawner.objects) {
+        for (const { spin, radius } of wheelsOf(other)) spin.rotation.x += rolled / radius;
+      }
       if (spawner.objects.length === 0) return { crashed: false, scored: false };
 
       car.getBounds(carBounds);

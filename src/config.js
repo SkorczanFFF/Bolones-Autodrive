@@ -24,6 +24,7 @@ export const PALETTE = {
   dusk: "#261447", // road
   deepTeal: "#13304a", // rocks
   bolonesBody: "#420d59", // the star: stands apart from the road; neon pink lines are its own
+  nightBlue: "#0e2238", // traffic bodies under neon cyan lines, the Bolones' complement
   grape: "#2a0a4a", // horizon range
   plum: "#1e0f4f", // side mountains
   horizon: "#c70050", // fog: distant things sink into a crimson-magenta glow
@@ -34,7 +35,6 @@ export const PALETTE = {
   neonOrange: "#ff8c1a",
   sunYellow: "#f9c80e",
   headlight: "#fff3c4",
-  sunset: "#c2410c", // traffic bodies: burnt orange of the setting sun, pops against the magenta fog
 };
 
 /**
@@ -49,8 +49,8 @@ export const PALETTE = {
  * @property {"phong" | "basic"} [wireType] wireframe material type (default phong)
  * @property {"roadline"} [wireMap] textured overlay instead of a wireframe
  * @property {boolean} [wireGrid] procedural line grid overlay instead of a wireframe
- * @property {boolean} [wirePolygons] FBX models: lines along the modelled polygons (quads) instead
- *   of every triangle
+ * @property {boolean} [wirePolygons] lines along the modelled polygons (`userData.polygons`: FBX
+ *   models, the minigame traffic) instead of every triangle
  * @property {number} [lineFade] WIRE.fade for this layer (lower: lines stay visible further)
  * @property {number} [lineMin] visibility (0..1) lines fade down to on tiny triangles (default WIRE.min)
  * @property {number} [glow] bloom on this layer's lines, 0..1 (default WIRE.glow)
@@ -116,10 +116,11 @@ export const LAYERS = {
   },
   traffic: {
     label: "Traffic",
-    solid: PALETTE.sunset,
-    wire: PALETTE.sunYellow, // sun colors: yellow lines on burnt orange
+    solid: PALETTE.nightBlue,
+    wire: PALETTE.neonCyan, // clear of the crimson fog they come out of and of the yellow palms
     toggleSolid: true,
-    lineFade: 1.5, // far cars show their body; dense glowing lines would turn them into yellow blobs
+    wirePolygons: true,
+    lineFade: 1.5, // far cars: dense glowing lines would turn them into blobs
   },
 };
 
@@ -484,8 +485,6 @@ export const TRAFFIC = {
   get y() {
     return CAR.lift;
   },
-  roofWidth: 0.8, // cabin width at the roof, fraction of the body width
-  tireWidth: 0.17,
 };
 
 export const MINIGAME = {
@@ -590,7 +589,7 @@ export const PICKER = {
     PALETTE.sunYellow,
     PALETTE.neonOrange,
     PALETTE.horizon,
-    PALETTE.sunset,
+    PALETTE.nightBlue,
     PALETTE.starlight,
     PALETTE.bolonesBody,
     PALETTE.dusk,

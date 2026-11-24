@@ -55,9 +55,10 @@ const reachOf = ({ half, shift }) => Math.hypot(half[0], half[1], half[2]) + shi
 /**
  * Cars meet through their crumple zones, not as rigid boxes: a front is a spring as stiff as the
  * car is heavy (MINIGAME.crash.stiffness), loading until the closing speed is used up (some
- * 0.1 s), unloading only a little (MINIGAME.crash.restitution). Momentum is kept, the energy goes into the crush, the lighter car takes
- * the deeper dent, and both grow with the speed. Ends crushed into each other are caught for a
- * while (MINIGAME.crash.interlock); a post takes nothing, the car all of the crush.
+ * 0.1 s), unloading only a little (MINIGAME.crash.restitution). Momentum is kept, the energy goes
+ * into the crush, the lighter car takes the deeper dent, and both grow with the speed. Ends
+ * crushed into each other are caught for a while (MINIGAME.crash.interlock); a post takes
+ * nothing, the car all of the crush.
  *
  * @template {Solid} T
  * @param {RAPIER.World} world

@@ -3,6 +3,7 @@ import { ICONS } from "./icons.js";
 import { withKey } from "./labels.js";
 
 /** @typedef {import("../config.js").Action} Action */
+/** @typedef {import("../game/game.js").Mode} Mode */
 
 /**
  * Called every frame by the game, so it only touches the DOM when something changed.
@@ -104,15 +105,38 @@ export function createHud(
   const levels = $$("[data-level]");
   const finalScore = $("[data-final-score]");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  let gameOverScore = 0;
   const newBest = $(".hud__new-best");
   const finalBest = $(".hud__final-best");
   const menuBest = $(".hud__best");
   const bestValues = $$("[data-best]");
+  const scoreLabel = $(".hud__scoreboard .stat--main .stat__label");
+  const title = $(".hud__gameover-title");
+  const finalLevel = $(".hud__final-level");
+  const finalCars = $(".hud__final-cars");
+  const cars = $("[data-cars]");
+  const tally = $(".hud__tally");
+  const games = $$(".hud__game");
+  const driveOn = $(".hud__drive-on");
+  /** @type {Mode} */
+  let mode = "dodge";
+  const records = { dodge: 0, crash: 0 };
+  let record = 0; // game over's: to beat
   const menuToggle = $(".hud__toggle");
   const wreck = $("[data-wreck]");
   const wreckCount = $("[data-wreck-count]");
   wreck.parentElement?.setAttribute("title", withKey(TEXT.nextCar, "next"));
+
+  /** The best scores: of the mode in the game and game over, of both in the menu. */
+  function showBest() {
+    for (const element of bestValues) show(element, String(records[mode]));
+    for (const [of, value] of Object.entries(records)) {
+      for (const entry of $$(`[data-record="${of}"]`)) {
+        entry.hidden = value <= 0;
+        show(/** @type {HTMLElement} */ (entry.querySelector("[data-value]")), String(value));
+      }
+    }
+    menuBest.hidden = records.dodge <= 0 && records.crash <= 0;
+  }
 
   /** @param {boolean} visible */
   function setMenuVisible(visible) {
@@ -155,10 +179,44 @@ export function createHud(
       if (show(countdown, text)) replay(countdown, "is-pop");
     },
 
-    /** @param {number | null} value null hides the scoreboard */
-    setScore(value) {
+    /**
+     * The minigame chosen in their list: lit up.
+     *
+     * @param {Mode} chosen
+     */
+    setChoice(chosen) {
+      for (const game of games) {
+        const lit = game.dataset.action === chosen;
+        game.classList.toggle("button--primary", lit);
+        if (lit) game.setAttribute("aria-current", "true");
+        else game.removeAttribute("aria-current"); // an empty one would read as false
+      }
+    },
+
+    /**
+     * The minigame's mode: what the scoreboard and game over show, the best score of which.
+     *
+     * @param {Mode} value
+     */
+    setMode(value) {
+      mode = value;
+      const crash = mode === "crash";
+      scoreLabel.textContent = crash ? TEXT.speed : TEXT.score;
+      title.textContent = crash ? TEXT.wrecked : TEXT.gameOver;
+      finalLevel.hidden = crash;
+      finalCars.hidden = !crash;
+      tally.hidden = !crash;
+      driveOn.hidden = !crash;
+      showBest();
+    },
+
+    /**
+     * @param {number | null} value null hides the scoreboard
+     * @param {boolean} [pop] a count pops at every new number, a speed does not
+     */
+    setScore(value, pop = true) {
       scoreboard.hidden = value === null;
-      if (value !== null && show(score, String(value))) replay(score, "is-pop");
+      if (value !== null && show(score, String(value)) && pop) replay(score, "is-pop");
     },
 
     /** @param {number} value */
@@ -168,38 +226,58 @@ export function createHud(
       }
     },
 
-    /** @param {number} value 0 = no record yet */
-    setBest(value) {
-      menuBest.hidden = value <= 0;
-      for (const element of bestValues) show(element, String(value));
+    /**
+     * @param {Mode} of
+     * @param {number} value 0 = no record yet
+     */
+    setBest(of, value) {
+      records[of] = value;
+      showBest();
     },
 
-    /**
-     * @param {number} value
-     * @param {boolean} isNewBest
-     */
-    showGameOver(value, isNewBest) {
-      gameOverScore = value;
-      finalScore.classList.remove("is-final");
+    /** @param {number} best the record to beat: NEW BEST! once the score counts past it */
+    showGameOver(best) {
+      record = best;
+      finalScore.classList.remove("is-tick", "is-final");
       show(finalScore, "0");
-      newBest.hidden = !isNewBest;
-      finalBest.hidden = isNewBest; // the record is this score
+      newBest.hidden = true;
+      finalBest.hidden = false;
     },
 
     /**
      * Counts the game over score up, every new number ticking; once there, it flashes and keeps
-     * pulsing (CSS). Called every frame by the game.
+     * pulsing (CSS), until the score grows again (crash mode). Past the record, NEW BEST! takes
+     * the record's place. Called every frame by the game once the score is in.
      *
-     * @param {number} progress 0..1
+     * @param {number} counted how far the count has got
+     * @param {number} total the score
      */
-    countGameOver(progress) {
-      const done = progress >= 1 || reducedMotion.matches;
-      const shown = done ? gameOverScore : Math.floor(gameOverScore * progress);
-      if (show(finalScore, String(shown))) replay(finalScore, "is-tick");
-      if (done && !finalScore.classList.contains("is-final")) {
+    countGameOver(counted, total) {
+      const shown = reducedMotion.matches ? total : Math.floor(counted);
+      if (show(finalScore, String(shown))) {
+        finalScore.classList.remove("is-final");
+        replay(finalScore, "is-tick");
+      }
+      if (shown >= total && !finalScore.classList.contains("is-final")) {
         finalScore.classList.remove("is-tick");
         finalScore.classList.add("is-final");
       }
+      newBest.hidden = shown <= record;
+      finalBest.hidden = shown > record; // the record is this score
+    },
+
+    /**
+     * What the crash wrecked (crash mode's game over).
+     *
+     * @param {import("../game/minigame.js").Damage} damage
+     */
+    setDamage({ kJ, parts, posts, others }) {
+      show(cars, `×${others}`);
+      const { crush, parts: off, posts: hit } = TEXT.tally;
+      const items = [`${crush} ${kJ} kJ`];
+      if (parts) items.push(`${off} ${parts}`);
+      if (posts) items.push(`${hit} ${posts}`);
+      show(tally, items.join(" · "));
     },
   };
 }

@@ -97,9 +97,18 @@ function trunkOf(palm) {
 }
 
 /**
+ * @typedef {object} Damage what a crash has wrecked so far, crash mode's score
+ * @property {number} kJ the crumple zones took up
+ * @property {number} parts wheels and bumpers torn off
+ * @property {number} posts palms and rocks hit
+ * @property {number} others cars in the wreck besides the Bolones: the points are multiplied by it
+ * @property {number} score MINIGAME.crashMode
+ */
+
+/**
  * Minigame obstacles: oncoming traffic (scene/traffic.js), collision with the car, the crash that
- * follows (the palms and the rocks by the road take part) and scoring. Each car is a clone of a random model;
- * its hitbox is the model's bounds (scene/traffic.js).
+ * follows (the palms and the rocks by the road take part) and scoring. Each car is a clone of a
+ * random model; its hitbox is the model's bounds (scene/traffic.js).
  *
  * @param {{ scene: THREE.Scene, car: ReturnType<typeof import("../scene/car.js").createCar>, materials: import("../scene/materials.js").Materials, palms: THREE.Object3D[], rocks: THREE.Object3D[] }} deps
  */
@@ -229,6 +238,11 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       spawner.spawning = value;
     },
 
+    /** How many times as dense the traffic comes (crash mode). @param {number} value */
+    set density(value) {
+      spawner.density = value;
+    },
+
     /** Removes all traffic and the crash, stops spawning and zeroes the score. */
     reset() {
       crash?.dispose();
@@ -236,6 +250,22 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       spawner.clear();
       spawner.spawning = false;
       score = 0;
+    },
+
+    /** @returns {Damage | null} null before the crash */
+    get damage() {
+      if (!crash) return null;
+      const { energy, cars, parts, posts } = crash.tally;
+      const { crush, part, post } = MINIGAME.crashMode;
+      const kJ = Math.round(energy / 1000);
+      const others = cars - 1;
+      return {
+        kJ,
+        parts,
+        posts,
+        others,
+        score: (kJ * crush + parts * part + posts * post) * others,
+      };
     },
 
     /** How hard the last crash was: 1 at the first level's speed. */
@@ -276,6 +306,16 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       }
 
       return { crashed: false, scored };
+    },
+
+    /**
+     * The Bolones in the player's hands after the crash (crash mode).
+     *
+     * @param {number} steer -1 (left) to 1 (right)
+     * @param {boolean} gas
+     */
+    control(steer, gas) {
+      crash?.control(steer, gas);
     },
 
     /**

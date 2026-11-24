@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { MINIGAME, SCENE, CAR } from "../src/config.js";
+import { MINIGAME, SCENE, CAR, SPEED, TRAFFIC } from "../src/config.js";
 import { createInput } from "../src/core/input.js";
 import { createTweens } from "../src/core/tween.js";
 import { createGame } from "../src/game/game.js";
@@ -15,11 +15,19 @@ function setup() {
     update() {},
   };
   const world = { speedMultiplier: 1 };
-  const calls = { minigameReset: 0, menuShow: 0, menuRandomize: 0, hudToggle: 0, carUpdate: 0 };
+  const calls = { minigameReset: 0, menuShow: 0, menuRandomize: 0, carUpdate: 0 };
   // the wreck: three cars 5 apart, the Bolones (moved by `at`) where the orbit is at the crash
   const state = { crashNext: false, wreckSpeed: 0.4, at: new THREE.Vector3(0, 1.8, 0) };
   const minigame = {
     score: 7,
+    /** @type {import("../src/game/minigame.js").Damage | null} */
+    damage: null,
+    density: 1,
+    /** @type {[number, boolean][]} what the player did with the Bolones after the crash */
+    controls: [],
+    control(/** @type {number} */ steer, /** @type {boolean} */ gas) {
+      this.controls.push([steer, gas]);
+    },
     spawning: false,
     reset: () => calls.minigameReset++,
     update: () => ({ crashed: state.crashNext, scored: false }),
@@ -41,18 +49,15 @@ function setup() {
     getBounds: (/** @type {THREE.Box3} */ box) =>
       box.setFromCenterAndSize(group.position, new THREE.Vector3(1.8, 1.4, 4.2)),
   };
-  /** @type {number[]} progress of every countGameOver call */
-  const counts = [];
-  // every HUD call is a no-op, but the game over count and the toggle are recorded
+  /** @type {Record<string, any[][]>} the arguments of every HUD call, by its name */
+  const hudCalls = {};
   const hud = new Proxy(
     {},
     {
-      get: (_, name) =>
-        name === "countGameOver"
-          ? (/** @type {number} */ p) => counts.push(p)
-          : name === "toggleMenu"
-            ? () => calls.hudToggle++
-            : () => {},
+      get:
+        (_, name) =>
+        (/** @type {any[]} */ ...args) =>
+          (hudCalls[String(name)] ??= []).push(args),
     },
   );
   const menu = { show: () => calls.menuShow++, hide() {}, randomize: () => calls.menuRandomize++ };
@@ -71,15 +76,36 @@ function setup() {
     }
   };
 
-  const crash = () => {
+  /** ENTER, then a minigame clicked in their list. */
+  const play = (/** @type {"dodge" | "crash"} */ mode = "dodge") => {
     input.dispatch("start");
+    input.dispatch(mode);
+  };
+
+  /** Plays a minigame and crashes as soon as it is on. */
+  const crash = (/** @type {"dodge" | "crash"} */ mode = "dodge") => {
+    play(mode);
     run(MINIGAME.countdown + 0.1);
     state.crashNext = true;
     run(1 / 60);
     state.crashNext = false;
   };
 
-  return { game, input, world, camera, controls, car, calls, counts, minigame, run, crash, state };
+  return {
+    game,
+    input,
+    world,
+    camera,
+    controls,
+    car,
+    calls,
+    hudCalls,
+    minigame,
+    run,
+    play,
+    crash,
+    state,
+  };
 }
 
 describe("keys outside the state machine", () => {
@@ -179,10 +205,10 @@ describe("free ride camera", () => {
   });
 
   it("softens the road edges in free ride only", () => {
-    const { input, car, run } = setup();
+    const { input, car, run, play } = setup();
     input.dispatch("free");
     expect(car.softEdges).toBe(true);
-    input.dispatch("start");
+    play();
     expect(car.softEdges).toBe(false);
     run(MINIGAME.countdown + 0.1);
     expect(car.softEdges).toBe(false);
@@ -209,13 +235,13 @@ describe("free ride camera", () => {
   });
 
   it("eases the orbit target back to the middle when the minigame starts", () => {
-    const { input, camera, controls, car, run } = setup();
+    const { input, camera, controls, car, run, play } = setup();
     camera.position.copy(home);
     controls.target.copy(target);
     input.dispatch("free");
     car.group.position.x = 3;
     run(1 / 60);
-    input.dispatch("start");
+    play();
     car.group.position.x = 0;
     run(1 / 60);
     expect(controls.target.x).toBeGreaterThan(2.9); // no jump on the first frame
@@ -241,8 +267,8 @@ describe("free ride camera", () => {
 
 describe("crash", () => {
   it("speeds the minigame up by half while ↑ is held, easing in and back out", () => {
-    const { input, world, run } = setup();
-    input.dispatch("start");
+    const { input, world, run, play } = setup();
+    play();
     run(MINIGAME.countdown + 0.1);
     expect(world.speedMultiplier).toBe(1);
     input.hold("faster", true);
@@ -296,12 +322,12 @@ describe("crash", () => {
   });
 
   it("hands the camera over at once: turn it round and pull it back, H hides the HUD", () => {
-    const { input, controls, run, crash, calls } = setup();
+    const { input, controls, run, crash, hudCalls } = setup();
     crash();
     expect(controls.enabled).toBe(true);
     expect(controls.maxDistance).toBe(MINIGAME.crash.orbit);
     input.dispatch("menu");
-    expect(calls.hudToggle).toBe(1);
+    expect(hudCalls.toggleMenu).toHaveLength(1);
     run(MINIGAME.crash.lock + 1 / 60);
     input.dispatch("start");
     run(SCENE.camera.transition + 1 / 60);
@@ -353,20 +379,22 @@ describe("crash", () => {
   });
 
   it("counts the score up once it is in, then holds it", () => {
-    const { counts, minigame, run, crash } = setup();
+    const { hudCalls, minigame, run, crash } = setup();
     crash();
-    counts.length = 0;
     run(MINIGAME.crash.lock - 0.05);
-    expect(Math.max(...counts)).toBe(0); // the panel is not in yet
+    expect(hudCalls.countGameOver).toBeUndefined(); // the panel is not in yet
+    expect(hudCalls.showGameOver.at(-1)).toEqual([0]); // no record to beat yet
     const duration = Math.min(
       minigame.score * MINIGAME.scoreCount.perPoint,
       MINIGAME.scoreCount.max,
     );
     run(0.05 + duration / 2);
-    expect(counts.at(-1)).toBeGreaterThan(0.3);
-    expect(counts.at(-1)).toBeLessThan(0.7);
+    const [counted, score] = hudCalls.countGameOver.at(-1) ?? [];
+    expect(score).toBe(minigame.score);
+    expect(counted / score).toBeGreaterThan(0.3);
+    expect(counted / score).toBeLessThan(0.7);
     run(duration);
-    expect(counts.at(-1)).toBe(1);
+    expect(hudCalls.countGameOver.at(-1)).toEqual([score, score]);
   });
 
   it("leaves the minigame for free ride too", () => {
@@ -377,5 +405,105 @@ describe("crash", () => {
     expect(game.state).toBe("free");
     expect(world.speedMultiplier).toBe(1);
     expect(calls.menuShow).toBe(1);
+  });
+});
+
+describe("minigames", () => {
+  it("ENTER lists them, ← → choose one, ENTER plays it, again from game over", () => {
+    const { game, input, minigame, run, hudCalls } = setup();
+    input.dispatch("start");
+    expect(game.state).toBe("select");
+    expect(hudCalls.setChoice.at(-1)).toEqual(["dodge"]);
+    input.dispatch("left"); // round to the last
+    expect(hudCalls.setChoice.at(-1)).toEqual(["crash"]);
+    input.dispatch("right");
+    input.dispatch("right");
+    expect(hudCalls.setChoice.at(-1)).toEqual(["crash"]);
+    input.dispatch("start");
+    expect(game.state).toBe("countdown");
+    expect(minigame.density).toBe(MINIGAME.crashMode.density);
+    expect(hudCalls.setMode.at(-1)).toEqual(["crash"]);
+    run(MINIGAME.countdown + 0.1);
+    input.dispatch("start"); // not mid-game
+    input.dispatch("dodge");
+    expect(game.state).toBe("playing");
+    input.dispatch("exit");
+    input.dispatch("start"); // the list remembers the last one
+    expect(hudCalls.setChoice.at(-1)).toEqual(["crash"]);
+  });
+
+  it("plays one clicked in the list at once; ESC goes back, the camera left be", () => {
+    const { game, input, minigame, calls, controls } = setup();
+    input.dispatch("dodge"); // not in the menu itself
+    expect(game.state).toBe("idle");
+    input.dispatch("start");
+    input.dispatch("exit");
+    expect(game.state).toBe("idle");
+    expect(calls.minigameReset).toBe(0);
+    expect(controls.enabled).toBe(true);
+    input.dispatch("start");
+    input.dispatch("dodge");
+    expect(game.state).toBe("countdown");
+    expect(minigame.density).toBe(1);
+  });
+
+  it("plays the same one again from game over", () => {
+    const { game, input, minigame, run, crash } = setup();
+    crash("crash");
+    run(MINIGAME.crash.lock + 1 / 60);
+    input.dispatch("start"); // AGAIN
+    expect(game.state).toBe("countdown");
+    expect(minigame.density).toBe(MINIGAME.crashMode.density);
+  });
+});
+
+describe("crash mode", () => {
+  it("shows how fast the traffic comes at the Bolones on the way, not a score", () => {
+    const { world, run, play, hudCalls } = setup();
+    play("crash");
+    run(MINIGAME.countdown + MINIGAME.startLabelDuration + 0.1);
+    const kmh = Math.round(((SPEED.traffic * world.speedMultiplier) / TRAFFIC.scale) * 3.6);
+    expect(hudCalls.setScore.at(-1)).toEqual([kmh, false]); // a speed does not pop
+  });
+
+  it("scores what the crash wrecks, counting on as it grows, for a record of its own", () => {
+    const { input, minigame, run, crash, hudCalls } = setup();
+    const damage = { kJ: 90, parts: 1, posts: 0, others: 2, score: 220 };
+    minigame.damage = damage;
+    crash("crash");
+    run(MINIGAME.crash.lock + MINIGAME.scoreCount.max + 0.1);
+    expect(hudCalls.countGameOver.at(-1)).toEqual([220, 220]);
+    expect(hudCalls.setDamage.at(-1)).toEqual([damage]);
+    minigame.damage = { ...damage, others: 3, score: 330 }; // another car runs into the wreck
+    run(0.05);
+    const [counted] = hudCalls.countGameOver.at(-1) ?? [];
+    expect(counted).toBeGreaterThan(220); // counting on
+    expect(counted).toBeLessThan(330);
+    run(MINIGAME.scoreCount.max);
+    expect(hudCalls.countGameOver.at(-1)).toEqual([330, 330]);
+    input.dispatch("exit");
+    expect(hudCalls.setBest.at(-1)).toEqual(["crash", 330]);
+    expect(
+      hudCalls.setBest.filter(([mode]) => mode === "dodge").every(([, value]) => value === 0),
+    ).toBe(true);
+  });
+
+  it("leaves the Bolones in the player's hands after the crash: ← → steer, ↑ drives on", () => {
+    const { input, minigame, run, crash } = setup();
+    crash();
+    input.hold("left", true);
+    run(0.1);
+    expect(minigame.controls).toEqual([]); // not when dodging
+    input.hold("left", false);
+    const again = setup();
+    again.crash("crash");
+    again.input.hold("left", true);
+    again.input.hold("faster", true);
+    again.run(0.1);
+    expect(again.minigame.controls.at(-1)).toEqual([-1, true]);
+    again.input.hold("left", false);
+    again.input.hold("faster", false);
+    again.run(0.1);
+    expect(again.minigame.controls.at(-1)).toEqual([0, false]);
   });
 });

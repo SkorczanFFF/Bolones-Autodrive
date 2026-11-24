@@ -43,6 +43,10 @@ export function createVehicle(world, body, rig, centre, groups) {
     return near / (a + b) / on;
   };
 
+  // which way its nose points along z: where the steered wheels are
+  const ahead = Math.sign(along[rig.findIndex(({ mount }) => mount.userData.steers)] ?? 1) || 1;
+  const driven = rig.filter(({ mount }) => !mount.userData.steers).length; // rear-wheel drive
+
   const height = body.translation().y; // of the centre of mass, the car upright
   const wheels = rig.map((wheel, i) => {
     const { mount, steer, spin, radius } = wheel;
@@ -98,10 +102,30 @@ export function createVehicle(world, body, rig, centre, groups) {
     /**
      * Turns the steered wheels (the front ones, as they stood when the crash began, and on).
      *
-     * @param {number} angle radians, towards the car's own +x going forward (+z)
+     * @param {number} angle radians, to the car's left (to its right below 0)
      */
     steer(angle) {
+      if (angle !== steering) body.wakeUp();
       steering = angle;
+    },
+
+    /**
+     * Drives the car on, nose first, by the wheels that do not steer (rear-wheel drive, as the
+     * Bolones'), as far as their tyres grip.
+     *
+     * @param {number} acceleration units/s², 0 to coast
+     */
+    accelerate(acceleration) {
+      if (acceleration > 0) body.wakeUp();
+      const force = (ahead * mass * acceleration) / driven;
+      wheels.forEach(({ mount }, i) =>
+        controller.setWheelEngineForce(i, mount.userData.steers ? 0 : force),
+      );
+    },
+
+    /** How fast it goes nose first, units/s. */
+    get speed() {
+      return ahead * controller.currentVehicleSpeed();
     },
 
     /**

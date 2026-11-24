@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { createStateMachine, nextState } from "../src/game/state.js";
 
 describe("game state machine", () => {
-  it("ENTER starts the minigame from the menu, free ride and game over", () => {
-    expect(nextState("idle", "start")).toBe("countdown");
-    expect(nextState("free", "start")).toBe("countdown");
+  it("ENTER lists the minigames (menu, free ride), plays one there, again in game over", () => {
+    expect(nextState("idle", "start")).toBe("select");
+    expect(nextState("free", "start")).toBe("select");
+    expect(nextState("select", "start")).toBe("countdown");
     expect(nextState("gameover", "start")).toBe("countdown");
   });
 
@@ -20,7 +21,13 @@ describe("game state machine", () => {
   });
 
   it("ESC always leaves to the menu, except in the menu itself", () => {
-    for (const state of /** @type {const} */ (["free", "countdown", "playing", "gameover"])) {
+    for (const state of /** @type {const} */ ([
+      "select",
+      "free",
+      "countdown",
+      "playing",
+      "gameover",
+    ])) {
       expect(nextState(state, "exit")).toBe("idle");
     }
     expect(nextState("idle", "exit")).toBeNull();
@@ -37,8 +44,8 @@ describe("game state machine", () => {
     const machine = createStateMachine("idle", onChange);
     expect(machine.send("exit")).toBe(false);
     expect(machine.send("start")).toBe(true);
-    expect(machine.state).toBe("countdown");
-    expect(onChange).toHaveBeenCalledWith("countdown", "idle", "start");
+    expect(machine.state).toBe("select");
+    expect(onChange).toHaveBeenCalledWith("select", "idle", "start");
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

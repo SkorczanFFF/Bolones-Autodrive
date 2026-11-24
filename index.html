@@ -47,8 +47,15 @@
           <span class="logo__script sunset-text" data-text="logoScript"></span>
           <span class="logo__caps" data-text="logoCaps"></span>
         </h1>
+        <!-- the best score of each mode of the minigame that has one -->
         <p class="hud__best hud__fade" hidden>
-          <span data-text="best"></span> <span data-best></span>
+          <span data-text="best"></span>
+          <span class="hud__record" data-record="dodge">
+            <span data-text="dodge"></span> <span data-value></span>
+          </span>
+          <span class="hud__record" data-record="crash">
+            <span data-text="crash"></span> <span data-value></span>
+          </span>
         </p>
         <!-- equal columns keep both buttons the same width; the steering hint spans both -->
         <div class="button-grid hud__bottom">
@@ -62,6 +69,33 @@
             <span><kbd data-key="left"></kbd><kbd data-key="right"></kbd></span>
             <span data-text="steer"></span>
           </p>
+        </div>
+        <!-- MINI GAME: the minigames in place of the buttons, the chosen one lit (ui/hud.js) -->
+        <div class="hud__games hud__fade">
+          <div class="button-grid">
+            <button class="button hud__game" type="button" data-action="dodge">
+              <span class="hud__game-name" data-text="dodge"></span>
+              <span class="hud__game-about" data-text="dodgeAbout"></span>
+              <span class="hud__game-best" data-record="dodge">
+                <span data-text="best"></span> <span data-value></span>
+              </span>
+            </button>
+            <button class="button hud__game" type="button" data-action="crash">
+              <span class="hud__game-name" data-text="crash"></span>
+              <span class="hud__game-about" data-text="crashAbout"></span>
+              <span class="hud__game-best" data-record="crash">
+                <span data-text="best"></span> <span data-value></span>
+              </span>
+            </button>
+          </div>
+          <p class="hud__games-keys">
+            <kbd data-key="left"></kbd><kbd data-key="right"></kbd> <span data-text="choose"></span>
+            <span class="hud__dot">·</span>
+            <kbd data-key="start"></kbd> <span data-text="play"></span>
+          </p>
+          <button class="button button--small" type="button" data-action="exit">
+            <span data-text="menu"></span><kbd data-key="exit"></kbd>
+          </button>
         </div>
         <a
           class="hud__source hud__fade"
@@ -129,11 +163,18 @@
               <span class="stat__label" data-text="score"></span>
               <span class="stat__value hud__final-score" data-final-score></span>
             </div>
-            <div class="stat">
+            <div class="stat hud__final-level">
               <span class="stat__label" data-text="level"></span>
               <span class="stat__value" data-level></span>
             </div>
+            <!-- crash mode: the other cars in the wreck, the score's multiplier -->
+            <div class="stat hud__final-cars" hidden>
+              <span class="stat__label" data-text="cars"></span>
+              <span class="stat__value" data-cars></span>
+            </div>
           </div>
+          <!-- crash mode: what the crash wrecked -->
+          <p class="hud__tally" hidden></p>
           <p class="hud__new-best" data-text="newBest" hidden></p>
         </header>
         <footer class="hud__gameover-actions hud__fade">
@@ -142,6 +183,11 @@
             <span data-wreck></span><span class="hud__wreck-count" data-wreck-count></span>
             <kbd data-key="next"></kbd>
           </button>
+          <!-- crash mode: the Bolones is still the player's -->
+          <p class="hud__gameover-hint hud__drive-on" hidden>
+            <kbd data-key="left"></kbd><kbd data-key="right"></kbd><kbd data-key="faster"></kbd>
+            <span data-text="driveOn"></span>
+          </p>
           <p class="hud__gameover-hint" data-text="lookAround"></p>
           <div class="button-grid button-grid--3 hud__gameover-buttons">
             <button class="button button--primary" type="button" data-action="start">

@@ -518,6 +518,10 @@ export const MINIGAME = {
      * until they act the wheels roll. A car hit on its side (not end on) has a broken wheel,
      * pulling it `broken` degrees towards that side for good. */
     drivers: { share: 0.5, angle: [1.5, 4], swerve: 0.6, gently: 0.4, broken: [2, 5] },
+    /** Crash mode: the Bolones stays the player's after the crash, a little: ← → turn its front
+     * wheels up to `steer` degrees (all the way in `turn` seconds), ↑ drives it on at `gas` m/s²
+     * up to `top` m/s; let go, it brakes gently. */
+    player: { steer: 25, turn: 0.3, gas: 2.5, top: 12 },
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
      * height up (unless the model says): cars are heavy low down, a hit pushes them more than it
      * tips them. It rides springs bouncing `bounce` times a second, damped `damping` of critical,
@@ -592,9 +596,16 @@ export const MINIGAME = {
     lock: 2.5, // seconds before game over takes keys and clicks (and shows its score and buttons)
     orbit: 24, // units: how far the camera can be pulled back from the car in view
   },
+  /**
+   * Crash mode: the same road with `density` times the traffic, and the crash is the goal. It
+   * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel or
+   * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
+   */
+  crashMode: { density: 1.5, crush: 1, part: 20, post: 20 },
   /** Holding ↑ speeds the game up by `factor`, easing in and out (time constants, seconds). */
   boost: { factor: 1.5, rise: 0.8, fall: 1.2 },
-  /** Game over score, arcade style: counts up once it is in, then flashes and pulses. */
+  /** Game over score, arcade style: counts up once it is in (and on as a crash in crash mode adds
+   * to it), then flashes and pulses. */
   scoreCount: {
     perPoint: 0.06, // seconds per point
     max: 1.2, // seconds at most, however big the score
@@ -610,7 +621,7 @@ export const CRT = {
   flickerIntensity: 0.4,
 };
 
-/** @typedef {"start" | "free" | "exit" | "left" | "right" | "faster" | "next" | "stats" | "menu" | "glow" | "randomize"} Action */
+/** @typedef {"start" | "dodge" | "crash" | "free" | "exit" | "left" | "right" | "faster" | "next" | "stats" | "menu" | "glow" | "randomize"} Action */
 
 /**
  * @typedef {object} ActionKeys
@@ -625,6 +636,9 @@ export const CRT = {
 /** Player actions (core/input.js): their keys and how the UI shows them. @type {Record<Action, ActionKeys>} */
 export const ACTIONS = {
   start: { keys: ["Enter", "NumpadEnter"], label: "Enter", icon: "enter" },
+  // the minigames, clicked in their list (← → and ENTER play the one chosen there)
+  dodge: { keys: [] },
+  crash: { keys: [] },
   free: { keys: ["KeyF"], label: "F" },
   exit: { keys: ["Escape"], label: "ESC" },
   left: { keys: ["ArrowLeft"], label: "Left arrow", icon: "arrowLeft" },
@@ -694,7 +708,8 @@ export const SCREEN = {
 };
 
 export const STORAGE = {
-  bestScore: "polonez-autodrive:best", // localStorage key
+  /** localStorage keys of the best scores, by the minigame's mode */
+  best: { dodge: "polonez-autodrive:best", crash: "polonez-autodrive:best-crash" },
 };
 
 /** F10 developer overlay. */
@@ -742,7 +757,13 @@ export const TEXT = {
   loading: "LOADING",
   logoScript: "Bolones",
   logoCaps: "AUTODRIVE",
-  menuStart: "MINI GAME", // same length as freeRide, so both buttons match
+  menuStart: "MINI GAME",
+  dodge: "DODGE",
+  dodgeAbout: "Weave through the oncoming traffic: a point for every car you pass.",
+  crash: "CRASH",
+  crashAbout: "Crash into it on purpose: the bigger the wreck, the more points.",
+  choose: "choose",
+  play: "play",
   again: "AGAIN",
   menu: "MENU",
   steer: "steer",
@@ -755,7 +776,12 @@ export const TEXT = {
   level: "LVL",
   newBest: "NEW BEST!",
   gameOver: "Game Over",
+  wrecked: "Wrecked", // crash mode's game over
+  speed: "KM/H", // crash mode: how fast the traffic comes at the Bolones
+  cars: "CARS",
+  tally: { crush: "CRUSH", parts: "PARTS OFF", posts: "PALMS & ROCKS" },
   lookAround: "Drag to look around, scroll to pull back",
+  driveOn: "drive the wreck on",
   nextCar: "Next car of the crash",
   bolones: "Bolones",
   menuHide: "Hide HUD",

@@ -211,8 +211,11 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   const before = new Map(); // where the bodies shown were a step ago
 
   const stands = createPosts(world, posts, onRoad);
-  /** @type {Party[]} the cars, then the palms there are now */
+  /** @type {Party[]} the cars, then the palms and rocks there are now */
   let solids = bodies;
+  let absorbed = 0; // J the crumple zones took up
+  /** @type {Set<Party>} the palms and rocks hit */
+  const struck = new Set();
 
   /**
    * Puts an object where its body is, in the scene.
@@ -360,6 +363,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const met = bodies.filter((body) => body === a || body === b);
     for (const body of met) if (!wrecks.includes(body)) wrecks.push(body);
     if (!crash) return undefined;
+    absorbed += crash.energy;
+    for (const solid of [a, b]) if (!met.some((body) => body === solid)) struck.add(solid);
     for (const body of met) {
       if (endOn(body.body, crash.normal)) continue;
       // hit on its side: where from, in its own frame
@@ -450,6 +455,25 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       debris.update(dt);
       inScene({ x: 0, y: 0, z: 0 }, debris.object.position);
       return Math.max(0, camera);
+    },
+
+    /**
+     * The Bolones in the player's hands (crash mode, MINIGAME.crash.player): from now on its
+     * driver steers and drives on as told.
+     *
+     * @param {number} steer -1 (left) to 1 (right)
+     * @param {boolean} gas
+     */
+    control(steer, gas) {
+      bodies[0].driver.take(steer, gas);
+    },
+
+    /**
+     * What it has wrecked so far: the energy the crumple zones took up (J), the cars in the wreck,
+     * the parts torn off, the palms and rocks hit.
+     */
+    get tally() {
+      return { energy: absorbed, cars: wrecks.length, parts: loose.length, posts: struck.size };
     },
 
     /** The cars that crashed, in the order they did (the Bolones and the car it hit first). */

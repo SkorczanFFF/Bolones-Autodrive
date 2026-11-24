@@ -131,6 +131,13 @@ describe("crash", () => {
     // and go on together, coming apart at a small share of the speed they closed at at most
     const closing = 14.4 + 18.9;
     expect(Math.abs(gap() - after) / 0.1).toBeLessThan(0.15 * closing);
+    // what the crumple zones took up: about all the closing energy (the cars barely bounce)
+    const mass = (1160 * 580) / (1160 + 580);
+    const energy = 0.5 * mass * (closing / TRAFFIC.scale) ** 2;
+    const { tally } = crash;
+    expect(tally.energy / energy).toBeGreaterThan(0.9);
+    expect(tally.energy / energy).toBeLessThanOrEqual(1);
+    expect(tally).toMatchObject({ cars: 2, parts: 0, posts: 0 });
   });
 
   it("the faster the crash, the deeper the dents; the lighter car takes more", () => {
@@ -241,6 +248,7 @@ describe("crash", () => {
     expect(lowest).toBeGreaterThan(-0.05);
     const torn = wheels.filter((wheel) => wheel.parent === scene);
     expect(torn.length).toBeGreaterThan(0);
+    expect(crash.tally.parts).toBeGreaterThanOrEqual(torn.length);
     const [wheel] = torn;
     expect(wheel.position.distanceTo(other.object.position)).toBeGreaterThan(3); // away
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(other.object.quaternion);
@@ -252,6 +260,31 @@ describe("crash", () => {
     expect(wheel.position.distanceTo(at)).toBeLessThan(0.05);
     crash.dispose();
     expect(wheels.every(({ parent }) => parent === other.object)).toBe(true); // back on
+  });
+
+  it("hands the Bolones to the player: ↑ drives it on, ← turns it left, let go it stops", () => {
+    const scene = new THREE.Scene();
+    const bolones = car(0, 0, BOLONES, 1160, -10);
+    const parked = car(30, -300, POLAKITO, 580, 0); // far off, never met
+    scene.add(bolones.object, parked.object);
+    const crash = createCrash(scene, [bolones, parked]);
+    const drive = (/** @type {number} */ steer, /** @type {boolean} */ gas, seconds = 1) => {
+      let speed = 0;
+      for (let t = 0; t < seconds; t += 1 / 60) {
+        crash.control(steer, gas);
+        speed = crash.update(1 / 60);
+      }
+      return speed; // along the road, the camera's
+    };
+    expect(drive(0, true, 2)).toBeGreaterThan(15); // faster than it came
+    drive(-1, true);
+    const nose = new THREE.Vector3(0, 0, -1).applyQuaternion(bolones.object.quaternion);
+    expect(nose.x).toBeLessThan(-0.2); // turned to its left
+    expect(bolones.object.position.x).toBeLessThan(-0.5);
+    drive(0, false, 8);
+    const at = bolones.object.position.clone();
+    drive(0, false);
+    expect(bolones.object.position.distanceTo(at)).toBeLessThan(0.05); // braked to a stop
   });
 
   it("stops the Bolones after a mere graze too: the drivers brake, the camera comes to rest", () => {
@@ -382,6 +415,7 @@ describe("crash", () => {
     const lean = palm.quaternion.angleTo(new THREE.Quaternion());
     expect(lean).toBeGreaterThan(0.02);
     expect(new THREE.Vector3(0, 1, 0).applyQuaternion(palm.quaternion).x).toBeLessThan(0); // away
+    expect(crash.tally.posts).toBe(1);
     crash.dispose();
     expect(palm.quaternion.angleTo(new THREE.Quaternion())).toBe(0);
   });

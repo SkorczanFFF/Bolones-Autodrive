@@ -71,11 +71,11 @@ canvas {
 }
 
 /* the scene can be grabbed and orbited in the menu and in free ride (core/renderer.js) */
-body:is([data-state="idle"], [data-state="free"]) canvas {
+body:is([data-state="idle"], [data-state="select"], [data-state="free"]) canvas {
   cursor: grab;
 }
 
-body:is([data-state="idle"], [data-state="free"]) canvas[data-grabbing] {
+body:is([data-state="idle"], [data-state="select"], [data-state="free"]) canvas[data-grabbing] {
   cursor: grabbing;
 }
 
@@ -275,7 +275,9 @@ body:is([data-state="idle"], [data-state="free"]) canvas[data-grabbing] {
 }
 
 [data-state="idle"] .hud__menu,
+[data-state="select"] .hud__menu,
 [data-state="idle"] .hud__toggle,
+[data-state="select"] .hud__toggle,
 [data-state="gameover"] .hud__toggle,
 [data-state="gameover"] .hud__gameover,
 [data-state="playing"] .hud__scoreboard:not([hidden]) {
@@ -578,6 +580,62 @@ kbd {
   margin-top: auto;
 }
 
+/* MINI GAME: the minigames in place of the menu's buttons and best scores, a card each */
+.hud__games {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+}
+
+[data-state="select"] .hud__games {
+  display: flex;
+}
+
+[data-state="select"] :is(.hud__bottom, .hud__best) {
+  display: none;
+}
+
+/* the name on top, the record at the bottom, both cards as tall */
+.button-grid > .button.hud__game {
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+  align-self: stretch;
+  gap: 6px;
+  padding: 0.4em 0.7em 0.5em;
+  white-space: normal;
+  text-align: left;
+}
+
+.hud__game-about {
+  width: 13em;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+}
+
+.hud__game-best {
+  margin-top: auto;
+  font-size: 18px;
+  opacity: 0.8;
+}
+
+.hud__games-keys {
+  margin: 0;
+  font-size: 18px;
+  text-shadow:
+    2px 2px 0 var(--ui-deep),
+    0 0 6px var(--aqua);
+}
+
+/* the best of each mode, a dot between them */
+.hud__record:not([hidden]) ~ .hud__record:not([hidden])::before {
+  content: "·";
+  margin: 0 0.5em;
+}
+
 .hud__steer {
   display: flex;
   flex-direction: column;
@@ -818,6 +876,7 @@ kbd {
 /* the result and what next show up once game over takes keys and clicks (--crash-lock, set by
    ui/hud.js); the title and the car in view are in from the crash */
 .hud__result,
+.hud__tally,
 .hud__gameover-buttons {
   animation: panel-in 0.3s ease-out var(--crash-lock, 0s) backwards;
 }
@@ -954,7 +1013,17 @@ kbd {
   }
 }
 
-/* the record beaten: blinks, once the result is in */
+/* crash mode: what the crash wrecked, under the result */
+.hud__tally {
+  margin: 8px 0 0;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+  text-shadow:
+    2px 2px 0 var(--ui-deep),
+    0 0 6px var(--aqua);
+}
+
+/* the record beaten: blinks, once the count passes it */
 .hud__new-best {
   margin: 6px 0 0;
   padding-left: 0.25em; /* balances the trailing letter-spacing */
@@ -962,8 +1031,8 @@ kbd {
   color: var(--yellow);
   text-shadow: 0 0 10px var(--yellow);
   animation:
-    panel-in 0.3s ease-out var(--crash-lock, 0s) backwards,
-    blink 0.8s step-end var(--crash-lock, 0s) infinite;
+    panel-in 0.3s ease-out backwards,
+    blink 0.8s step-end infinite;
 }
 
 @keyframes pop {

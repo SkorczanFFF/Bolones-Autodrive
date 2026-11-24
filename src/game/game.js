@@ -1,9 +1,17 @@
 import * as THREE from "three";
-import { MINIGAME, SCENE, SPEED, STORAGE, TEXT } from "../config.js";
+import { MINIGAME, SCENE, SPEED, STORAGE, TEXT, TRAFFIC } from "../config.js";
 import { loadNumber, saveNumber } from "../core/storage.js";
 import { createStateMachine } from "./state.js";
 
 /** @typedef {import("./state.js").GameState} GameState */
+/** The minigames, as their list in the menu shows them (index.html). */
+const MODES = /** @type {const} */ (["dodge", "crash"]);
+/**
+ * @typedef {(typeof MODES)[number]} Mode the minigame: dodge the oncoming traffic, or crash into
+ *   it for the damage (MINIGAME.crashMode)
+ */
+
+const KMH = 3.6 / TRAFFIC.scale; // units/s -> km/h
 
 /**
  * @typedef {object} Menu
@@ -72,15 +80,21 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   const moveTarget = new THREE.Vector3();
   let stateTime = 0;
   let boost = 1; // the minigame sped up while ↑ is held (MINIGAME.boost), eased
-  let best = loadNumber(STORAGE.bestScore);
+  /** @type {Mode} */
+  let mode = "dodge"; // the one played, or chosen in the list
+  const best = { dodge: loadNumber(STORAGE.best.dodge), crash: loadNumber(STORAGE.best.crash) };
+  let record = 0; // the mode's best before this game over: to beat
+  let counted = 0; // how far game over has counted its score up
 
-  /** Keeps the best score (also when leaving mid-game with ESC). @returns {boolean} new record */
+  /** This game's score: the cars dodged, or what the crash wrecked. */
+  const scoreOf = () => (mode === "crash" ? (minigame.damage?.score ?? 0) : minigame.score);
+
+  /** Keeps the mode's best score (also when leaving mid-game with ESC). */
   function recordScore() {
-    if (minigame.score <= best) return false;
-    best = minigame.score;
-    saveNumber(STORAGE.bestScore, best);
-    hud.setBest(best);
-    return true;
+    const score = scoreOf();
+    if (score <= best[mode]) return;
+    best[mode] = score;
+    saveNumber(STORAGE.best[mode], score);
   }
 
   /**
@@ -199,8 +213,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     hud.setState(next);
     car.steering = next === "free" || next === "playing";
     car.softEdges = next === "free";
-    // ESC from free ride keeps the pin while the car eases back to the middle (see followCar)
-    pinned = next === "free" || (next === "idle" && previous === "free");
+    // leaving free ride for the menu keeps the pin while the car eases back (see followCar)
+    pinned = next === "free" || (previous === "free" && (next === "idle" || next === "select"));
     input.arm("next", false); // Tab is the browser's again, but over a wreck
 
     switch (next) {
@@ -208,9 +222,11 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         boost = 1;
         car.reset(tweens);
         minigame.reset();
+        minigame.density = mode === "crash" ? MINIGAME.crashMode.density : 1;
         world.speedMultiplier = 1;
         menu?.hide();
         moveCamera(gamePosition);
+        hud.setMode(mode);
         hud.setScore(null);
         hud.setLevel(1);
         hud.setCountdown(String(MINIGAME.countdown));
@@ -223,7 +239,9 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       case "gameover":
         // the wreck stays on the road, the camera can be turned round it and pulled back at
         // once; the camera and the scene GUI return on leaving
-        hud.showGameOver(minigame.score, recordScore());
+        record = best[mode];
+        counted = 0;
+        hud.showGameOver(record);
         world.speedMultiplier = 0; // the road stops with the crash: the palms stay where it found them
         wreckFocus = 0;
         shakeOffset.set(0, 0, 0);
@@ -236,7 +254,12 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       case "idle":
         car.reset(tweens);
         if (previous === "countdown" || previous === "playing") recordScore();
-        if (previous !== "free") leaveMinigame();
+        if (previous !== "free" && previous !== "select") leaveMinigame();
+        break;
+
+      case "select":
+        car.reset(tweens);
+        hud.setChoice(mode);
         break;
 
       case "free":
@@ -246,20 +269,42 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         }
         break;
     }
+    hud.setBest(mode, best[mode]); // game over's record only once it is left: the count beats it
   }
 
   const machine = createStateMachine("idle", enter);
 
+  /** Game over takes no keys or clicks at first (MINIGAME.crash.lock). */
+  const locked = () => machine.state === "gameover" && stateTime < MINIGAME.crash.lock;
+
   input.onPress((action) => {
     switch (action) {
       case "start":
+        // the menu, free ride: the minigames; their list: the one chosen; game over: again
+        if (locked()) return;
+        machine.send("start");
+        break;
+      case "dodge":
+      case "crash":
+        if (machine.state !== "select") return; // a minigame clicked in the list
+        mode = action;
+        machine.send("start");
+        break;
+      case "left":
+      case "right": {
+        if (machine.state !== "select") return; // otherwise held, steering
+        const i = MODES.indexOf(mode) + (action === "left" ? -1 : 1);
+        mode = MODES[(i + MODES.length) % MODES.length];
+        hud.setChoice(mode);
+        break;
+      }
       case "free":
       case "exit":
-        if (machine.state === "gameover" && stateTime < MINIGAME.crash.lock) return; // see config
+        if (locked()) return;
         machine.send(action);
         break;
       case "menu":
-        if (machine.state === "idle" || machine.state === "gameover") hud.toggleMenu(); // shown there
+        if (["idle", "select", "gameover"].includes(machine.state)) hud.toggleMenu(); // shown there
         break;
       case "next":
         if (machine.state === "gameover") {
@@ -286,7 +331,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   }
 
   hud.setState(machine.state);
-  hud.setBest(best);
+  for (const of of MODES) hud.setBest(of, best[of]);
 
   return {
     get state() {
@@ -313,10 +358,6 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         }
 
         case "playing": {
-          if (stateTime >= MINIGAME.startLabelDuration) {
-            hud.setCountdown(null);
-            hud.setScore(minigame.score);
-          }
           const { factor, rise, fall } = MINIGAME.boost;
           const target = input.isHeld("faster") ? factor : 1;
           boost += (target - boost) * (1 - Math.exp(-dt / (target > boost ? rise : fall)));
@@ -326,25 +367,32 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
             machine.send("crash");
             break;
           }
-          if (scored) {
-            hud.setScore(minigame.score);
-            hud.setLevel(tierForScore(minigame.score) + 1);
-          }
+          if (scored) hud.setLevel(tierForScore(minigame.score) + 1);
+          if (stateTime < MINIGAME.startLabelDuration) break;
+          hud.setCountdown(null);
+          if (mode === "dodge") hud.setScore(minigame.score);
+          // how fast the traffic comes at the Bolones: as hard as the crash will be
+          else hud.setScore(Math.round(SPEED.traffic * world.speedMultiplier * KMH), false);
           break;
         }
 
         case "gameover": {
+          // crash mode: the Bolones is still the player's, a little
+          if (mode === "crash") minigame.control(steerInput(), input.isHeld("faster"));
           const scale = slowMotion(stateTime);
           // the road under the camera, which rides along with the car in view
           world.speedMultiplier = minigame.wreck(dt * scale, wreckFocus) * scale;
           followWreck(dt);
           hud.setWreck(minigame.wrecks, wreckFocus);
-          // the score counts up once it is in (after the lock)
+          const { damage } = minigame;
+          if (mode === "crash" && damage) hud.setDamage(damage);
+          recordScore();
+          if (locked()) break;
+          // the score counts up once it is in, and on as the crash adds to it (crash mode)
+          const score = scoreOf();
           const { perPoint, max } = MINIGAME.scoreCount;
-          const duration = Math.min(minigame.score * perPoint, max);
-          const counting = stateTime - MINIGAME.crash.lock;
-          const progress = duration > 0 ? counting / duration : counting >= 0 ? 1 : 0;
-          hud.countGameOver(Math.min(Math.max(progress, 0), 1));
+          counted = Math.min(score, counted + Math.max(1 / perPoint, score / max) * dt);
+          hud.countGameOver(counted, score);
           break;
         }
       }

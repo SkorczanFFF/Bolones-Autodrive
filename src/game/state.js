@@ -2,22 +2,24 @@
  * Game states and the only allowed transitions between them. Pure: no three.js, no DOM.
  *
  * idle      - menu, car parked, orbit camera
+ * select    - the minigames to pick from (the menu's MINI GAME), as in the menu
  * free      - free ride: steering without obstacles
  * countdown - 3-2-1 before the minigame
  * playing   - minigame running
  * gameover  - crash summary, stays until the player picks what next
  *
- * @typedef {"idle" | "free" | "countdown" | "playing" | "gameover"} GameState
+ * @typedef {"idle" | "select" | "free" | "countdown" | "playing" | "gameover"} GameState
  * @typedef {"start" | "free" | "exit" | "timeout" | "crash"} GameEvent
  */
 
 /** @type {Record<GameState, Partial<Record<GameEvent, GameState>>>} */
 const TRANSITIONS = {
-  idle: { start: "countdown", free: "free" },
-  free: { start: "countdown", exit: "idle" },
+  idle: { start: "select", free: "free" },
+  select: { start: "countdown", exit: "idle" },
+  free: { start: "select", exit: "idle" },
   countdown: { exit: "idle", timeout: "playing" },
   playing: { exit: "idle", crash: "gameover" }, // start is ignored on purpose (v1 bug: reset mid-game)
-  gameover: { start: "countdown", free: "free", exit: "idle" },
+  gameover: { start: "countdown", free: "free", exit: "idle" }, // start: the same minigame again
 };
 
 /**

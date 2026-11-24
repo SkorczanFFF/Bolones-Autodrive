@@ -11,13 +11,14 @@ endless road. Every model is drawn as a flat-colored solid with a neon wireframe
 lets you recolor and tweak everything.
 
 - **Menu (idle):** the scene runs, the camera can be orbited with the mouse, the menu can be hidden
-  (**H**) to enjoy or recolor the view.
-- **Free ride (F):** steer the Bolones with **← / →**, no obstacles.
+  (**H**) to enjoy or recolor the view; PRESS ⏎ TO START blinks at the bottom, as on an arcade
+  machine (TAP TO START on touch screens).
+- **Free ride (F, or the last card of the list):** steer the Bolones with **← / →**, no obstacles.
 - **Minigames (ENTER):** a list to pick one from (← / → and ENTER, or a click). Each starts with
   a 3-2-1 countdown, then oncoming communist-era traffic (Polakito, Kredens, the Ramses van);
   the best score of each is kept in the browser. A digital speedometer sits in the bottom right
   corner, the Bolones goes 150 km/h at most, and after a crash it can still be steered and driven
-  on until its engine stalls.
+  on until its engine stalls. On touch screens the keys are on screen, played sideways.
   - **Dodge:** every car that passes scores a point, and every few points the world speeds up
     (`SPEED` in `src/config.js`); the Bolones starts at 50 km/h. A crash ends the game.
   - **Crash:** denser traffic, the Bolones at 50 km/h from the start, and the crash is the goal: it
@@ -39,6 +40,42 @@ lets you recolor and tweak everything.
   menu (or game over), G glow on/off, R randomize all colors, F10 developer stats.
 
 ## [Unreleased]
+
+### Added
+
+- The minigames on phones and tablets, with the keys on screen as in mobile driving games: ← / →
+  held on the left, the gas pedal (and in Overtake the brake) on the right, the way back in the
+  corner and the speedometer between them; after a crash they stay while the wreck can be driven
+  on. A minigame goes full screen and sideways where the browser allows it (not on iPhones); held
+  upright, it waits, asking to turn the phone; TAP TO START says so. Game over says to pinch, not
+  scroll, to pull back, fits a phone held sideways (smaller, with room for the wreck), and every
+  button on a touch screen is big enough for a finger.
+
+### Changed
+
+- The menu waits for a player as a 90s arcade machine does: a blinking PRESS ⏎ TO START (TAP TO
+  START on touch screens) in place of the MINI GAME and FREE RIDE buttons and the steering hint.
+  ENTER lists what to play, free ride the fourth card beside the three minigames (on a phone held
+  sideways the cards show their names alone, side by side).
+- The traffic's lines are pale lavender (they were cyan, the colour of the ground and the rocks it
+  drives past) and glow less (0.6); its headlamps are warm halogen yellow, apart from them.
+- Game over shows the car in view (Tab, or its two arrows, for the next) in the top right corner
+  and how to look around at the very bottom; hidden (H, or the eye) it keeps both, to watch the
+  wreck. ESC first brings back what H hid, then leaves.
+- The SkorczanFFF link in the menu leads to the author's GitHub profile, not to the repository.
+- The score no longer grows and shrinks: a new number lights up a moment, and game over's score
+  blinks like a neon sign, as an 80s arcade would.
+- Tyres grip sideways as on dry asphalt (from 0.8 to 1 g): a car sliding sideways stops sooner.
+- The Bolones' rear lamps: the lower row is one long lamp, without the division the upper row
+  keeps.
+
+### Fixed
+
+- Fast head-on crashes (from about 170 km/h closing) no longer throw the lighter car aside: the
+  crush went deeper than the fronts are wide, and the cars slid through each other and apart. Now
+  they stay in each other.
+- Corners hit no longer spin the cars round like tops: a corner takes up only its share of the
+  crash, by how wide the fronts overlap, and glances off.
 
 ## [2.5.0] – November 2026
 

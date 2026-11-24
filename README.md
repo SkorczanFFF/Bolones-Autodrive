@@ -19,20 +19,20 @@ The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, u
 
 | Key | Action |
 |---|---|
-| **ENTER** | The minigames (also from free ride): **← / →** choose, **ENTER** play; in game over: the same one again |
-| **F** | Free ride: steer without obstacles |
+| **ENTER** | PRESS START: what to play, the minigames and free ride (also from free ride): **← / →** choose, **ENTER** play; in game over: the same one again |
+| **F** | Free ride at once: steer without obstacles |
 | **← / →** | Steer; in every minigame also after the crash, with **↑** to drive the wreck on until its engine stalls |
 | **↑ / W** | Hold to speed Dodge and Crash up by half; in Overtake: gas |
 | **↓ / S** | In Overtake: brake |
 | **TAB** | After a crash: the camera from car to car of the wreck |
-| **ESC** | Back to the menu |
-| **H** | Hide / show the menu (eye button in the top-left corner) to enjoy or recolor the scene |
+| **ESC** | Back to the menu; with the menu or game over hidden (**H**), first brings it back |
+| **H** | Hide / show the menu (eye button in the top-left corner) to enjoy or recolor the scene; in game over the car switcher and how to look around stay, to watch the wreck |
 | **G** | Glow on the wireframes on / off (also in the side panel) |
 | **R** | Randomize all: new colors for the whole scene (also in the side panel) |
 
 All menu and game over buttons are clickable too. Drag with the mouse to orbit the camera outside the minigame and around a wreck, scroll to pull back.
 
-On touch screens (phones, tablets without a keyboard) orbit with one finger, pinch to zoom and recolor the scene in the side panel; free ride has on-screen steering (hold ← / →) and a MENU button. The minigame needs a keyboard for now.
+On touch screens (phones, tablets without a keyboard) orbit with one finger, pinch to zoom and recolor the scene in the side panel. Free ride and the minigames have the keys on screen: hold ← / → on the left to steer, and in a minigame ↑ (gas) and, in Overtake, ↓ (brake) on the right, also after a crash while the wreck can be driven on. The minigames are played sideways: full screen and turned where the browser allows it; held upright, a game waits for the phone to turn.
 
 ---
 
@@ -108,7 +108,6 @@ tests/             Vitest unit tests
 - Rocks and palms that follow the terrain, so the mountains can start closer to the road; a sidewalk
 - Palette presets: Original 2024, Take On Me, Game Boy, Tron, Vaporwave
 - More communist-era cars in the minigame
-- The minigame on touch screens
 
 ---
 

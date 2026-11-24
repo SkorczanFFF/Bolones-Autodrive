@@ -119,6 +119,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   const nextX = createLanePicker();
   const [minInterval, maxInterval] = MINIGAME.interval;
 
+  /** @type {THREE.Object3D[]} the cars spawned since the last frame */
+  const spawned = [];
   const spawner = createSpawner({
     parent: scene,
     speed: SPEED.traffic,
@@ -127,6 +129,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       const car = pick(models).clone();
       car.position.set(nextX(), TRAFFIC.y, 0);
       car.userData.scored = false;
+      spawned.push(car);
       return [car];
     },
   });
@@ -137,6 +140,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   let score = 0;
   /** @type {ReturnType<typeof createCrash> | null} */
   let crash = null;
+  let pace = 1; // the speed multiplier the crash came at: the traffic keeps coming at it
+  let since = 0; // game seconds since the crash
 
   /**
    * Puts out a car's lamps that a crash crushed: the body's colour, outlined like the body
@@ -156,6 +161,22 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   };
 
   /**
+   * A car of the traffic in the crash, at its speed over the road.
+   *
+   * @param {THREE.Object3D} other
+   * @returns {import("./crash.js").Car}
+   */
+  const traffic = (other) => ({
+    object: other,
+    box: hitboxOf(other, new THREE.Box3()),
+    mass: other.userData.mass,
+    velocity: new THREE.Vector3(0, 0, overRoad(pace)),
+    color: colorOf(materials.wire.traffic),
+    onCrash: lampsOut(other),
+    label: other.userData.label,
+  });
+
+  /**
    * The Bolones ran into a car: they and the rest of the traffic go over to the physics
    * (game/crash.js), each with its speed over the road.
    *
@@ -163,18 +184,10 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
    * @param {number} speedMultiplier
    */
   function hit(obstacle, speedMultiplier) {
-    spawner.spawning = false;
+    pace = speedMultiplier;
+    since = 0;
+    spawned.length = 0; // the traffic there is goes in as it is
     const road = WORLD.speed * speedMultiplier;
-    const oncoming = new THREE.Vector3(0, 0, overRoad(speedMultiplier));
-    const traffic = /** @param {THREE.Object3D} other */ (other) => ({
-      object: other,
-      box: hitboxOf(other, new THREE.Box3()),
-      mass: other.userData.mass,
-      velocity: oncoming,
-      color: colorOf(materials.wire.traffic),
-      onCrash: lampsOut(other),
-      label: other.userData.label,
-    });
     // every palm and rock by the road, measured where it is when it comes up
     /** @type {WeakMap<THREE.Object3D, import("./crash.js").Post>} */
     const measured = new WeakMap();
@@ -249,7 +262,13 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       crash = null;
       spawner.clear();
       spawner.spawning = false;
+      spawned.length = 0;
       score = 0;
+    },
+
+    /** How much power the Bolones' engine has left after the crash, in the player's hands. */
+    get engine() {
+      return crash?.engine ?? 0;
     },
 
     /** @returns {Damage | null} null before the crash */
@@ -282,6 +301,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
      */
     update(dt, speedMultiplier) {
       spawner.update(dt, speedMultiplier);
+      spawned.length = 0; // the spawner moves them
       const rolled = overRoad(speedMultiplier) * dt; // their wheels roll as far as they go
       for (const other of spawner.objects) {
         for (const { spin, radius } of wheelsOf(other)) spin.rotation.x += rolled / radius;
@@ -327,7 +347,13 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
      */
     wreck(dt, which) {
       if (!crash) return 0;
-      spawner.update(dt, 0); // the physics moves the traffic now; the spawner still fades it
+      since += dt;
+      // the traffic keeps coming a while (MINIGAME.crash.keepComing), and as long as the Bolones
+      // can be driven into it (crash mode), into the crash; the physics moves it, the spawner
+      // still fades it
+      spawner.spawning = since < MINIGAME.crash.keepComing || crash.engine > 0;
+      spawner.update(dt, 0, pace);
+      for (const other of spawned.splice(0)) crash.join(traffic(other));
       return crash.update(dt, which) / WORLD.speed;
     },
 

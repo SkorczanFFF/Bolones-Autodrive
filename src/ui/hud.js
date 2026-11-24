@@ -267,6 +267,15 @@ export function createHud(
     },
 
     /**
+     * The hint to drive the wreck on, while its engine runs (crash mode's game over).
+     *
+     * @param {boolean} running
+     */
+    setDriveOn(running) {
+      driveOn.hidden = !running;
+    },
+
+    /**
      * What the crash wrecked (crash mode's game over).
      *
      * @param {import("../game/minigame.js").Damage} damage

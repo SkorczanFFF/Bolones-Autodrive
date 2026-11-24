@@ -12,11 +12,12 @@ import { GRAVITY, METRE, STEP } from "./physics.js";
  * @param {ReturnType<typeof import("./vehicle.js").createVehicle>} vehicle what they drive
  * @param {boolean} swerves whether they may swerve (not the Bolones' driver: the player crashed)
  * @param {() => number} random in [0, 1)
+ * @param {number} [from] game seconds since the crash they come along at: they react from then
  */
-export function createDriver(vehicle, swerves, random) {
+export function createDriver(vehicle, swerves, random, from = 0) {
   const { friction, reaction, drivers, player } = MINIGAME.crash;
   const { randomIn } = createRandom(random);
-  const reactAt = randomIn(reaction);
+  const reactAt = from + randomIn(reaction);
   const steer =
     swerves && random() < drivers.share
       ? THREE.MathUtils.degToRad(randomIn(drivers.angle)) * (random() < 0.5 ? -1 : 1)
@@ -25,7 +26,17 @@ export function createDriver(vehicle, swerves, random) {
   let hands;
   let wheel = 0; // how far the player has turned the wheels, radians to the left
 
+  /**
+   * The share of its power the engine has, the player's: it stalls MINIGAME.crash.player.stall
+   * seconds after the crash, sputtering out over its last one.
+   *
+   * @param {number} time game seconds since the crash
+   */
+  const engine = (time) => (hands ? THREE.MathUtils.clamp(player.stall - time, 0, 1) : 0);
+
   return {
+    engine,
+
     /**
      * Hit on its side: a wheel there is broken.
      *
@@ -52,11 +63,13 @@ export function createDriver(vehicle, swerves, random) {
      */
     drive(time) {
       const since = time - reactAt;
-      const gas = hands?.gas ?? false;
+      const power = engine(time);
+      const gas = (hands?.gas ?? false) && power > 0;
       const braking =
         since < 0 || gas ? friction.roll : friction.brake * (steer || hands ? drivers.gently : 1);
       vehicle.brake(braking * GRAVITY);
-      vehicle.accelerate(gas && vehicle.speed < player.top * METRE ? player.gas * METRE : 0);
+      const fast = vehicle.speed >= player.top * METRE;
+      vehicle.accelerate(gas && !fast ? player.gas * METRE * power : 0);
       if (hands) {
         const lock = THREE.MathUtils.degToRad(player.steer);
         const turn = (lock / player.turn) * STEP;

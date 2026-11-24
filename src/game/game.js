@@ -14,6 +14,26 @@ const MODES = /** @type {const} */ (["dodge", "crash"]);
 const KMH = 3.6 / TRAFFIC.scale; // units/s -> km/h
 
 /**
+ * The speed level a score has reached, from 0: every SPEED.tierEvery cars passed, in crash mode
+ * every MINIGAME.crashMode.every.
+ *
+ * @param {number} score
+ * @param {Mode} mode
+ */
+const tierOf = (score, mode) =>
+  Math.floor(score / (mode === "crash" ? MINIGAME.crashMode.every : SPEED.tierEvery));
+
+/**
+ * The world's speed multiplier at a score: crash mode starts as fast as MINIGAME.crashMode.start.
+ *
+ * @param {number} score
+ * @param {Mode} mode
+ */
+const speedOf = (score, mode) =>
+  (mode === "crash" ? MINIGAME.crashMode.start / (SPEED.traffic * KMH) : 1) +
+  tierOf(score, mode) * SPEED.tierStep;
+
+/**
  * @typedef {object} Menu
  * @property {() => void} show
  * @property {() => void} hide
@@ -31,12 +51,6 @@ const KMH = 3.6 / TRAFFIC.scale; // units/s -> km/h
  * @property {ReturnType<typeof import("../ui/hud.js").createHud>} hud
  * @property {Menu} [menu] scene GUI, hidden during the minigame
  */
-
-/** @param {number} score */
-const tierForScore = (score) => Math.floor(score / SPEED.tierEvery);
-
-/** @param {number} score */
-const speedForScore = (score) => 1 + tierForScore(score) * SPEED.tierStep;
 
 /**
  * Game time per real second after a crash: a moment frozen at the impact, then slow motion easing
@@ -223,7 +237,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         car.reset(tweens);
         minigame.reset();
         minigame.density = mode === "crash" ? MINIGAME.crashMode.density : 1;
-        world.speedMultiplier = 1;
+        world.speedMultiplier = speedOf(0, mode);
         menu?.hide();
         moveCamera(gamePosition);
         hud.setMode(mode);
@@ -361,13 +375,13 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
           const { factor, rise, fall } = MINIGAME.boost;
           const target = input.isHeld("faster") ? factor : 1;
           boost += (target - boost) * (1 - Math.exp(-dt / (target > boost ? rise : fall)));
-          world.speedMultiplier = speedForScore(minigame.score) * boost;
+          world.speedMultiplier = speedOf(minigame.score, mode) * boost;
           const { crashed, scored } = minigame.update(dt, world.speedMultiplier);
           if (crashed) {
             machine.send("crash");
             break;
           }
-          if (scored) hud.setLevel(tierForScore(minigame.score) + 1);
+          if (scored) hud.setLevel(tierOf(minigame.score, mode) + 1);
           if (stateTime < MINIGAME.startLabelDuration) break;
           hud.setCountdown(null);
           if (mode === "dodge") hud.setScore(minigame.score);
@@ -377,8 +391,11 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         }
 
         case "gameover": {
-          // crash mode: the Bolones is still the player's, a little
-          if (mode === "crash") minigame.control(steerInput(), input.isHeld("faster"));
+          // crash mode: the Bolones is still the player's, a little, until its engine stalls
+          if (mode === "crash") {
+            minigame.control(steerInput(), input.isHeld("faster"));
+            hud.setDriveOn(minigame.engine > 0);
+          }
           const scale = slowMotion(stateTime);
           // the road under the camera, which rides along with the car in view
           world.speedMultiplier = minigame.wreck(dt * scale, wreckFocus) * scale;

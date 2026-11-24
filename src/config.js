@@ -520,8 +520,10 @@ export const MINIGAME = {
     drivers: { share: 0.5, angle: [1.5, 4], swerve: 0.6, gently: 0.4, broken: [2, 5] },
     /** Crash mode: the Bolones stays the player's after the crash, a little: ← → turn its front
      * wheels up to `steer` degrees (all the way in `turn` seconds), ↑ drives it on at `gas` m/s²
-     * up to `top` m/s; let go, it brakes gently. */
-    player: { steer: 25, turn: 0.3, gas: 2.5, top: 12 },
+     * up to `top` m/s until its engine stalls `stall` s after the crash; let go, it brakes
+     * gently. */
+    player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
+    keepComing: 2.5, // s the traffic keeps coming after a crash (crash mode: while the engine runs)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
      * height up (unless the model says): cars are heavy low down, a hit pushes them more than it
      * tips them. It rides springs bouncing `bounce` times a second, damped `damping` of critical,
@@ -597,11 +599,12 @@ export const MINIGAME = {
     orbit: 24, // units: how far the camera can be pulled back from the car in view
   },
   /**
-   * Crash mode: the same road with `density` times the traffic, and the crash is the goal. It
+   * Crash mode: the same road with `density` times the traffic, coming at the Bolones at `start`
+   * km/h and faster every `every` cars passed (SPEED.tierStep), and the crash is the goal. It
    * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel or
    * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
    */
-  crashMode: { density: 1.5, crush: 1, part: 20, post: 20 },
+  crashMode: { density: 1.5, start: 100, every: 10, crush: 1, part: 20, post: 20 },
   /** Holding ↑ speeds the game up by `factor`, easing in and out (time constants, seconds). */
   boost: { factor: 1.5, rise: 0.8, fall: 1.2 },
   /** Game over score, arcade style: counts up once it is in (and on as a crash in crash mode adds

@@ -23,6 +23,7 @@ function setup() {
     /** @type {import("../src/game/minigame.js").Damage | null} */
     damage: null,
     density: 1,
+    engine: 1,
     /** @type {[number, boolean][]} what the player did with the Bolones after the crash */
     controls: [],
     control(/** @type {number} */ steer, /** @type {boolean} */ gas) {
@@ -505,5 +506,33 @@ describe("crash mode", () => {
     again.input.hold("faster", false);
     again.run(0.1);
     expect(again.minigame.controls.at(-1)).toEqual([0, false]);
+  });
+
+  it("comes at the Bolones at the start speed from the countdown on, faster every few cars", () => {
+    const { world, minigame, run, play, hudCalls } = setup();
+    const kmh = () => ((SPEED.traffic * world.speedMultiplier) / TRAFFIC.scale) * 3.6;
+    play("crash");
+    expect(kmh()).toBeCloseTo(MINIGAME.crashMode.start);
+    run(MINIGAME.countdown + 0.1);
+    expect(kmh()).toBeCloseTo(MINIGAME.crashMode.start);
+    const start = world.speedMultiplier;
+    minigame.score = MINIGAME.crashMode.every - 1;
+    run(1 / 60);
+    expect(world.speedMultiplier).toBe(start);
+    minigame.score = MINIGAME.crashMode.every;
+    minigame.update = () => ({ crashed: false, scored: true });
+    run(1 / 60);
+    expect(world.speedMultiplier).toBeCloseTo(start + SPEED.tierStep);
+    expect(hudCalls.setLevel.at(-1)).toEqual([2]);
+  });
+
+  it("hides the hint to drive the wreck on once its engine stalls", () => {
+    const { minigame, run, crash, hudCalls } = setup();
+    crash("crash");
+    run(0.1);
+    expect(hudCalls.setDriveOn.at(-1)).toEqual([true]);
+    minigame.engine = 0;
+    run(0.1);
+    expect(hudCalls.setDriveOn.at(-1)).toEqual([false]);
   });
 });

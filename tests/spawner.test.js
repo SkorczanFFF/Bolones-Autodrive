@@ -44,6 +44,17 @@ describe("spawner", () => {
     expect(spawner.objects).toHaveLength(1);
   });
 
+  it("spawns at a pace of its own while something else moves the objects (a crash)", () => {
+    const { spawner } = setup();
+    run(spawner, 1.5);
+    const [first] = spawner.objects;
+    const at = first.position.z;
+    for (let t = 0; t < 3 - 1e-9; t += 1 / 60) spawner.update(1 / 60, 0, 1);
+    expect(first.position.z).toBe(at); // not moved
+    expect(spawner.objects).toHaveLength(4); // one a second, as before
+    for (const object of spawner.objects.slice(1)) expect(object.position.z).toBeCloseTo(-100, 0);
+  });
+
   it("moves objects with speed * multiplier and removes them past endZ", () => {
     const { spawner, parent } = setup({ speed: 100, interval: () => 10 });
     run(spawner, 10);

@@ -1,11 +1,10 @@
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CAR, MINIGAME, TRAFFIC } from "../src/config.js";
+import { MINIGAME, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
 import { createCrash as create, ready } from "../src/game/crash.js";
-import { mountWheel } from "../src/scene/rig.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
-import { testMaterials } from "./helpers.js";
+import { testCar as car, testMaterials } from "./helpers.js";
 
 /**
  * A crash whose drivers do the same every run.
@@ -13,60 +12,6 @@ import { testMaterials } from "./helpers.js";
  * @param {Parameters<typeof create>} args
  */
 const createCrash = (...[scene, cars, palms]) => create(scene, cars, palms, mulberry32(1));
-
-/** How high a test car's body is off the road, on its wheels. */
-const CLEARANCE = 0.4;
-
-/**
- * A car standing on the road at (x, z), [width, height, length], driving with vz along the road:
- * a box mesh to dent, raised off the road on four wheels on their rig (scene/rig.js), the front
- * ones steering, and a lamp at each end, put out where a crash crushes it.
- *
- * @param {number} x
- * @param {number} z
- * @param {number[]} size
- * @param {number} mass
- * @param {number} vz
- */
-function car(x, z, [width, height, length], mass, vz) {
-  const body = new THREE.BoxGeometry(width, height - CLEARANCE, length, 4, 2, 8).toNonIndexed();
-  body.translate(0, (height + CLEARANCE) / 2, 0);
-  const object = new THREE.Group().add(new THREE.Mesh(body));
-  object.position.set(x, CAR.lift, z);
-  const ahead = Math.sign(vz) || 1;
-  for (const [side, end] of [
-    [-1, -1],
-    [-1, 1],
-    [1, -1],
-    [1, 1],
-  ]) {
-    const tyre = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 12).rotateZ(Math.PI / 2);
-    const at = new THREE.Vector3(
-      side * (width / 2 - 0.15),
-      0.5 - CAR.lift,
-      end * (length / 2 - 1.1),
-    );
-    object.add(mountWheel(new THREE.Mesh(tyre.toNonIndexed()), at, 0.5, end === ahead));
-  }
-  const lamps = { front: true, rear: true };
-  /** @param {(point: THREE.Vector3) => boolean} crushed */
-  const onCrash = (crushed) => {
-    object.updateWorldMatrix(true, false);
-    for (const [end, sign] of /** @type {const} */ ([
-      ["front", 1],
-      ["rear", -1],
-    ])) {
-      const at = new THREE.Vector3(0, height / 2, (sign * ahead * length) / 2 - sign * ahead * 0.1);
-      if (crushed(object.localToWorld(at))) lamps[end] = false;
-    }
-  };
-  const box = new THREE.Box3(
-    new THREE.Vector3(-width / 2, 0, -length / 2),
-    new THREE.Vector3(width / 2, height, length / 2),
-  );
-  const velocity = new THREE.Vector3(0, 0, vz);
-  return { object, box, mass, velocity, color: new THREE.Color(), lamps, onCrash, label: "car" };
-}
 
 const BOLONES = /** @type {number[]} */ ([3, 2.6, 7.8]);
 const POLAKITO = /** @type {number[]} */ ([2.5, 2.4, 5.5]);
@@ -285,6 +230,41 @@ describe("crash", () => {
     const at = bolones.object.position.clone();
     drive(0, false);
     expect(bolones.object.position.distanceTo(at)).toBeLessThan(0.05); // braked to a stop
+  });
+
+  it("takes in a car coming along later: its driver reacts from then on, not at once", () => {
+    const { scene, crash } = headOn();
+    run(crash, 3);
+    const late = car(20, -100, POLAKITO, 580, 18.9);
+    scene.add(late.object);
+    crash.join(late);
+    const from = late.object.position.z;
+    run(crash, 6);
+    const went = late.object.position.z - from;
+    expect(went).toBeGreaterThan(30); // braking at once it would stop after about 20
+    expect(went).toBeLessThan(60); // stopped
+  });
+
+  it("stalls the Bolones' engine a while after the crash: ↑ still held, it stops", () => {
+    const scene = new THREE.Scene();
+    const bolones = car(0, 0, BOLONES, 1160, -10);
+    const parked = car(30, -300, POLAKITO, 580, 0); // far off, never met
+    scene.add(bolones.object, parked.object);
+    const crash = createCrash(scene, [bolones, parked]);
+    const { stall } = MINIGAME.crash.player;
+    let speed = 0;
+    for (let t = 0; t < stall - 1.5; t += 1 / 60) {
+      crash.control(0, true);
+      speed = crash.update(1 / 60);
+    }
+    expect(crash.engine).toBe(1);
+    expect(speed).toBeGreaterThan(15); // driven on
+    for (let t = 0; t < 10; t += 1 / 60) {
+      crash.control(0, true);
+      speed = crash.update(1 / 60);
+    }
+    expect(crash.engine).toBe(0);
+    expect(speed).toBeLessThan(0.1);
   });
 
   it("stops the Bolones after a mere graze too: the drivers brake, the camera comes to rest", () => {

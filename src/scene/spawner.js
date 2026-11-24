@@ -72,9 +72,11 @@ export function createSpawner({
 
     /**
      * @param {number} dt
-     * @param {number} speedMultiplier
+     * @param {number} speedMultiplier how fast the objects move
+     * @param {number} [coming] how fast new ones come, spacing them: as fast, unless something else
+     *   moves them (after a crash the physics moves the traffic, still coming a while)
      */
-    update(dt, speedMultiplier) {
+    update(dt, speedMultiplier, coming = speedMultiplier) {
       const velocity = speed * speedMultiplier;
 
       for (let i = objects.length - 1; i >= 0; i--) {
@@ -98,22 +100,22 @@ export function createSpawner({
 
       // The way travelled, in seconds at speed 1: a world standing still (after a crash) saves up
       // no spawns for when it moves again.
-      due += dt * speedMultiplier;
-      if (speedMultiplier <= 0) return;
-      let wait = spawner.currentInterval(speedMultiplier) * speedMultiplier;
+      due += dt * coming;
+      if (coming <= 0) return;
+      let wait = spawner.currentInterval(coming) * coming;
       while (due >= wait) {
         due -= wait;
         // Objects spawned late in a long frame start a bit further, keeping the spacing even.
-        const late = due / speedMultiplier; // seconds
+        const late = due / coming; // seconds
         for (const object of create()) {
-          object.position.z = startZ + late * velocity;
+          object.position.z = startZ + late * speed * coming;
           parent.add(object);
           objects.push(object);
           ages.set(object, late);
           fader.set(object, opacityOf(object));
         }
         roll = Math.random();
-        wait = spawner.currentInterval(speedMultiplier) * speedMultiplier;
+        wait = spawner.currentInterval(coming) * coming;
       }
     },
 

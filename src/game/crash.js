@@ -127,7 +127,13 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   const onRoad = ({ x, y, z }) => new THREE.Vector3(x, y, z - travel);
 
   const pose = new THREE.Matrix4();
-  const bodies = cars.map((car, i) => {
+  /**
+   * A car comes into the crash, on its wheels, its driver reacting from now on.
+   *
+   * @param {Car} car upright on the road, in the scene
+   * @param {boolean} swerves whether its driver may swerve (not the Bolones')
+   */
+  function board(car, swerves) {
     const { object, box, mass, velocity, com = build.com } = car;
     object.updateWorldMatrix(true, true);
     const size = box.getSize(new THREE.Vector3());
@@ -139,6 +145,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const [at, turn] = [new THREE.Vector3(), new THREE.Quaternion()];
     pose.copy(object.matrixWorld).multiply(translation(centre));
     pose.decompose(at, turn, new THREE.Vector3());
+    at.z -= travel; // on the road, which the scene has ridden along since the crash began
     const { x, y, z } = half;
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
@@ -174,7 +181,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       offset,
       vehicle,
       stiffness: stiffness * mass,
-      driver: createDriver(vehicle, i > 0, random),
+      driver: createDriver(vehicle, swerves, random, time),
       color: car.color,
       /** @param {Hit} hit @param {number} speed */
       struck(hit, speed) {
@@ -190,7 +197,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       },
     };
     return entry;
-  });
+  }
+  const bodies = cars.map((car, i) => board(car, i > 0));
   /** @typedef {(typeof bodies)[number]} Body */
   /**
    * Parts torn off in a physics step, taken away after it.
@@ -455,6 +463,21 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       debris.update(dt);
       inScene({ x: 0, y: 0, z: 0 }, debris.object.position);
       return Math.max(0, camera);
+    },
+
+    /**
+     * A car of the traffic that comes along after the crash began: into it, its driver reacting
+     * from now on.
+     *
+     * @param {Car} car upright on the road, in the scene
+     */
+    join(car) {
+      bodies.push(board(car, true));
+    },
+
+    /** How much power the Bolones' engine has left in the player's hands (0 to 1, stalling). */
+    get engine() {
+      return bodies[0].driver.engine(time);
     },
 
     /**

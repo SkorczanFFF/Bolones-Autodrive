@@ -1,17 +1,17 @@
-# P O L O N E Z – A U T O D R I V E
+# B O L O N E S – A U T O D R I V E
 
 **Created by:** Maciej Skorus
 
-A synthwave-styled Three.js "coloring book"-like animation with a minigame: dodge the oncoming communist-era traffic. A built-in GUI lets you experiment with the scene's models and colors. See [CHANGELOG.md](CHANGELOG.md) for what the app does and how it got here.
+A synthwave-styled Three.js "coloring book"-like animation with three minigames: dodge the oncoming communist-era traffic, crash into it for the damage, or overtake it. A built-in GUI lets you experiment with the scene's models and colors. See [CHANGELOG.md](CHANGELOG.md) for what the app does and how it got here.
 
-The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, updated in 3Ds Max 2023, and exported as `.fbx` files. The minigame traffic (Polakito, Škoda 120) and the mountains are built in code.
+The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, updated in 3Ds Max 2023, and exported as `.fbx` files; those files are the source now, their lines edited by script. The minigame traffic (Polakito, Kredens, the Ramses van, traced from blueprints) and the mountains are built in code.
 
 ---
 
 ## 🔗 Live Demo
 
-- [https://polonez-autodrive.vercel.app/](https://polonez-autodrive.vercel.app/)
-- [https://skorczanfff.github.io/Polonez-Autodrive/](https://skorczanfff.github.io/Polonez-Autodrive/)
+- [https://bolones-autodrive.vercel.app/](https://bolones-autodrive.vercel.app/)
+- [https://skorczanfff.github.io/Bolones-Autodrive/](https://skorczanfff.github.io/Bolones-Autodrive/)
 
 ---
 
@@ -19,15 +19,18 @@ The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, u
 
 | Key | Action |
 |---|---|
-| **ENTER** | Start the minigame (also from free ride or game over) |
+| **ENTER** | The minigames (also from free ride): **← / →** choose, **ENTER** play; in game over: the same one again |
 | **F** | Free ride: steer without obstacles |
-| **← / →** | Steer (hold to speed up) |
+| **← / →** | Steer; in every minigame also after the crash, with **↑** to drive the wreck on until its engine stalls |
+| **↑ / W** | Hold to speed Dodge and Crash up by half; in Overtake: gas |
+| **↓ / S** | In Overtake: brake |
+| **TAB** | After a crash: the camera from car to car of the wreck |
 | **ESC** | Back to the menu |
 | **H** | Hide / show the menu (eye button in the top-left corner) to enjoy or recolor the scene |
 | **G** | Glow on the wireframes on / off (also in the side panel) |
 | **R** | Randomize all: new colors for the whole scene (also in the side panel) |
 
-All menu and game over buttons are clickable too. Drag with the mouse to orbit the camera outside the minigame.
+All menu and game over buttons are clickable too. Drag with the mouse to orbit the camera outside the minigame and around a wreck, scroll to pull back.
 
 On touch screens (phones, tablets without a keyboard) orbit with one finger, pinch to zoom and recolor the scene in the side panel; free ride has on-screen steering (hold ← / →) and a MENU button. The minigame needs a keyboard for now.
 
@@ -64,11 +67,11 @@ src/
   main.js          bootstrap
   core/            renderer, wireframe bloom, main loop, tweens, asset loading, input, device
                    detection, seeded noise, random picks
-  scene/           materials, shader wireframes, car, minigame traffic, spawner, height fields,
-                   mountain shapes, world
+  scene/           materials, shader wireframes, car, minigame traffic (built from traced data:
+                   traffic, van, polygons), dents, spawner, height fields, mountain shapes, world
     environment/   independent world parts: sky, lights, ground, sun, horizon range (hills),
                    side mountains (side hills), scenery, city
-  game/            state machine, minigame, game orchestration
+  game/            state machine, minigames, game orchestration, crash physics (crash/)
   ui/              theme, loader, HUD, scene GUI, CRT overlay, F10 stats
 public/            FBX models (Bolones, wheel, palm, rocks) and textures
 tests/             Vitest unit tests
@@ -88,13 +91,15 @@ tests/             Vitest unit tests
   - The horizon range in front of the sun is static and parted like a sea for the road, so the striped sun shows in the pass.
   - The side panel (**Mountains**) sets their height, roughness and where they start, and the seed: a new landscape on every visit, or **New landscape**. The line style (triangles or squares) is `MOUNTAINS.lines` in `src/config.js`.
 - The road starts lined with palms and rocks; they come from far ahead (`SPAWN` in `src/config.js`) and fade in and out.
+- A crash runs on [Rapier](https://rapier.rs) physics (WebAssembly, loaded with the assets): every car on four sprung wheels, crumple zones that dent the meshes, parts torn off, pile-ups. A crash is played once, unseen, while the app loads, so the first real one does not stall.
+- A digital speedometer shows in every minigame; the Bolones starts at 50 km/h and goes 150 km/h at most.
 - The Vercel deployment counts page views with Vercel Web Analytics (enabled only in Vercel builds, see `vite.config.js`); local and GitHub Pages builds load nothing.
 
 ---
 
 ## 🐞 Known Bugs
 
-- None known
+- A car that falls onto another car's roof passes through it: cars meet only through their sides.
 
 ---
 
@@ -102,7 +107,7 @@ tests/             Vitest unit tests
 
 - Rocks and palms that follow the terrain, so the mountains can start closer to the road; a sidewalk
 - Palette presets: Original 2024, Take On Me, Game Boy, Tron, Vaporwave
-- More communist-era cars in the minigame; springy suspension
+- More communist-era cars in the minigame
 - The minigame on touch screens
 
 ---

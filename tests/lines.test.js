@@ -99,6 +99,59 @@ describe("polygon lines", () => {
     expect(end.getY(4)).toBeCloseTo(4); // ...but 4 past its end: not drawn
   });
 
+  it("stop an outline edge drawn by a sliver at its far end too", () => {
+    // one polygon: a short edge (0,0)-(0.1,0) (a window's cut corner) and a sliver from (0,0)
+    // far along it, (0,0) (5,0.1) (5,0.3): for the sliver, the short edge ends 4.9 short of x = 5
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        [0, 0, 0, 0.1, 0, 0, 0, -1, 0, 0, 0, 0, 5, 0.1, 0, 5, 0.3, 0],
+        3,
+      ),
+    );
+    geometry.userData.polygons = {
+      inner: Uint8Array.from([0, 0]),
+      polygon: Uint32Array.from([0, 0]),
+    };
+    const lines = polygonLineGeometry(geometry);
+    const near = lines.getAttribute("wireNear");
+    const far = lines.getAttribute("wireNearFar");
+    // the sliver's slot along the short edge: near its line at (5, 0.1), but 4.9 past its far end
+    const slot = [0, 1, 2].find((j) => Math.abs(Math.abs(near.getComponent(4, j)) - 0.1) < 1e-6);
+    expect(slot).toBeDefined();
+    expect(far.getComponent(4, /** @type {number} */ (slot))).toBeCloseTo(4.9);
+    expect(far.getComponent(3, /** @type {number} */ (slot))).toBeCloseTo(-0.1); // at (0, 0)
+  });
+
+  it("run a line on along the edges in line with it, only up to where the outline turns", () => {
+    // one polygon: A (0,0) B (1,0) C (1.01,0) in line, then a turn up to E (0,1); and a sliver
+    // from A far along the line, to (3, -0.05) and (3, -0.02): past C it must stop
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(
+        [
+          0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1.01, 0, 0, 0, 1, 0, 0, 0, 0, 3, -0.05, 0, 3, -0.02,
+          0,
+        ],
+        3,
+      ),
+    );
+    geometry.userData.polygons = {
+      inner: Uint8Array.from([0b001, 0b010, 0]), // B-E, shared by the first two
+      polygon: Uint32Array.from([0, 0, 0]),
+    };
+    const lines = polygonLineGeometry(geometry);
+    const near = lines.getAttribute("wireNear");
+    const far = lines.getAttribute("wireNearFar");
+    // the sliver's slot along A-B: 0.05 off its line at (3, -0.05)
+    const slot = [0, 1, 2].find((j) => Math.abs(Math.abs(near.getComponent(7, j)) - 0.05) < 1e-6);
+    expect(slot).toBeDefined();
+    // A-B runs on through B to C (1.01), not past it: (3, -0.05) is 1.99 past its end
+    expect(far.getComponent(7, /** @type {number} */ (slot))).toBeCloseTo(1.99, 5);
+  });
+
   it("leave out an edge leaving the triangle's face steeply", () => {
     // one polygon folded by 90°: (0,0,0) (1,0,0) (0,1,0) and (0,0,0) (0,1,0) (0,0,1); for the
     // first triangle, the edge (0,0,0)-(0,0,1) is perpendicular (it would fill the triangle)

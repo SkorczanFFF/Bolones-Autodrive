@@ -1,36 +1,67 @@
 import * as THREE from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { TRAFFIC, WIRE } from "../config.js";
+import { TRAFFIC } from "../config.js";
+import {
+  bars,
+  builtIn,
+  counterClockwise,
+  creaseRuns,
+  densify,
+  densifyLine,
+  ellipse,
+  evenNormals,
+  face,
+  facingPositions,
+  fillPoints,
+  fineFace,
+  flatGeometry,
+  glassTriangles,
+  joined,
+  ladder,
+  mergeParts,
+  mirrored,
+  prism,
+  recessed,
+  rectangle,
+  rounded,
+  sample,
+  surface,
+  triangleFacing,
+  withPolygons,
+  zip,
+} from "./polygons.js";
 import { mountWheel } from "./rig.js";
 import { TRAFFIC_MODELS } from "./trafficModels.js";
+import { vanGeometry } from "./van.js";
 import { dress } from "./wire.js";
 
 /**
  * @typedef {import("./trafficModels.js").TrafficModel} TrafficModel
  * @typedef {import("./trafficModels.js").Bumper} Bumper
- * @typedef {import("./trafficModels.js").Point} Point
- * @typedef {{ geometry: THREE.BufferGeometry, polygon: number[] }} Part non-indexed geometry
- *   (position, normal) and the polygon of each triangle, numbered within the part
+ * @typedef {import("./trafficModels.js").Decal} Decal
+ * @typedef {import("./trafficModels.js").Mark} Mark
+ * @typedef {import("./polygons.js").Point} Point
+ * @typedef {import("./polygons.js").Part} Part
  */
 
 /** Segments of each wheel arch (half an ellipse). */
 const ARCH_SEGMENTS = 6;
 /** The waist line keeps this far above a wheel arch, metres. */
 const ARCH_LIP = 0.03;
+/** An arch's feet come down to the sill this far out from its ends, metres. */
+const ARCH_FOOT = 0.01;
+/** A curve's point closer than this to a station is left out: the loft samples it, metres. */
+const STATION_GAP = 0.04;
 const WHEEL_SEGMENTS = 12;
-/** Segments of a rounded corner (a window's, a screen's). */
-const CORNER_STEPS = 4;
+/** Segments round a round hole in a rim: a few centimetres across, an octagon is round enough. */
+const HOLE_SEGMENTS = 8;
 /** How far a rim sits in its tyre, and a hubcap stands out of the rim, metres. */
 const [RIM_DEPTH, HUBCAP] = [0.04, 0.03];
-const LAMP_SEGMENTS = 12;
 /** Bumper thickness, metres. */
 const BUMPER_DEPTH = 0.06;
 /** Windows, lamps and marks sit this far off the body, so they draw their own outline. */
 const OFFSET = 0.005;
 /** Window frame width around the windscreen and the rear window, metres. */
 const FRAME = 0.07;
-/** How far the glass sits in behind the pillars and frames, metres. */
-const RECESS = 0.02;
 /**
  * Across the deck, the roof and the screens, as on the Bolones: four flat facets, two each side,
  * the line between them FACET of the half width out and INNER of the crown high (facets()).
@@ -38,19 +69,35 @@ const RECESS = 0.02;
 const [FACET, INNER] = [0.55, 0.85];
 /** How much higher the middle of the roof is than its edges, metres, unless the model says. */
 const CROWN = 0.035;
-/** Across the roof and the screens (-1 left edge, 1 right): the facets' corners, and halfway. */
-const ACROSS = [-1, -(1 + FACET) / 2, -FACET, -FACET / 2, 0, FACET / 2, FACET, (1 + FACET) / 2, 1];
+/** Across the roof and the screens (-1 left edge, 1 right): the facets' corners. */
+const ACROSS = [-1, -FACET, 0, FACET, 1];
 /** The drip rail along each side of the roof, this far under its edge, metres. */
 const RAIL = [0.012, 0.03];
 /** Stations along the body and the cabin at least this close, metres (a crash bends them). */
 const STATION = 0.15;
+/** How often a decal samples the body under it, and how far off it it sits, metres. */
+const [DECAL_STEP, DECAL_OFFSET] = [0.03, 0.01];
+/** How far a decal may stray from the body under it between the points it keeps, metres. */
+const DECAL_TOLERANCE = 0.002;
 /** A screen that neither curves nor rounds its corners (TrafficModel `cabin.screens`). */
 const FLAT_SCREEN = { bow: [0, 0], corners: [0, 0] };
 
-/** Half the widest car, in scene units: the minigame keeps lanes this far from the centre. */
+/**
+ * How far a car reaches out from its centre line, metres: half its width, or its mirrors.
+ *
+ * @param {TrafficModel | import("./trafficModels.js").VanModel} model
+ */
+export function halfReach({ width, mirrors }) {
+  const mirror = mirrors ? Math.abs(mirrors.centre[2]) + mirrors.head[0] / 2 : 0;
+  return Math.max(width / 2, mirror);
+}
+
+/**
+ * Half the widest car, mirrors and all, in scene units: the minigame keeps lanes this far from
+ * the centre.
+ */
 export function trafficHalfWidth() {
-  const widest = Math.max(...Object.values(TRAFFIC_MODELS).map((model) => model.width));
-  return (widest * TRAFFIC.scale) / 2;
+  return Math.max(...Object.values(TRAFFIC_MODELS).map(halfReach)) * TRAFFIC.scale;
 }
 
 /**
@@ -62,19 +109,25 @@ export function trafficHalfWidth() {
  * whole and tear either off; each headlamp is a mesh of its own ("lamp"), so a crash can put out
  * just the ones it crushes.
  *
- * The local hitbox (the car's bounds) is in `userData.hitbox` as { min, max } arrays: clone()
- * copies userData through JSON, which would turn a Box3 into a plain object. The car's mass is
- * in `userData.mass`.
+ * The local hitbox (the bounds of the body, its wheels and bumpers: the crash's box for the
+ * physics) is in `userData.hitbox` as { min, max } arrays: clone() copies userData through JSON,
+ * which would turn a Box3 into a plain object. The mirrors (a mesh "mirrors", both sides')
+ * stand out of it: `userData.reach`, the same with them, is what the Bolones must not touch
+ * (game/minigame.js); in a crash they are dented with the body. The car's mass is in
+ * `userData.mass`.
  *
  * @param {import("./materials.js").Materials} materials
  * @returns {THREE.Group[]}
  */
 export function createTrafficModels(materials) {
   return Object.values(TRAFFIC_MODELS).map((model) => {
-    const { body, loose } = carGeometry(model);
+    const { body, lamps } =
+      "van" in model
+        ? vanGeometry(model)
+        : { body: carGeometry(model), lamps: lampGeometries(model) };
     const scale = TRAFFIC.scale;
     const car = new THREE.Group().add(new THREE.Mesh(body.scale(scale, scale, scale)));
-    for (const { geometry, at, part } of loose) {
+    for (const { geometry, at, part } of looseParts(model)) {
       const mesh = new THREE.Mesh(geometry.scale(scale, scale, scale));
       at.multiplyScalar(scale);
       if (part === "wheel") {
@@ -87,7 +140,7 @@ export function createTrafficModels(materials) {
       bumper.userData.part = part;
       car.add(bumper);
     }
-    for (const lamp of lampGeometries(model)) {
+    for (const lamp of lamps) {
       const mesh = new THREE.Mesh(lamp.scale(TRAFFIC.scale, TRAFFIC.scale, TRAFFIC.scale));
       mesh.name = "lamp";
       car.add(mesh);
@@ -102,6 +155,18 @@ export function createTrafficModels(materials) {
     car.updateMatrixWorld(true);
     const { min, max } = new THREE.Box3().setFromObject(car);
     car.userData.hitbox = { min: min.toArray(), max: max.toArray() };
+    // after the hitbox: the mirrors stand out of it (a box as wide would make the physics' box
+    // wider and, one mirror only, shift its middle), within the reach
+    if (model.mirrors) {
+      const mirrors = new THREE.Mesh(
+        mirrorGeometry(model.mirrors, model).scale(scale, scale, scale),
+      );
+      mirrors.name = "mirrors";
+      car.add(dress(mirrors, materials.solid.traffic, materials.wire.traffic));
+      car.updateMatrixWorld(true);
+    }
+    const reach = new THREE.Box3().setFromObject(car);
+    car.userData.reach = { min: reach.min.toArray(), max: reach.max.toArray() };
     car.userData.mass = model.mass;
     car.userData.label = model.label;
     return car;
@@ -116,14 +181,42 @@ export function createTrafficModels(materials) {
  */
 
 /**
- * Body, cabin, windows and marks of a car, and its bumpers and wheels, in metres, its origin on
- * the ground in the middle of its length.
+ * A car's bumpers and wheels, each round its middle, in metres (the car's origin on the ground in
+ * the middle of its length).
+ *
+ * @param {TrafficModel | import("./trafficModels.js").VanModel} model
+ * @returns {Loose[]}
+ */
+function looseParts(model) {
+  const { wheel } = model;
+  /** A part round its middle, and where that is. @param {Part[]} of @param {Loose["part"]} part */
+  const loose = (of, part) => {
+    const geometry = centred(withPolygons(of), model);
+    geometry.computeBoundingBox();
+    const at = /** @type {THREE.Box3} */ (geometry.boundingBox).getCenter(new THREE.Vector3());
+    geometry.translate(-at.x, -at.y, -at.z);
+    return { geometry, at, part };
+  };
+  return [
+    loose([bumper(model.bumpers.front, model.length, -1)], "bumper"),
+    loose([bumper(model.bumpers.rear, 0, 1)], "bumper"),
+    ...wheel.axles.flatMap((axle, i) =>
+      [-1, 1].map((side) =>
+        loose(wheelParts(wheel, [(side * wheel.track[i]) / 2, wheel.radius, axle], side), "wheel"),
+      ),
+    ),
+  ];
+}
+
+/**
+ * Body, cabin, windows and marks of a car, in metres, its origin on the ground in the middle of
+ * its length.
  *
  * @param {TrafficModel} model
- * @returns {{ body: THREE.BufferGeometry, loose: Loose[] }}
+ * @returns {THREE.BufferGeometry}
  */
 function carGeometry(model) {
-  const { cabin, wheel } = model;
+  const { cabin } = model;
   const cabinBottom = Math.min(...cabin.outline.map(([, y]) => y));
   const cabinTop = Math.max(...cabin.outline.map(([, y]) => y));
   const cabinHalf = (/** @type {number} */ y) =>
@@ -140,64 +233,411 @@ function carGeometry(model) {
         new THREE.Vector3(side * (sideWidth(model, x, y) + OFFSET), y, x);
       parts.push(
         ...bars(mark.outline, mark.bars ?? 1).map((bar) =>
-          face(bar, at, new THREE.Vector3(side, 0, 0)),
+          fineFace(bar, at, new THREE.Vector3(side, 0, 0), STATION),
         ),
       );
     }
   }
 
+  if (model.body.flares) parts.push(...flareParts(model, model.body.flares));
+
   const [rear, front] = ends(model);
   for (const { marks, z, facing } of [
     { marks: model.frontMarks, z: front + OFFSET, facing: 1 },
     { marks: model.rearMarks, z: rear - OFFSET, facing: -1 },
+    // a lamp with depth stands out of the front in a housing, its lit glass on it
+    { marks: model.lamps.filter(({ depth }) => depth), z: front, facing: 1 },
   ]) {
     const at = (/** @type {Point} */ [w, y]) => new THREE.Vector3(w, y, z);
+    const out = new THREE.Vector3(0, 0, facing);
     for (const mark of mirrored(marks)) {
-      for (const bar of bars(rectangle(mark), mark.bars ?? 1)) {
-        parts.push(face(bar, at, new THREE.Vector3(0, 0, facing)));
+      if (mark.depth) parts.push(raised(rectangle(mark), at, out, mark.depth, mark.bars));
+      else {
+        for (const bar of bars(rectangle(mark), mark.bars ?? 1)) {
+          parts.push(fineFace(bar, at, out, STATION));
+        }
       }
     }
   }
 
-  /** A part round its middle, and where that is. @param {Part[]} of @param {Loose["part"]} part */
-  const loose = (of, part) => {
-    const geometry = centred(withPolygons(of), model);
-    geometry.computeBoundingBox();
-    const at = /** @type {THREE.Box3} */ (geometry.boundingBox).getCenter(new THREE.Vector3());
-    geometry.translate(-at.x, -at.y, -at.z);
-    return { geometry, at, part };
-  };
-  return {
-    body: centred(leanNose(withPolygons(parts), model), model),
-    loose: [
-      loose([bumper(model.bumpers.front, model.length, -1)], "bumper"),
-      loose([bumper(model.bumpers.rear, 0, 1)], "bumper"),
-      ...wheel.axles.flatMap((axle, i) =>
-        [-1, 1].map((side) =>
-          loose(
-            wheelParts(wheel, [(side * wheel.track[i]) / 2, wheel.radius, axle], side),
-            "wheel",
-          ),
-        ),
-      ),
-    ],
-  };
+  const leaned = leanEnds(withPolygons(parts), model);
+  if (!model.decals?.length) return centred(leaned, model);
+  /** @type {Part} */
+  const body = { geometry: leaned, polygon: Array.from(leaned.userData.polygons.polygon) };
+  const decals = decalParts(model.decals, leaned);
+  const geometry = withPolygons([body, ...decals]);
+  // the flat decals shaded each as if flat (polygons.js evenNormals(); scene/dents.js again)
+  geometry.userData.even = Uint8Array.from(
+    [body, ...decals].flatMap((part) => part.polygon.map(() => (part.even ? 1 : 0))),
+  );
+  evenNormals(geometry);
+  return centred(geometry, model);
 }
 
 /**
- * Leans the front of a car forward above `body.nose.from`, the higher the more (its top edge
- * `lean` ahead), fading out over a STATION behind the front end; the faces that move get their
- * normals again.
+ * The half width of a car's lower body at (x, y): the side tucked in from the waist down to the
+ * sill, between the waist and the shoulder as sideWidth().
+ *
+ * @param {TrafficModel} model
+ * @param {number} x
+ * @param {number} y
+ */
+function surfaceWidth(model, x, y) {
+  const { body } = model;
+  const [waist, sill] = [sample(body.waist, x), sample(body.bottom, x)];
+  if (y >= waist) return sideWidth(model, x, y);
+  return sample(body.width, x) - (body.tuck * (waist - y)) / (waist - sill);
+}
+
+/**
+ * A flare round each wheel arch, `width` wide, standing OFFSET out of the side: a band between
+ * the arch (as lowerBody() cuts it) and the arch grown by `width`, one polygon each.
+ *
+ * @param {TrafficModel} model
+ * @param {number} width
+ * @returns {Part[]}
+ */
+function flareParts(model, width) {
+  const { wheel } = model;
+  return wheel.axles.flatMap((axle, i) => {
+    const [r, height] = wheel.arches[i];
+    /** Round the arch from its rear foot to its front. @param {number} grow */
+    const arc = (grow) =>
+      Array.from({ length: ARCH_SEGMENTS + 1 }, (_, k) => {
+        const angle = Math.PI - (Math.PI * k) / ARCH_SEGMENTS;
+        return /** @type {Point} */ ([
+          axle + (r + grow) * Math.cos(angle),
+          wheel.radius + (height + grow) * Math.sin(angle),
+        ]);
+      });
+    const band = [...arc(width), ...arc(0).reverse()];
+    return [-1, 1].map((side) =>
+      face(
+        band,
+        ([x, y]) => new THREE.Vector3(side * (surfaceWidth(model, x, y) + OFFSET), y, x),
+        new THREE.Vector3(side, 0, 0),
+      ),
+    );
+  });
+}
+
+/**
+ * An outline standing `depth` out of a surface: its face, cut into bars, and the walls round it,
+ * with corners every STATION.
+ *
+ * @param {Point[]} rim convex
+ * @param {(p: Point) => THREE.Vector3} at on the surface
+ * @param {THREE.Vector3} out unit
+ * @param {number} depth
+ * @param {number} [count] bars
+ * @returns {Part}
+ */
+function raised(rim, at, out, depth, count = 1) {
+  const outline = densify(rim, STATION);
+  const top = (/** @type {Point} */ p) => at(p).addScaledVector(out, depth);
+  const centre = outline.reduce((sum, p) => sum.add(at(p)), new THREE.Vector3());
+  centre.divideScalar(outline.length);
+  const walls = outline.flatMap((p, i) => {
+    const q = outline[(i + 1) % outline.length];
+    const facing = at(p).add(at(q)).multiplyScalar(0.5).sub(centre); // out of the outline
+    return [
+      triangleFacing([at(p), at(q), top(q)], facing),
+      triangleFacing([at(p), top(q), top(p)], facing),
+    ];
+  });
+  return mergeParts([
+    ...bars(outline, count).map((bar) => face(bar, top, out)),
+    joined(
+      walls,
+      walls.map(() => 0),
+    ),
+  ]);
+}
+
+/**
+ * Decals (TrafficModel `decals`): each outline drawn in a view, cut into bars or columns, one
+ * polygon each, its corners (every DECAL_STEP, inside too) projected onto the body along the view
+ * and DECAL_OFFSET off it.
+ *
+ * @param {Decal[]} decals
+ * @param {THREE.BufferGeometry} body built from the rear (z = 0) forward
+ * @returns {Part[]}
+ */
+function decalParts(decals, body) {
+  const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  const position = /** @type {THREE.BufferAttribute} */ (body.getAttribute("position")).array;
+  // each triangle's smallest and largest x, y, z
+  const triangles = position.length / 9;
+  const [low, high] = [new Float32Array(triangles * 3), new Float32Array(triangles * 3)];
+  for (let t = 0; t < triangles; t++) {
+    for (let axis = 0; axis < 3; axis++) {
+      const [a, b, c] = [0, 3, 6].map((k) => position[9 * t + k + axis]);
+      low[3 * t + axis] = Math.min(a, b, c);
+      high[3 * t + axis] = Math.max(a, b, c);
+    }
+  }
+  /**
+   * The body's triangles that lie (in the view) round the outline's box, a margin wider, as a
+   * mesh to cast rays at: tested against every triangle of the body, the rays would be slow.
+   *
+   * @param {Point[]} outline
+   * @param {[number, number, number, number]} axes the view's two coordinates: the scene axis
+   *   (0 x, 1 y, 2 z) and the sign of each
+   */
+  const under = (outline, [axisA, signA, axisB, signB]) => {
+    const margin = 0.05;
+    const [as, bs] = [outline.map(([a]) => a), outline.map(([, b]) => b)];
+    const [a0, a1, b0, b1] = [Math.min(...as), Math.max(...as), Math.min(...bs), Math.max(...bs)];
+    /**
+     * The triangle's range along an axis, signed.
+     *
+     * @param {number} t
+     * @param {number} axis
+     * @param {number} sign
+     */
+    const range = (t, axis, sign) =>
+      sign > 0
+        ? [low[3 * t + axis], high[3 * t + axis]]
+        : [-high[3 * t + axis], -low[3 * t + axis]];
+    /** @type {number[]} */
+    const kept = [];
+    for (let t = 0; t < triangles; t++) {
+      const [[pa0, pa1], [pb0, pb1]] = [range(t, axisA, signA), range(t, axisB, signB)];
+      if (pa1 < a0 - margin || pa0 > a1 + margin || pb1 < b0 - margin || pb0 > b1 + margin)
+        continue;
+      for (let k = 0; k < 9; k++) kept.push(position[9 * t + k]);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(kept, 3));
+    return new THREE.Mesh(geometry, material);
+  };
+  const raycaster = new THREE.Raycaster();
+  const far = 50;
+  /** @type {Part[]} */
+  const parts = [];
+  for (const decal of decals) {
+    const { view } = decal;
+    const outline = decal.outline ?? rectangle(/** @type {Mark} */ (decal.shape));
+    const across = view === "top" ? 1 : 0; // which coordinate runs across the car
+    const offCentre = outline.every((p) => p[across] > 0);
+    const sides = view === "side" || offCentre ? [1, -1] : [1];
+    // transposed, cut into bars, back: columns
+    const swap = (/** @type {Point[]} */ points) =>
+      points.map(([a, b]) => /** @type {Point} */ ([b, a]));
+    const pieces = decal.columns
+      ? bars(swap(outline), decal.columns).map(swap)
+      : bars(outline, decal.bars ?? 1);
+    for (const side of sides) {
+      /** The ray towards the body through a point of the view. @param {Point} p */
+      const ray = ([a, b]) => {
+        if (view === "side")
+          return [new THREE.Vector3(side * far, b, a), new THREE.Vector3(-side, 0, 0)];
+        if (view === "front")
+          return [new THREE.Vector3(side * a, b, far), new THREE.Vector3(0, 0, -1)];
+        if (view === "rear")
+          return [new THREE.Vector3(side * a, b, -far), new THREE.Vector3(0, 0, 1)];
+        return [new THREE.Vector3(side * b, far, a), new THREE.Vector3(0, -1, 0)];
+      };
+      // the view's coordinates in the scene: side [z, y], top [z, ±x], front and rear [±x, y]
+      /** @type {[number, number, number, number]} */
+      const axes =
+        view === "side" ? [2, 1, 1, 1] : view === "top" ? [2, 1, 0, side] : [0, side, 1, 1];
+      const mesh = under(outline, axes);
+      /** Where the ray through a point meets the body, and its normal. @param {Point} p */
+      const hit = (p) => {
+        const [origin, direction] = ray(p);
+        raycaster.set(origin, direction);
+        const [first] = raycaster.intersectObject(mesh);
+        if (!first?.face) throw new Error(`a ${view} decal misses the body at ${p}`);
+        return { point: first.point, normal: first.face.normal };
+      };
+      const facing = ray([0, 0])[1].negate();
+      if (decal.raise) {
+        parts.push(...block(outline, pieces, ray, hit, facing, decal.raise));
+        continue;
+      }
+      const at = (/** @type {Point} */ p) => {
+        const { point, normal } = hit(p);
+        return point.clone().addScaledVector(normal, DECAL_OFFSET);
+      };
+      // a four-sided piece as a grid fine enough to follow a curved surface (a long side would
+      // cut under it), anything else (small and round) as it is
+      for (const piece of pieces) {
+        const flat = piece.length === 4 ? grid(piece, at, facing) : face(piece, at, facing);
+        parts.push({ ...flat, even: true });
+      }
+    }
+  }
+  return parts;
+}
+
+/**
+ * A four-sided outline as a grid of quads (bilinear over its corners) on the body: sampled every
+ * DECAL_STEP, then only the columns and rows kept where the body bends away from a straight line
+ * through the ones kept by more than DECAL_TOLERANCE, and at least every STATION, for a crash to
+ * bend it with the body. On a flat panel it is quads STATION long; on a curved one, as fine as the
+ * curve needs. One polygon.
+ *
+ * @param {Point[]} quad corners in order round it
+ * @param {(p: Point) => THREE.Vector3} at
+ * @param {THREE.Vector3} facing
+ * @returns {Part}
+ */
+function grid([p0, p1, p2, p3], at, facing) {
+  const length = (/** @type {Point} */ a, /** @type {Point} */ b) =>
+    Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const across = Math.max(1, Math.ceil(Math.max(length(p0, p1), length(p3, p2)) / DECAL_STEP));
+  const up = Math.max(1, Math.ceil(Math.max(length(p0, p3), length(p1, p2)) / DECAL_STEP));
+  /** @param {number} u @param {number} v */
+  const point = (u, v) =>
+    at(
+      /** @type {Point} */ (
+        [0, 1].map(
+          (k) =>
+            p0[k] * (1 - u) * (1 - v) + p1[k] * u * (1 - v) + p2[k] * u * v + p3[k] * (1 - u) * v,
+        )
+      ),
+    );
+  const fine = Array.from({ length: up + 1 }, (_, j) =>
+    Array.from({ length: across + 1 }, (_, i) => point(i / across, j / up)),
+  );
+  const straight = (
+    /** @type {THREE.Vector3} */ a,
+    /** @type {THREE.Vector3} */ b,
+    /** @type {THREE.Vector3} */ c,
+    /** @type {number} */ t,
+  ) => c.distanceTo(a.clone().lerp(b, t)) <= DECAL_TOLERANCE;
+  /**
+   * The indices kept of `count`: the ends, and each one where a straight line on to the next
+   * would leave the body or run on further than `most` samples.
+   *
+   * @param {number} count
+   * @param {number} most
+   * @param {(a: number, b: number, c: number) => boolean} fits whether c lies on the line a-b
+   */
+  const keep = (count, most, fits) => {
+    const kept = [0];
+    let a = 0;
+    for (let b = 2; b < count; b++) {
+      if (b - a > most) {
+        a = b - 1;
+        kept.push(a);
+        continue;
+      }
+      for (let c = a + 1; c < b; c++) {
+        if (fits(a, b, c)) continue;
+        a = b - 1;
+        kept.push(a);
+        break;
+      }
+    }
+    kept.push(count - 1);
+    return kept;
+  };
+  /** How many samples apart, at most, so that they stay a STATION apart. @param {number} long @param {number} count */
+  const most = (long, count) => Math.max(1, Math.floor((STATION * count) / long));
+  const columns = keep(
+    across + 1,
+    most(Math.max(length(p0, p1), length(p3, p2)), across),
+    (a, b, c) => fine.every((row) => straight(row[a], row[b], row[c], (c - a) / (b - a))),
+  );
+  const rows = keep(up + 1, most(Math.max(length(p0, p3), length(p1, p2)), up), (a, b, c) =>
+    fine[0].every((_, i) => straight(fine[a][i], fine[b][i], fine[c][i], (c - a) / (b - a))),
+  );
+  /** @type {number[]} */
+  const positions = [];
+  for (let j = 0; j + 1 < rows.length; j++) {
+    for (let i = 0; i + 1 < columns.length; i++) {
+      const [r0, r1, c0, c1] = [rows[j], rows[j + 1], columns[i], columns[i + 1]];
+      const [a, b, c, d] = [fine[r0][c0], fine[r0][c1], fine[r1][c1], fine[r1][c0]];
+      positions.push(...facingPositions([a, b, c], facing), ...facingPositions([a, c, d], facing));
+    }
+  }
+  return { geometry: flatGeometry(positions), polygon: new Array(positions.length / 9).fill(0) };
+}
+
+/**
+ * A decal standing out of the body as a block: its face flat, square to the view across the car
+ * and tilted up or down as the body under it is, `raise` out past the body's farthest point
+ * under it, cut into its pieces; its walls back to the body.
+ *
+ * @param {Point[]} outline
+ * @param {Point[][]} pieces
+ * @param {(p: Point) => THREE.Vector3[]} ray origin and direction through a point of the view
+ * @param {(p: Point) => { point: THREE.Vector3, normal: THREE.Vector3 }} hit
+ * @param {THREE.Vector3} facing towards the view
+ * @param {number} raise
+ * @returns {Part[]}
+ */
+function block(outline, pieces, ray, hit, facing, raise) {
+  const rim = densify(outline, DECAL_STEP);
+  const hits = rim.map(hit);
+  const bottoms = hits.map(({ point }) => point);
+  // the face's normal: the view's, tilted up or down as the body's normals are on average
+  const up = new THREE.Vector3(0, 1, 0);
+  const mean = hits.reduce((sum, { normal }) => sum.add(normal), new THREE.Vector3());
+  const tilt = Math.abs(facing.dot(up)) > 0.5 ? 0 : mean.dot(up) / Math.max(mean.dot(facing), 1e-6);
+  const n = facing.clone().addScaledVector(up, tilt).normalize();
+  const level = Math.max(...bottoms.map((point) => point.dot(n))) + raise;
+  /** On the face: along the ray, where it meets the face's plane. @param {Point} p */
+  const onFace = (p) => {
+    const [origin, direction] = ray(p);
+    return origin.clone().addScaledVector(direction, (level - origin.dot(n)) / direction.dot(n));
+  };
+  const centre = rim.reduce((sum, p) => sum.add(onFace(p)), new THREE.Vector3());
+  centre.divideScalar(rim.length);
+  // the walls run on into the body, closed there by a back: their far edge draws no line where
+  // the body curves away from it
+  const sunk = bottoms.map((point) => point.clone().addScaledVector(facing, -3 * DECAL_OFFSET));
+  const back = sunk.reduce((sum, point) => sum.add(point), new THREE.Vector3());
+  back.divideScalar(sunk.length);
+  const inwards = facing.clone().negate();
+  const walls = rim.flatMap((p, i) => {
+    const j = (i + 1) % rim.length;
+    const [a, b] = [onFace(p), onFace(rim[j])];
+    const out = a.clone().add(b).multiplyScalar(0.5).sub(centre);
+    return [
+      triangleFacing([a, b, sunk[j]], out),
+      triangleFacing([a, sunk[j], sunk[i]], out),
+      triangleFacing([back, sunk[i], sunk[j]], inwards),
+    ];
+  });
+  return [
+    ...pieces.map((piece) => face(piece, onFace, facing)),
+    joined(
+      walls,
+      walls.map(() => 0),
+    ),
+  ];
+}
+
+/**
+ * Leans a car's ends: the front forward above `body.nose.from`, the higher the more (its top
+ * edge `lean` ahead); the rear back above `body.tail.from`, its top edge `lean` behind the face
+ * below, the face drawn in under its top (which stays where the deck has it) towards the bottom.
+ * Each fades out over a STATION from its end; the faces that move get their normals again.
  *
  * @param {THREE.BufferGeometry} geometry non-indexed, built from the rear (z = 0) forward
  * @param {TrafficModel} model
  */
-function leanNose(geometry, model) {
-  const { nose, top: deck } = model.body;
-  if (!nose) return geometry;
-  const { lean, from } = nose;
-  const front = ends(model)[1];
-  const top = sample(deck, front);
+function leanEnds(geometry, model) {
+  const { nose, tail, top: deck } = model.body;
+  if (!nose && !tail) return geometry;
+  const [rear, front] = ends(model);
+  const [frontTop, rearTop] = [sample(deck, front), sample(deck, rear)];
+  /** How far a point moves along the car. @param {number} y @param {number} z */
+  const shift = (y, z) => {
+    let by = 0;
+    if (nose) {
+      const high = THREE.MathUtils.clamp((y - nose.from) / (frontTop - nose.from), 0, 1);
+      by += nose.lean * high * THREE.MathUtils.clamp((z - front + STATION) / STATION, 0, 1);
+    }
+    if (tail) {
+      const low = THREE.MathUtils.clamp((rearTop - y) / (rearTop - tail.from), 0, 1);
+      by += tail.lean * low * THREE.MathUtils.clamp((rear + STATION - z) / STATION, 0, 1);
+    }
+    return by;
+  };
   const position = geometry.getAttribute("position");
   const normal = geometry.getAttribute("normal");
   const corners = [0, 1, 2].map(() => new THREE.Vector3());
@@ -205,10 +645,9 @@ function leanNose(geometry, model) {
     let moved = false;
     for (let k = 0; k < 3; k++) {
       const [y, z] = [position.getY(i + k), position.getZ(i + k)];
-      const high = THREE.MathUtils.clamp((y - from) / (top - from), 0, 1);
-      const near = THREE.MathUtils.clamp((z - front + STATION) / STATION, 0, 1);
-      position.setZ(i + k, z + lean * high * near);
-      moved ||= high * near > 0;
+      const by = shift(y, z);
+      position.setZ(i + k, z + by);
+      moved ||= by !== 0;
     }
     if (!moved) continue;
     const [a, b, c] = corners.map((v, k) => v.fromBufferAttribute(position, i + k));
@@ -223,27 +662,12 @@ function leanNose(geometry, model) {
  * middle of its length.
  *
  * @param {THREE.BufferGeometry} geometry
- * @param {TrafficModel} model
+ * @param {{ length: number }} model
  */
 const centred = (geometry, { length }) => geometry.translate(0, 0, -length / 2);
 
 /** The body's rear and front ends (without the bumpers). @param {TrafficModel} model */
 const ends = ({ body }) => [body.top[0][0], body.top[body.top.length - 1][0]];
-
-/**
- * y of a polyline sorted by x, at x (clamped at its ends).
- *
- * @param {Point[]} curve
- * @param {number} x
- */
-function sample(curve, x) {
-  if (x <= curve[0][0]) return curve[0][1];
-  for (let i = 1; i < curve.length; i++) {
-    const [[ax, ay], [bx, by]] = [curve[i - 1], curve[i]];
-    if (x <= bx) return ay + ((by - ay) * (x - ax)) / (bx - ax);
-  }
-  return curve[curve.length - 1][1];
-}
 
 /**
  * Half width of the body side at (x, y), between the waist and the shoulder.
@@ -260,7 +684,7 @@ function sideWidth({ body }, x, y) {
 }
 
 /** Which band of the lower body each stretch of its section is: underside, sides, deck. */
-const BANDS = [0, 0, 1, 1, 2, 2, 3, 3, 3, 3];
+const BANDS = [0, 1, 1, 2, 2, 3, 3, 3, 3];
 
 /**
  * The lower body, lofted through cross-sections along the car: each half section runs from the
@@ -278,17 +702,29 @@ function lowerBody(model) {
   const { body, wheel } = model;
   const curves = [body.top, body.shoulder, body.waist, body.bottom, body.width];
   const [start, end] = ends(model);
-  const xs = [...curves.flatMap((curve) => curve.map(([x]) => x)), ...body.seams];
-  for (let x = start; x < end; x += STATION) xs.push(x);
+  // the stations: the ends, the seams and round the arches; the curves' points where none is
+  // near (one a few millimetres from another cuts a sliver of a strip, twisted, its shading in
+  // patches); then the gaps cut evenly, no longer than STATION
+  const required = [start, end, ...body.seams];
   wheel.axles.forEach((axle, i) => {
     const [r] = wheel.arches[i];
     for (let k = 0; k <= ARCH_SEGMENTS; k++)
-      xs.push(axle + r * Math.cos((Math.PI * k) / ARCH_SEGMENTS));
-    xs.push(axle - r - 0.002, axle + r + 0.002); // the arch's feet drop straight to the sill
+      required.push(axle + r * Math.cos((Math.PI * k) / ARCH_SEGMENTS));
+    required.push(axle - r - ARCH_FOOT, axle + r + ARCH_FOOT); // the arch's feet drop to the sill
   });
-  const stations = [...new Set(xs.map((x) => Math.round(x * 1e4) / 1e4))]
-    .filter((x) => x >= start && x <= end)
-    .sort((a, b) => a - b);
+  const kept = [...new Set(required.map((x) => Math.round(x * 1e4) / 1e4))].filter(
+    (x) => x >= start && x <= end,
+  );
+  for (const x of curves.flatMap((curve) => curve.map(([cx]) => cx)).sort((a, b) => a - b)) {
+    const clear = kept.every((k) => Math.abs(k - x) >= STATION_GAP);
+    if (clear && x > start && x < end) kept.push(x);
+  }
+  kept.sort((a, b) => a - b);
+  const stations = kept.flatMap((x, i) => {
+    if (i === kept.length - 1) return [x];
+    const pieces = Math.ceil((kept[i + 1] - x) / STATION - 1e-9);
+    return Array.from({ length: pieces }, (_, k) => x + ((kept[i + 1] - x) * k) / pieces);
+  });
 
   const bottom = (/** @type {number} */ x) =>
     wheel.axles.reduce(
@@ -316,17 +752,19 @@ function lowerBody(model) {
     ]);
   };
   /**
-   * The half section with a point halfway along each band, for a crash to bend, the deck in two
-   * facets (facets()), each halved too; BANDS says which band each stretch is.
+   * The half section with a point halfway along each band but the underside (hidden), for a crash
+   * to bend, the deck in two facets (facets()), each halved too; BANDS says which band each
+   * stretch is.
    */
   const section = (/** @type {number} */ x) => {
-    const [sill, arch, waist, shoulder, top] = corners(x);
+    const [centre, sill, waist, shoulder, top] = corners(x);
     const between = (/** @type {Point} */ p, /** @type {Point} */ q) =>
       /** @type {Point} */ ([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]);
     /** @type {Point} */
     const inner = [FACET * shoulder[0], shoulder[1] + (top[1] - shoulder[1]) * INNER];
     return [
-      ...[sill, arch, waist, shoulder, inner].flatMap((p, i, all) =>
+      centre,
+      ...[sill, waist, shoulder, inner].flatMap((p, i, all) =>
         i ? [between(all[i - 1], p), p] : [p],
       ),
       between(inner, top),
@@ -408,205 +846,6 @@ function lowerBody(model) {
 }
 
 /**
- * A closed solid over a side profile: the profile's x runs along the car (+z), its y up; the
- * left and right sides sit at x = ∓halfWidth(y), joined by a strip around the outline. Each side
- * is one polygon; the strip is one polygon per run of outline between creases (a turn of
- * WIRE.edgeAngle or more), so lines draw the outline and its sharp corners only. Faces point
- * outwards.
- *
- * @param {Point[]} profile simple polygon, any winding
- * @param {(y: number) => number} halfWidth
- * @returns {Part}
- */
-export function prism(profile, halfWidth) {
-  const outline = counterClockwise(profile);
-  const at =
-    (/** @type {number} */ side) =>
-    (/** @type {Point} */ [x, y]) =>
-      new THREE.Vector3(side * halfWidth(y), y, x);
-  const parts = [
-    face(outline, at(-1), new THREE.Vector3(-1, 0, 0)),
-    face(outline, at(1), new THREE.Vector3(1, 0, 0)),
-  ];
-
-  // The strip, counter-clockwise: quad i joins point i to the next, one polygon per run.
-  const n = outline.length;
-  /** @type {number[]} */
-  const positions = [];
-  /** @type {number[]} */
-  const polygon = [];
-  for (const { i, run } of creaseRuns(outline)) {
-    const [a, b] = [at(-1)(outline[i]), at(-1)(outline[(i + 1) % n])];
-    const [a1, b1] = [at(1)(outline[i]), at(1)(outline[(i + 1) % n])];
-    positions.push(...a.toArray(), ...b1.toArray(), ...b.toArray());
-    positions.push(...a.toArray(), ...a1.toArray(), ...b1.toArray());
-    polygon.push(run, run);
-  }
-  parts.push({ geometry: flatGeometry(positions), polygon });
-  return mergeParts(parts);
-}
-
-/**
- * The polygon going counter-clockwise: itself, or reversed.
- *
- * @param {Point[]} polygon
- * @returns {Point[]}
- */
-function counterClockwise(polygon) {
-  const clockwise = THREE.ShapeUtils.isClockWise(polygon.map(([x, y]) => new THREE.Vector2(x, y)));
-  return clockwise ? [...polygon].reverse() : polygon;
-}
-
-/**
- * The sides of a closed outline (side i from point i to the next) in the order to walk them, each
- * with its run: a crease (a turn of WIRE.edgeAngle or more) at a point starts a new run. The walk
- * starts at a crease, so a run never wraps around.
- *
- * @param {Point[]} outline
- * @returns {{ i: number, run: number }[]}
- */
-function creaseRuns(outline) {
-  const n = outline.length;
-  const crease = Math.cos(THREE.MathUtils.degToRad(WIRE.edgeAngle));
-  const direction = (/** @type {number} */ i) => {
-    const [a, b] = [outline[i % n], outline[(i + 1) % n]];
-    return new THREE.Vector2(b[0] - a[0], b[1] - a[1]).normalize();
-  };
-  const creases = (/** @type {number} */ i) => direction(i + n - 1).dot(direction(i)) < crease;
-  const first = Math.max(
-    0,
-    outline.findIndex((_, i) => creases(i)),
-  );
-  let run = -1;
-  return outline.map((_, s) => {
-    const i = (first + s) % n;
-    if (s === 0 || creases(i)) run++;
-    return { i, run };
-  });
-}
-
-/**
- * A flat polygon from a 2D outline (and the holes in it) mapped into 3D, its triangles facing
- * `facing`.
- *
- * @param {Point[]} outline
- * @param {(point: Point) => THREE.Vector3} at
- * @param {THREE.Vector3} facing
- * @param {Point[][]} [holes]
- * @returns {Part}
- */
-function face(outline, at, facing, holes = []) {
-  const vectors = (/** @type {Point[]} */ points) =>
-    points.map(([x, y]) => new THREE.Vector2(x, y));
-  const points = [outline, ...holes].flat();
-  // earcut drops the outline's points that lie in line; nudged in a hair, they stay corners and
-  // the neighbours sharing them stay joined
-  const turn = THREE.ShapeUtils.isClockWise(vectors(outline)) ? -1 : 1;
-  const contour = outline.map(([x, y], i) => {
-    const [p, q] = [
-      outline[(i + outline.length - 1) % outline.length],
-      outline[(i + 1) % outline.length],
-    ];
-    const cross = (x - p[0]) * (q[1] - y) - (y - p[1]) * (q[0] - x);
-    if (Math.abs(cross) > 1e-12) return new THREE.Vector2(x, y);
-    const [dx, dy] = [q[0] - p[0], q[1] - p[1]];
-    const nudge = (turn * 1e-6) / Math.hypot(dx, dy);
-    return new THREE.Vector2(x - dy * nudge, y + dx * nudge);
-  });
-  /** @type {number[]} */
-  const positions = [];
-  for (const triangle of THREE.ShapeUtils.triangulateShape(contour, holes.map(vectors))) {
-    const corners = triangle.map((i) => at(points[i]));
-    positions.push(...facingPositions(corners, facing));
-  }
-  return { geometry: flatGeometry(positions), polygon: new Array(positions.length / 9).fill(0) };
-}
-
-/**
- * A convex outline cut into `count` horizontal bars (one bar: the outline itself).
- *
- * @param {Point[]} outline
- * @param {number} count
- * @returns {Point[][]}
- */
-function bars(outline, count) {
-  if (count === 1) return [outline];
-  const ys = outline.map(([, y]) => y);
-  const [bottom, top] = [Math.min(...ys), Math.max(...ys)];
-  /** The outline's left and right x at height y. @param {number} y */
-  const across = (y) => {
-    const xs = outline.flatMap(([ax, ay], i) => {
-      const [bx, by] = outline[(i + 1) % outline.length];
-      if (y < Math.min(ay, by) || y > Math.max(ay, by) || ay === by) return ay === y ? [ax] : [];
-      return [ax + ((bx - ax) * (y - ay)) / (by - ay)];
-    });
-    return [Math.min(...xs), Math.max(...xs)];
-  };
-  return Array.from({ length: count }, (_, b) => {
-    const [y0, y1] = [b, b + 1].map((k) => THREE.MathUtils.lerp(bottom, top, k / count));
-    const [[l0, r0], [l1, r1]] = [across(y0), across(y1)];
-    return /** @type {Point[]} */ ([
-      [l0, y0],
-      [r0, y0],
-      [r1, y1],
-      [l1, y1],
-    ]);
-  });
-}
-
-/**
- * Marks with an offset x are mirrored to the other side.
- *
- * @template {{ x: number }} T
- * @param {T[]} marks
- * @returns {T[]}
- */
-const mirrored = (marks) =>
-  marks.flatMap((mark) => (mark.x ? [mark, { ...mark, x: -mark.x }] : [mark]));
-
-/**
- * A front view outline: a rectangle with its corners cut by `round` (0..0.5 of the smaller side),
- * or an ellipse with `round` 0.5.
- *
- * @param {{ x: number, y: number, w: number, h: number, round?: number }} mark
- * @returns {Point[]}
- */
-function rectangle({ x, y, w, h, round = 0 }) {
-  if (round >= 0.5) return ellipse(x, y, w / 2, h / 2, LAMP_SEGMENTS);
-  const [hw, hh, c] = [w / 2, h / 2, round * Math.min(w, h)];
-  return /** @type {Point[]} */ ([
-    [x - hw + c, y - hh],
-    [x + hw - c, y - hh],
-    [x + hw, y - hh + c],
-    [x + hw, y + hh - c],
-    [x + hw - c, y + hh],
-    [x - hw + c, y + hh],
-    [x - hw, y + hh - c],
-    [x - hw, y - hh + c],
-  ]).filter((p, i, all) => {
-    const [px, py] = all[(i + all.length - 1) % all.length]; // uncut corners repeat points
-    return p[0] !== px || p[1] !== py;
-  });
-}
-
-/**
- * Points round an ellipse, counter-clockwise from its right end.
- *
- * @param {number} x centre
- * @param {number} y
- * @param {number} rx half width
- * @param {number} ry half height
- * @param {number} segments
- * @returns {Point[]}
- */
-function ellipse(x, y, rx, ry, segments) {
-  return Array.from({ length: segments }, (_, k) => {
-    const angle = (2 * Math.PI * k) / segments;
-    return [x + rx * Math.cos(angle), y + ry * Math.sin(angle)];
-  });
-}
-
-/**
  * The cabin: its side profile drawn across the car, narrowing up to the roof (`halfWidth`). The
  * roof and the screens bulge up (CROWN, from nothing at the cabin's foot to all of it at the
  * roof), rounding off at the edges, and the screens curve out in the middle (`cabin.screens`,
@@ -679,34 +918,11 @@ function cabinParts({ cabin, windows }, halfWidth, deckCrown) {
 
   /** @type {Part[]} */
   const parts = [];
-  /**
-   * A recessed glass in an opening: the glass (its triangles) and the opening's sides (round
-   * its rim).
-   */
-  const glass = (
-    /** @type {Point[]} */ rim,
-    /** @type {Point[][]} */ triangles,
-    /** @type {(p: Point) => THREE.Vector3} */ at,
-    /** @type {THREE.Vector3} */ out,
-  ) => {
-    const inner = (/** @type {Point} */ p) => at(p).addScaledVector(out, -RECESS);
-    parts.push(surface(triangles, inner, out));
-    const centre = rim.reduce((sum, p) => sum.add(inner(p)), new THREE.Vector3());
-    centre.divideScalar(rim.length);
-    const sides = rim.flatMap((p, i) => {
-      const q = rim[(i + 1) % rim.length];
-      const facing = centre.clone().sub(at(p).add(at(q)).multiplyScalar(0.5)); // into the opening
-      return [
-        triangleFacing([at(p), at(q), inner(q)], facing),
-        triangleFacing([at(p), inner(q), inner(p)], facing),
-      ];
-    });
-    parts.push(
-      joined(
-        sides,
-        sides.map(() => 0),
-      ),
-    );
+  /** A recessed glass in an opening (polygons.js recessed()). @type {typeof recessed} */
+  const glass = (rim, triangles, at, out) => {
+    const pieces = recessed(rim, triangles, at, out);
+    parts.push(...pieces);
+    return pieces;
   };
 
   // the strip round the profile: one polygon per run between creases, as prism()
@@ -731,66 +947,87 @@ function cabinParts({ cabin, windows }, halfWidth, deckCrown) {
       runs.push(run);
       continue;
     }
-    // the opening, FRAME in from the strip's ends and sides, its corners rounded (in metres
-    // across and along: X, T), and the frame zipped round it
+    // the opening, the frame in from the strip's ends and sides, its corners cut (in metres
+    // across and along: X, T), with points along its bottom and top only where they cross the
+    // facets' corners: the glass a strip between the two, one quad a facet, the frame zipped
+    // round it
+    const frame = cabin.frame ?? FRAME;
     const ts = screen.line.map(([x, y]) => ((x - a[0]) * dx + (y - a[1]) * dy) / length ** 2);
-    const [t0, t1] = [Math.min(...ts) + FRAME / length, Math.max(...ts) - FRAME / length];
+    const [t0, t1] = [Math.min(...ts) + frame / length, Math.max(...ts) - frame / length];
     const half = (/** @type {number} */ t) => halfWidth(a[1] + dy * t);
     const [r0, r1] = dy > 0 ? screen.corners : [...screen.corners].reverse(); // bottom, top
-    /** @type {Point[]} */
-    const corners = [
-      [-(half(t0) - FRAME), t0 * length],
-      [half(t0) - FRAME, t0 * length],
-      [half(t1) - FRAME, t1 * length],
-      [-(half(t1) - FRAME), t1 * length],
+    /** @type {Point[]} [BL, BR, TR, TL] */
+    const [bl, br, tr, tl] = [
+      [-(half(t0) - frame), t0 * length],
+      [half(t0) - frame, t0 * length],
+      [half(t1) - frame, t1 * length],
+      [-(half(t1) - frame), t1 * length],
     ];
-    const rim = densify(rounded(corners, [r0, r0, r1, r1]), STATION).map(
-      ([X, T]) => /** @type {Point} */ ([X / half(T / length), T / length]),
-    );
+    /** A corner cut `r` towards its neighbours, the side's first (uncut: the corner itself). */
+    const cut = (
+      /** @type {Point} */ corner,
+      /** @type {Point} */ side,
+      /** @type {Point} */ along,
+      /** @type {number} */ r,
+    ) => {
+      const towards = (/** @type {Point} */ p) => {
+        const share = Math.min(r / Math.hypot(p[0] - corner[0], p[1] - corner[1]), 0.45);
+        return /** @type {Point} */ ([
+          corner[0] + (p[0] - corner[0]) * share,
+          corner[1] + (p[1] - corner[1]) * share,
+        ]);
+      };
+      return r > 1e-4 ? [towards(side), towards(along)] : [corner];
+    };
+    /** Where an edge at T crosses the facets' corners between X0 and X1. */
+    const creases = (/** @type {number} */ X0, /** @type {number} */ X1, /** @type {number} */ T) =>
+      [-FACET, 0, FACET]
+        .map((u) => u * half(T / length))
+        .filter((X) => X > X0 + 1e-3 && X < X1 - 1e-3)
+        .map((X) => /** @type {Point} */ ([X, T]));
+    // each left to right
+    const [bottomLeft, bottomRight] = [cut(bl, tl, br, r0), cut(br, bl, tr, r0)];
+    const [topLeft, topRight] = [cut(tl, bl, tr, r1), cut(tr, tl, br, r1)];
+    const toStrip = (/** @type {Point} */ [X, T]) =>
+      /** @type {Point} */ ([X / half(T / length), T / length]);
+    const bottom = densifyLine(
+      [
+        ...bottomLeft,
+        ...creases(bottomLeft[bottomLeft.length - 1][0], bottomRight[0][0], t0 * length),
+        ...bottomRight,
+      ],
+      STATION,
+    ).map(toStrip);
+    const top = densifyLine(
+      [
+        ...topLeft,
+        ...creases(topLeft[topLeft.length - 1][0], topRight[0][0], t1 * length),
+        ...topRight,
+      ],
+      STATION,
+    ).map(toStrip);
+    const rim = [...bottom, ...[...top].reverse()];
     const centre = /** @type {Point} */ ([0, (t0 + t1) / 2]);
     const angle = (/** @type {Point} */ [u, t]) =>
       Math.atan2((t - centre[1]) * length, u * half(t));
     const outer = [...row(ACROSS, 0), ...row([...ACROSS].reverse(), 1)];
     strip.push(surface(zip(outer, rim, angle), at, out));
     runs.push(run);
-    glass(
-      rim,
-      rim.map((p, j) => [centre, p, rim[(j + 1) % rim.length]]),
-      at,
-      out,
-    );
+    glass(rim, ladder(bottom, top), at, out);
   }
   parts.push(joined(strip, runs));
 
   // the sides, their windows set in, with points inside for a crash to bend
-  const panes = windows.map((window) => rounded(window, cabin.windowCorners ?? 0));
-  /** @type {Point[][]} */
-  const steiner = [];
-  const [xs, ys] = [outline.map(([x]) => x), outline.map(([, y]) => y)];
-  for (let x = Math.min(...xs) + STATION / 2; x < Math.max(...xs); x += STATION) {
-    for (let y = Math.min(...ys) + STATION / 2; y < Math.max(...ys); y += STATION) {
-      const p = /** @type {Point} */ ([x, y]);
-      const clear = [outline, ...panes].every((polygon) => distanceTo(polygon, p) > 0.03);
-      if (contains(outline, p) && !panes.some((pane) => contains(pane, p)) && clear) {
-        steiner.push([p]);
-      }
-    }
-  }
+  const panes = windows.map((window) =>
+    densify(rounded(window, cabin.windowCorners ?? 0, 1), STATION),
+  );
+  const steiner = fillPoints(outline, panes, STATION, 0.03, 2 * STATION);
   const roofLine = outline.filter(([, y]) => y >= roof - 1e-6);
   for (const side of [-1, 1]) {
     const out = new THREE.Vector3(side, 0, 0);
     const at = (/** @type {Point} */ [x, y]) => new THREE.Vector3(side * halfWidth(y), y, x);
     parts.push(face(outline, at, out, [...panes, ...steiner]));
-    for (const pane of panes) {
-      const contour = pane.map(([x, y]) => new THREE.Vector2(x, y));
-      const triangles = THREE.ShapeUtils.triangulateShape(contour, []);
-      glass(
-        pane,
-        triangles.map((t) => t.map((i) => pane[i])),
-        at,
-        out,
-      );
-    }
+    for (const pane of panes) glass(pane, glassTriangles(pane, STATION), at, out);
     // the drip rail, under the roof's edge
     /** @type {Point[]} */
     const rail = [
@@ -805,26 +1042,87 @@ function cabinParts({ cabin, windows }, halfWidth, deckCrown) {
 }
 
 /**
+ * Outside mirrors (Mirror, scene/trafficModels.js), both sides' in one geometry, with
+ * `userData.polygons`: on each side a head (an outline with its corners cut, drawn across and
+ * deep along the car), its glass outlined on its back (looking back: -z, the car's front is +z),
+ * and the arms from the body, boxes.
+ *
+ * @param {import("./trafficModels.js").Mirror} mirror
+ * @param {{ length: number }} model
+ */
+function mirrorGeometry({ sides, head, depth, corners, centre, arms, arm }, model) {
+  const [x, y, w] = centre;
+  const [across, up] = head;
+  /** @type {Part[]} */
+  const parts = [];
+  for (const side of sides) {
+    // the head: its outline across and up, drawn along the car (prism: x across -> z)
+    const outline = rounded(
+      [
+        [side * w - across / 2, y - up / 2],
+        [side * w + across / 2, y - up / 2],
+        [side * w + across / 2, y + up / 2],
+        [side * w - across / 2, y + up / 2],
+      ],
+      corners,
+      1,
+    );
+    const shell = prism(outline, () => depth / 2);
+    // (±depth / 2, up, across) -> (across, up, x ∓ depth / 2)
+    shell.geometry.rotateY(Math.PI / 2).translate(0, 0, x);
+    parts.push(shell);
+    // the glass, looking back
+    const inset = Math.min(across, up) * 0.15;
+    const glass = rounded(
+      [
+        [side * w - across / 2 + inset, y - up / 2 + inset],
+        [side * w + across / 2 - inset, y - up / 2 + inset],
+        [side * w + across / 2 - inset, y + up / 2 - inset],
+        [side * w - across / 2 + inset, y + up / 2 - inset],
+      ],
+      corners / 2,
+      1,
+    );
+    const back = x - depth / 2 - OFFSET;
+    parts.push(face(glass, ([u, v]) => new THREE.Vector3(u, v, back), new THREE.Vector3(0, 0, -1)));
+    for (const [from, to] of arms) {
+      const [a, b] = [from, to].map(([px, py, pw]) => new THREE.Vector3(side * pw, py, px));
+      const rod = new THREE.BoxGeometry(arm, arm, a.distanceTo(b));
+      rod.applyQuaternion(
+        new THREE.Quaternion().setFromUnitVectors(
+          new THREE.Vector3(0, 0, 1),
+          b.clone().sub(a).normalize(),
+        ),
+      );
+      rod.translate(...a.add(b).multiplyScalar(0.5).toArray());
+      parts.push(builtIn(rod, (t) => Math.floor(t / 2))); // two triangles a face
+    }
+  }
+  return centred(withPolygons(parts), model);
+}
+
+/**
  * The headlamps, one geometry each, with `userData.polygons` (its outline): lines once it is out.
  *
  * @param {TrafficModel} model
  */
 function lampGeometries(model) {
   const front = ends(model)[1];
-  const at = (/** @type {Point} */ [w, y]) => new THREE.Vector3(w, y, front + 2 * OFFSET);
-  return mirrored(model.lamps).map((lamp) =>
-    centred(
-      leanNose(withPolygons([face(rectangle(lamp), at, new THREE.Vector3(0, 0, 1))]), model),
+  return mirrored(model.lamps).map((lamp) => {
+    const z = front + (lamp.depth ?? 0) + 2 * OFFSET; // on its housing, if it has one
+    const at = (/** @type {Point} */ [w, y]) => new THREE.Vector3(w, y, z);
+    return centred(
+      leanEnds(withPolygons([face(rectangle(lamp), at, new THREE.Vector3(0, 0, 1))]), model),
       model,
-    ),
-  );
+    );
+  });
 }
 
 /**
  * A wheel: the tyre (its tread, the sidewall round the rim), the rim set RIM_DEPTH into it with
  * its holes, the hubcap. Lines draw the rings, the holes and the hubcap.
  *
- * @param {TrafficModel["wheel"]} wheel
+ * @param {Omit<TrafficModel["wheel"], "arches">} wheel
  * @param {number[]} centre
  * @param {number} side -1 left, 1 right: where the outer face looks
  * @returns {Part[]}
@@ -845,7 +1143,7 @@ function wheelParts({ radius, width, rim }, [x, y, z], side) {
     const angle = (2 * Math.PI * (k + turn)) / count;
     const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
     const [w, h] = [size[0] * radius, size[1] * radius];
-    const hole = rectangle({ x: at * radius, y: 0, w, h, round });
+    const hole = rectangle({ x: at * radius, y: 0, w, h, round }, HOLE_SEGMENTS);
     const turned = hole.map(
       ([a, b]) => /** @type {Point} */ ([a * cos - b * sin, a * sin + b * cos]),
     );
@@ -854,7 +1152,8 @@ function wheelParts({ radius, width, rim }, [x, y, z], side) {
   return [
     tube(radius, width, [x, y, z]), // the tread
     face(ring(radius), on(width), facing.clone().negate()), // the inner side
-    face(ring(radius), on(0), facing, [ring(inner)]), // the sidewall
+    // the sidewall: quads between the rings (earcut would cut thin slivers, their lines spikes)
+    surface(ladderRing(ring(radius), ring(inner)), on(0), facing),
     tube(inner, RIM_DEPTH, [outside - (side * RIM_DEPTH) / 2, y, z]), // the rim's lip
     face(ring(inner), on(RIM_DEPTH), facing), // the rim
     ...holes,
@@ -863,33 +1162,51 @@ function wheelParts({ radius, width, rim }, [x, y, z], side) {
 }
 
 /**
- * A bumper: a bar BUMPER_DEPTH thick and `height` tall around y, its outer edge along `plan`
- * (mirrored to the other side) from z = end into the car, and its guards. The bar's top and
- * bottom are one polygon each, the faces around it one per run between creases.
+ * Triangles between two closed rings of as many points, point i of one facing point i of the
+ * other: two a quad.
+ *
+ * @param {Point[]} outer
+ * @param {Point[]} inner
+ * @returns {Point[][]}
+ */
+function ladderRing(outer, inner) {
+  return outer.flatMap((p, i) => {
+    const j = (i + 1) % outer.length;
+    return [
+      [p, outer[j], inner[j]],
+      [p, inner[j], inner[i]],
+    ];
+  });
+}
+
+/**
+ * A bumper: a bar `depth` thick (BUMPER_DEPTH unless it says) and `height` tall around y, its
+ * outer edge along `plan` (mirrored to the other side) from z = end into the car, and its guards.
+ * The bar's top and bottom are one polygon each, the faces around it one per run between creases.
  *
  * @param {Bumper} bumper
  * @param {number} end z of the bumper's outermost point
  * @param {number} back 1 or -1: the direction into the car
  * @returns {Part}
  */
-function bumper({ y, height, plan, guards }, end, back) {
-  /** @type {Point[]} [across, back], from one end round to the other */
-  const outer = [
-    ...plan
-      .slice(1)
-      .map(([w, b]) => /** @type {Point} */ ([-w, b]))
-      .reverse(),
-    ...plan,
-  ];
-  // the inner edge: BUMPER_DEPTH along the normal of each point's neighbours' chord
+function bumper({ y, height, plan, guards, depth: thick = BUMPER_DEPTH }, end, back) {
+  /** @type {Point[]} [across, back], from one end round to the other, a point every STATION */
+  const outer = densifyLine(
+    [
+      ...plan
+        .slice(1)
+        .map(([w, b]) => /** @type {Point} */ ([-w, b]))
+        .reverse(),
+      ...plan,
+    ],
+    STATION,
+  );
+  // the inner edge: `thick` along the normal of each point's neighbours' chord
   const inner = outer.map(([w, b], i) => {
     const [p, q] = [outer[Math.max(i - 1, 0)], outer[Math.min(i + 1, outer.length - 1)]];
     const [dw, db] = [q[0] - p[0], q[1] - p[1]];
     const length = Math.hypot(dw, db);
-    return /** @type {Point} */ ([
-      w - (db / length) * BUMPER_DEPTH,
-      b + (dw / length) * BUMPER_DEPTH,
-    ]);
+    return /** @type {Point} */ ([w - (db / length) * thick, b + (dw / length) * thick]);
   });
   const outline = [...outer, ...inner.reverse()].map(
     ([w, b]) => /** @type {Point} */ ([end + back * b, w]),
@@ -899,7 +1216,7 @@ function bumper({ y, height, plan, guards }, end, back) {
   bar.geometry.rotateZ(-Math.PI / 2).translate(0, y, 0);
   const parts = [bar];
   if (guards) {
-    const depth = sample(plan, guards.x) + BUMPER_DEPTH; // from the car's end back through the bar
+    const depth = sample(plan, guards.x) + thick; // from the car's end back through the bar
     for (const side of [-1, 1]) {
       const box = new THREE.BoxGeometry(guards.width, guards.y[1] - guards.y[0], depth);
       box.translate(side * guards.x, (guards.y[0] + guards.y[1]) / 2, end + (back * depth) / 2);
@@ -940,31 +1257,6 @@ function tube(radius, length, [x, y, z]) {
 }
 
 /**
- * @param {THREE.BufferGeometry} geometry a built-in shape
- * @param {(triangle: number) => number} polygonOf
- * @returns {Part}
- */
-function builtIn(geometry, polygonOf) {
-  const flat = plain(geometry);
-  const count = flat.getAttribute("position").count / 3;
-  return { geometry: flat, polygon: Array.from({ length: count }, (_, t) => polygonOf(t)) };
-}
-
-/**
- * Parts as one, their polygons by `ids` (parts with the same id are one polygon).
- *
- * @param {Part[]} parts
- * @param {number[]} ids
- * @returns {Part}
- */
-function joined(parts, ids) {
-  const geometry = /** @type {THREE.BufferGeometry} */ (
-    mergeGeometries(parts.map((part) => part.geometry))
-  );
-  return { geometry, polygon: parts.flatMap((part, k) => part.polygon.map(() => ids[k])) };
-}
-
-/**
  * How high across (s: -1 left edge, 0 middle, 1 right edge) a crowned surface stands, as a share
  * of its crown: four flat facets (FACET, INNER).
  *
@@ -973,264 +1265,4 @@ function joined(parts, ids) {
 function facets(s) {
   const u = Math.abs(s);
   return u <= FACET ? 1 - ((1 - INNER) * u) / FACET : (INNER * (1 - u)) / (1 - FACET);
-}
-
-/**
- * A polygon with its corners rounded off (a quadratic curve through each, CORNER_STEPS long),
- * by `radius` each or all; a corner never takes more than 45 % of its sides.
- *
- * @param {Point[]} polygon
- * @param {number | number[]} radius
- * @returns {Point[]}
- */
-function rounded(polygon, radius) {
-  return polygon.flatMap((v, i) => {
-    const r = typeof radius === "number" ? radius : radius[i];
-    const [p, q] = [
-      polygon[(i + polygon.length - 1) % polygon.length],
-      polygon[(i + 1) % polygon.length],
-    ];
-    const [lp, lq] = [Math.hypot(p[0] - v[0], p[1] - v[1]), Math.hypot(q[0] - v[0], q[1] - v[1])];
-    const cos = ((p[0] - v[0]) * (q[0] - v[0]) + (p[1] - v[1]) * (q[1] - v[1])) / (lp * lq);
-    const cut = Math.min(
-      r / Math.tan(Math.acos(THREE.MathUtils.clamp(cos, -1, 1)) / 2),
-      0.45 * lp,
-      0.45 * lq,
-    );
-    if (!(cut > 1e-4)) return [v];
-    const [a, b] = [
-      [v[0] + ((p[0] - v[0]) * cut) / lp, v[1] + ((p[1] - v[1]) * cut) / lp],
-      [v[0] + ((q[0] - v[0]) * cut) / lq, v[1] + ((q[1] - v[1]) * cut) / lq],
-    ];
-    return Array.from({ length: CORNER_STEPS + 1 }, (_, k) => {
-      const t = k / CORNER_STEPS;
-      const [u, w, z] = [(1 - t) ** 2, 2 * (1 - t) * t, t ** 2];
-      return /** @type {Point} */ ([
-        u * a[0] + w * v[0] + z * b[0],
-        u * a[1] + w * v[1] + z * b[1],
-      ]);
-    });
-  });
-}
-
-/**
- * A closed polygon with its sides cut at most `step` long.
- *
- * @param {Point[]} polygon
- * @param {number} step
- * @returns {Point[]}
- */
-function densify(polygon, step) {
-  return polygon.flatMap((p, i) => {
-    const q = polygon[(i + 1) % polygon.length];
-    const pieces = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / step));
-    return Array.from({ length: pieces }, (_, j) => {
-      const t = j / pieces;
-      return /** @type {Point} */ ([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
-    });
-  });
-}
-
-/** @param {Point[]} polygon @param {Point} p */
-function contains(polygon, [x, y]) {
-  let inside = false;
-  polygon.forEach(([ax, ay], i) => {
-    const [bx, by] = polygon[(i + 1) % polygon.length];
-    if (ay > y !== by > y && x < ax + ((y - ay) * (bx - ax)) / (by - ay)) inside = !inside;
-  });
-  return inside;
-}
-
-/** How far a point is from a polygon's sides. @param {Point[]} polygon @param {Point} p */
-function distanceTo(polygon, [x, y]) {
-  return Math.min(
-    ...polygon.map(([ax, ay], i) => {
-      const [bx, by] = polygon[(i + 1) % polygon.length];
-      const [dx, dy] = [bx - ax, by - ay];
-      const t = THREE.MathUtils.clamp(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy), 0, 1);
-      return Math.hypot(ax + dx * t - x, ay + dy * t - y);
-    }),
-  );
-}
-
-/**
- * Triangles between two closed loops, one round the other (the frame round a window): both go
- * the same way round, each point a corner, zipped by the angle `angle` gives them.
- *
- * @param {Point[]} outer
- * @param {Point[]} inner
- * @param {(p: Point) => number} angle
- * @returns {Point[][]}
- */
-function zip(outer, inner, angle) {
-  /** The loop from its smallest angle, the angles unwrapped, closed. @param {Point[]} loop */
-  const unwrap = (loop) => {
-    const angles = loop.map(angle);
-    const start = angles.indexOf(Math.min(...angles));
-    const points = [...loop.slice(start), ...loop.slice(0, start)];
-    const turned = points.map(angle);
-    for (let k = 1; k < turned.length; k++) {
-      while (turned[k] < turned[k - 1]) turned[k] += 2 * Math.PI;
-    }
-    return { points: [...points, points[0]], angles: [...turned, turned[0] + 2 * Math.PI] };
-  };
-  const [o, w] = [unwrap(outer), unwrap(inner)];
-  /** @type {Point[][]} */
-  const triangles = [];
-  let [i, j] = [0, 0];
-  while (i < o.points.length - 1 || j < w.points.length - 1) {
-    const along =
-      j === w.points.length - 1 || (i < o.points.length - 1 && o.angles[i + 1] <= w.angles[j + 1]);
-    if (along) triangles.push([o.points[i], o.points[++i], w.points[j]]);
-    else triangles.push([o.points[i], w.points[j + 1], w.points[j++]]);
-  }
-  return triangles;
-}
-
-/**
- * Triangles between two rows of points, each from left to right (along the first coordinate):
- * every point is a corner, so what the rows share with their neighbours stays joined (earcut
- * would drop the points in line, THREE.ShapeUtils.triangulateShape).
- *
- * @param {Point[]} bottom
- * @param {Point[]} top
- * @returns {Point[][]}
- */
-function ladder(bottom, top) {
-  /** @type {Point[][]} */
-  const triangles = [];
-  let [i, j] = [0, 0];
-  while (i < bottom.length - 1 || j < top.length - 1) {
-    const up = i === bottom.length - 1 || (j < top.length - 1 && top[j + 1][0] < bottom[i + 1][0]);
-    if (up) triangles.push([bottom[i], top[j + 1], top[j++]]);
-    else triangles.push([bottom[i], bottom[++i], top[j]]);
-  }
-  return triangles;
-}
-
-/**
- * Triangles (2D) mapped into 3D, facing `facing`: one polygon.
- *
- * @param {Point[][]} triangles
- * @param {(point: Point) => THREE.Vector3} at
- * @param {THREE.Vector3} facing
- * @returns {Part}
- */
-function surface(triangles, at, facing) {
-  const parts = triangles.map((triangle) => triangleFacing(triangle.map(at), facing));
-  return joined(
-    parts,
-    parts.map(() => 0),
-  );
-}
-
-/**
- * A triangle turned to face `facing`.
- *
- * @param {THREE.Vector3[]} corners
- * @param {THREE.Vector3} facing
- * @returns {Part}
- */
-function triangleFacing(corners, facing) {
-  return { geometry: flatGeometry(facingPositions(corners, facing)), polygon: [0] };
-}
-
-/**
- * A triangle's positions (x, y, z of each corner), wound to face `facing`.
- *
- * @param {THREE.Vector3[]} corners
- * @param {THREE.Vector3} facing
- * @returns {number[]}
- */
-function facingPositions([a, b, c], facing) {
-  const normal = new THREE.Vector3().subVectors(b, a).cross(c.clone().sub(a));
-  const [p, q] = normal.dot(facing) >= 0 ? [b, c] : [c, b];
-  return [...a.toArray(), ...p.toArray(), ...q.toArray()];
-}
-
-/**
- * One geometry of parts, with `userData.polygons` (as core/fbx.js), so its lines follow them.
- *
- * @param {Part[]} parts
- */
-export function withPolygons(parts) {
-  const { geometry, polygon } = mergeParts(parts);
-  geometry.userData.polygons = {
-    inner: innerEdges(geometry, polygon),
-    polygon: Uint32Array.from(polygon),
-  };
-  return geometry;
-}
-
-/**
- * One part of many; each part's polygons keep numbers of their own.
- *
- * @param {Part[]} parts
- * @returns {Part}
- */
-function mergeParts(parts) {
-  const geometry = /** @type {THREE.BufferGeometry} */ (
-    mergeGeometries(parts.map((part) => part.geometry))
-  );
-  /** @type {number[]} */
-  const polygon = [];
-  for (const part of parts) {
-    const offset = polygon.length ? Math.max(...polygon) + 1 : 0;
-    polygon.push(...part.polygon.map((id) => id + offset));
-  }
-  return { geometry, polygon };
-}
-
-/**
- * Per triangle, the edges it shares with a triangle of its own polygon (bit k: the edge opposite
- * vertex k, as core/fbx.js): lines are drawn along the others.
- *
- * @param {THREE.BufferGeometry} geometry
- * @param {number[]} polygon
- */
-function innerEdges(geometry, polygon) {
-  const position = geometry.getAttribute("position");
-  const point = (/** @type {number} */ i) =>
-    [position.getX(i), position.getY(i), position.getZ(i)].map((v) => Math.round(v * 1e5)).join();
-  const edgeKey = (/** @type {number} */ t, /** @type {number} */ k) => {
-    const [a, b] = [point(3 * t + ((k + 1) % 3)), point(3 * t + ((k + 2) % 3))];
-    return a < b ? `${a}|${b}` : `${b}|${a}`;
-  };
-  /** @type {Map<string, number[]>} */
-  const owners = new Map();
-  for (let t = 0; t < polygon.length; t++) {
-    for (let k = 0; k < 3; k++) {
-      const key = edgeKey(t, k);
-      let triangles = owners.get(key);
-      if (!triangles) owners.set(key, (triangles = []));
-      triangles.push(t);
-    }
-  }
-  return Uint8Array.from(polygon, (id, t) => {
-    let mask = 0;
-    for (let k = 0; k < 3; k++) {
-      const shared = /** @type {number[]} */ (owners.get(edgeKey(t, k)));
-      if (shared.some((u) => u !== t && polygon[u] === id)) mask |= 1 << k;
-    }
-    return mask;
-  });
-}
-
-/** @param {number[]} positions non-indexed triangles */
-function flatGeometry(positions) {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-/**
- * Non-indexed, position + normal only, so built-in shapes merge with the rest.
- *
- * @param {THREE.BufferGeometry} geometry
- */
-function plain(geometry) {
-  const flat = geometry.index ? geometry.toNonIndexed() : geometry;
-  flat.deleteAttribute("uv");
-  return flat;
 }

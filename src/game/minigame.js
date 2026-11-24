@@ -59,13 +59,15 @@ export function createLanePicker(halfWidth = trafficHalfWidth(), rng = Math.rand
 }
 
 /**
- * A traffic car's hitbox, in its own frame (scene/traffic.js keeps it as arrays).
+ * A traffic car's hitbox (the physics' box), or its reach (with the mirrors: what the Bolones
+ * must not touch), in its own frame (scene/traffic.js keeps them as arrays).
  *
  * @param {THREE.Object3D} car
  * @param {THREE.Box3} target
+ * @param {"hitbox" | "reach"} [which]
  */
-function hitboxOf(car, target) {
-  const { min, max } = car.userData.hitbox;
+function hitboxOf(car, target, which = "hitbox") {
+  const { min, max } = car.userData[which] ?? car.userData.hitbox;
   target.min.fromArray(min);
   target.max.fromArray(max);
   return target;
@@ -433,7 +435,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
 
       for (const obstacle of cars) {
         obstacle.updateMatrix(); // turned round, going the Bolones' way
-        hitboxOf(obstacle, obstacleBounds).applyMatrix4(obstacle.matrix);
+        hitboxOf(obstacle, obstacleBounds, "reach").applyMatrix4(obstacle.matrix);
         if (carBounds.intersectsBox(obstacleBounds)) {
           hit(obstacle, world, level);
           return { crashed: true, scored };

@@ -159,19 +159,25 @@ export const polygonLineGeometry = memoByGeometry((geometry) => {
   }
   const distances = edgeDistances(position, { hidden, sizes });
   lines.setAttribute("wireEdge", new THREE.BufferAttribute(distances, 4));
-  const { near, end } = nearDistances(position, hidden, polygon);
+  const { near, end, far } = nearDistances(position, hidden, polygon);
   lines.setAttribute("wireNear", new THREE.BufferAttribute(near, 3));
   lines.setAttribute("wireNearEnd", new THREE.BufferAttribute(end, 3));
+  lines.setAttribute("wireNearFar", new THREE.BufferAttribute(far, 3));
   return lines;
 });
+
+/** cos of the largest turn at which an outline still goes on straight (nearDistances). */
+const STRAIGHT = Math.cos(THREE.MathUtils.degToRad(10));
 
 /**
  * A polygon's outline edges through a triangle's corners, drawn by that triangle too: at a thin
  * corner (a quad's hidden diagonal leaves two) the line is wider than the triangle that owns the
  * edge. Up to 3 per triangle, those it lies alongside first. Per vertex and edge, `wireNear`: the
  * signed distance to the edge's line in the triangle's plane; `wireNearEnd`: the distance past
- * the edge's end at that corner, so the line stops there. Both are linear in the triangle, so they
- * interpolate exactly. Spare slots stay HIDDEN.
+ * the edge's end at that corner, so the line stops there; `wireNearFar`: the distance past its
+ * other end, or past where the outline turns after edges in line with it, so a long thin triangle
+ * along a short edge (a cut corner) does not draw it on past the turn. All are
+ * linear in the triangle, so they interpolate exactly. Spare slots stay HIDDEN.
  *
  * @param {THREE.BufferAttribute | THREE.InterleavedBufferAttribute} position
  * @param {Uint8Array} hidden per triangle
@@ -200,6 +206,7 @@ function nearDistances(position, hidden, polygon) {
 
   const near = new Float32Array(count * 9).fill(HIDDEN);
   const end = new Float32Array(count * 9);
+  const far = new Float32Array(count * 9);
   const normal = new THREE.Vector3();
   for (let t = 0; t < count; t++) {
     const points = [0, 1, 2].map((v) => at(3 * t + v));
@@ -217,26 +224,50 @@ function nearDistances(position, hidden, polygon) {
         seen.add(edge);
         const from = points[v];
         const [a, b] = [1, 2].map((s) => at(edge - (edge % 3) + ((edge + s) % 3)));
-        const along = (a.equals(from) ? b : a).sub(from);
+        const to = a.equals(from) ? b : a;
+        const along = to.clone().sub(from);
         const length = along.length();
+        // where the outline goes on straight past the far end, its line may run on as far as it
+        // does: along the edges in line with it, up to where it turns
+        const ahead = along.clone().divideScalar(length);
+        let [last, end, further] = [edge, to, 0];
+        for (let step = 0; step < 64; step++) {
+          const next = (through.get(`${polygon[t]} ${end.toArray()}`) ?? []).find((n) => {
+            if (n === last) return false;
+            const [c, d] = [1, 2].map((s) => at(n - (n % 3) + ((n + s) % 3)));
+            const onward = (c.equals(end) ? d : c).sub(end);
+            return onward.dot(ahead) > STRAIGHT * onward.length();
+          });
+          if (next === undefined) break;
+          const [c, d] = [1, 2].map((s) => at(next - (next % 3) + ((next + s) % 3)));
+          const beyond = c.equals(end) ? d : c;
+          further += beyond.clone().sub(end).dot(ahead);
+          [last, end] = [next, beyond];
+        }
         along.addScaledVector(normal, -along.dot(normal)); // in the triangle's plane
-        if (along.length() <= 0.7 * length) continue; // over 45° off this face: no line on it
+        const span = along.length();
+        if (span <= 0.7 * length) continue; // over 45° off this face: no line on it
         along.normalize();
         const across = normal.clone().cross(along);
         const past = Math.max(...points.map((p) => -p.clone().sub(from).dot(along)));
-        lines.push({ from, along, across, past });
+        lines.push({ from, along, across, past, span: span + further });
       }
     }
-    lines.sort((p, q) => p.past - q.past);
-    lines.slice(0, 3).forEach(({ from, along, across }, j) => {
+    // those it lies alongside first, then the longer, then the nearer the middle across: the
+    // same for a triangle and its mirror image, whichever way round its corners come
+    lines.sort(
+      (p, q) => p.past - q.past || q.span - p.span || Math.abs(p.from.x) - Math.abs(q.from.x),
+    );
+    lines.slice(0, 3).forEach(({ from, along, across, span }, j) => {
       points.forEach((p, v) => {
         const offset = p.clone().sub(from);
         near[(3 * t + v) * 3 + j] = offset.dot(across);
         end[(3 * t + v) * 3 + j] = -offset.dot(along);
+        far[(3 * t + v) * 3 + j] = offset.dot(along) - span;
       });
     });
   }
-  return { near, end };
+  return { near, end, far };
 }
 
 /**
@@ -250,8 +281,8 @@ const LINE_VERTEX = /* glsl */ `
   attribute vec4 wireEdge;
   varying vec4 vWireEdge;
   #ifdef WIRE_NEAR
-  attribute vec3 wireNear, wireNearEnd;
-  varying vec3 vWireNear, vWireNearEnd;
+  attribute vec3 wireNear, wireNearEnd, wireNearFar;
+  varying vec3 vWireNear, vWireNearEnd, vWireNearFar;
   #endif`;
 
 // object space -> world units (instances are scaled, e.g. rocks)
@@ -261,6 +292,7 @@ const LINE_VERTEX_MAIN = /* glsl */ `
   #ifdef WIRE_NEAR
   vWireNear = wireNear * wireScale;
   vWireNearEnd = wireNearEnd * wireScale;
+  vWireNearFar = wireNearFar * wireScale;
   #endif`;
 
 const LINE_FRAGMENT = /* glsl */ `
@@ -269,7 +301,7 @@ const LINE_FRAGMENT = /* glsl */ `
   uniform float uLineMin;
   varying vec4 vWireEdge;
   #ifdef WIRE_NEAR
-  varying vec3 vWireNear, vWireNearEnd;
+  varying vec3 vWireNear, vWireNearEnd, vWireNearFar;
   #endif
 
   // world units per pixel across each line (never 0: a spare nearDistances slot is constant)
@@ -290,9 +322,11 @@ const LINE_FRAGMENT = /* glsl */ `
     vec3 pixel = linePixel(vWireEdge.xyz);
     vec3 line = lineAt(vWireEdge.xyz, pixel);
     #ifdef WIRE_NEAR
-    // the polygon's edges through this triangle's corners, up to half a line width past their end
+    // the polygon's edges through this triangle's corners, up to half a line width past their ends
     vec3 near = lineAt(abs(vWireNear), linePixel(vWireNear));
-    line = max(line, near * lineAt(vWireNearEnd, linePixel(vWireNearEnd)));
+    near *= lineAt(vWireNearEnd, linePixel(vWireNearEnd));
+    near *= lineAt(vWireNearFar, linePixel(vWireNearFar));
+    line = max(line, near);
     #endif
     float inradius = vWireEdge.w / max(pixel.x, max(pixel.y, pixel.z));
     float dense = uLineFade > 0.0 ? 1.0 - smoothstep(uLineFade * 0.25, uLineFade, inradius) : 0.0;

@@ -3,7 +3,7 @@ import { CAR, SPEED, WORLD } from "../config.js";
 import { easeInOutCubic, settle } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
 import { mountWheel, wheelsOf } from "./rig.js";
-import { withPolygons } from "./traffic.js";
+import { withPolygons } from "./polygons.js";
 import { dress } from "./wire.js";
 
 /** @typedef {-1 | 0 | 1} SteerInput left, none, right */

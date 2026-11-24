@@ -1,11 +1,17 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { TRAFFIC } from "../src/config.js";
-import { createTrafficModels, prism, trafficHalfWidth } from "../src/scene/traffic.js";
+import { prism } from "../src/scene/polygons.js";
+import { dent, dentable } from "../src/scene/dents.js";
+import { createTrafficModels, halfReach, trafficHalfWidth } from "../src/scene/traffic.js";
 import { TRAFFIC_MODELS } from "../src/scene/trafficModels.js";
+import { vanGeometry } from "../src/scene/van.js";
 import { testMaterials as materials } from "./helpers.js";
 
-/** @typedef {[number, number]} Point */
+/**
+ * @typedef {[number, number]} Point
+ * @typedef {import("../src/scene/trafficModels.js").TrafficModel} TrafficModel
+ */
 
 /** y of a polyline sorted by x, at x. @param {Point[]} curve @param {number} x */
 const at = (curve, x) => {
@@ -53,6 +59,10 @@ describe("traffic models", () => {
   const dressed = materials();
   const models = createTrafficModels(dressed);
   const configs = Object.values(TRAFFIC_MODELS);
+  /** The cars with a cabin on their deck, and their templates. */
+  const sedans = configs.flatMap((config, i) =>
+    "cabin" in config ? [{ config, model: models[i] }] : [],
+  );
 
   it("builds one template per model, front towards +z, on the ground", () => {
     expect(models).toHaveLength(configs.length);
@@ -93,7 +103,9 @@ describe("traffic models", () => {
       }).length %
         2 ===
       1;
-    for (const { label, body, cabin, windows } of configs) {
+    for (const {
+      config: { label, body, cabin, windows },
+    } of sedans) {
       // the bottom edge: under the deck, not below the shoulder (no gap, no step)
       const bottom = Math.min(...cabin.outline.map(([, y]) => y));
       for (const [x, y] of cabin.outline.filter(([, y]) => y === bottom)) {
@@ -120,12 +132,12 @@ describe("traffic models", () => {
   });
 
   it("crown the roof: its middle rises a few centimetres over its edges", () => {
-    models.forEach((model, i) => {
-      const profileTop = Math.max(...configs[i].cabin.outline.map(([, y]) => y));
+    for (const { config, model } of sedans) {
+      const profileTop = Math.max(...config.cabin.outline.map(([, y]) => y));
       const top = model.userData.hitbox.max[1] / TRAFFIC.scale;
       expect(top - profileTop).toBeGreaterThan(0.02);
       expect(top - profileTop).toBeLessThan(0.1);
-    });
+    }
   });
 
   it("wrap the Kredens' windscreen round into its pillars", () => {
@@ -179,16 +191,85 @@ describe("traffic models", () => {
     }
   });
 
-  it("keeps lanes clear of the widest car: as wide as the widest hitbox", () => {
-    const halves = models.map(({ userData: { hitbox } }) => (hitbox.max[0] - hitbox.min[0]) / 2);
-    expect(trafficHalfWidth()).toBeGreaterThanOrEqual(Math.max(...halves) - 1e-9);
+  it("lean the Polakito's rear face back up to its engine lid, as the drawings have it", () => {
+    const i = Object.keys(TRAFFIC_MODELS).indexOf("polakito");
+    const config = /** @type {import("../src/scene/trafficModels.js").TrafficModel} */ (configs[i]);
+    const body = /** @type {THREE.Mesh} */ (models[i].children[0]);
+    const raycaster = new THREE.Raycaster();
+    /** Where the body's rear is, in the middle at a height y: metres from the car's rear end. */
+    const rearAt = (/** @type {number} */ y) => {
+      raycaster.set(
+        new THREE.Vector3(0.2, y, -10).multiplyScalar(TRAFFIC.scale),
+        new THREE.Vector3(0, 0, 1),
+      );
+      const [hit] = raycaster.intersectObject(body, false);
+      return hit.point.z / TRAFFIC.scale + config.length / 2;
+    };
+    const [top, low] = [rearAt(0.67), rearAt(0.43)];
+    expect(top).toBeCloseTo(config.body.top[0][0], 2); // the engine lid's edge stays
+    expect(low - top).toBeGreaterThan(0.02); // the face drawn in towards the bumper
+    expect(low - top).toBeLessThan(0.04);
+  });
+
+  it("give each car its mirrors: out of its hitbox (the physics' box), within its reach", () => {
+    models.forEach((model, i) => {
+      const label = configs[i].label;
+      const mirrors = model.getObjectByName("mirrors");
+      expect(mirrors, label).toBeDefined();
+      const bounds = new THREE.Box3().setFromObject(/** @type {THREE.Object3D} */ (mirrors));
+      const { hitbox, reach } = model.userData;
+      expect(bounds.max.x, label).toBeGreaterThan(hitbox.max[0]); // the driver's side, out
+      expect(bounds.min.y, label).toBeGreaterThan(0.5 * TRAFFIC.scale); // up by the windows
+      expect(reach.max[0], label).toBeCloseTo(bounds.max.x, 5); // the Bolones must not touch them
+      expect(reach.max[0] / TRAFFIC.scale, label).toBeLessThanOrEqual(halfReach(configs[i]) + 1e-4);
+      for (const k of [1, 2]) {
+        // otherwise as the hitbox
+        expect(reach.min[k], label).toBeCloseTo(hitbox.min[k], 5);
+        expect(reach.max[k], label).toBeCloseTo(hitbox.max[k], 5);
+      }
+    });
+  });
+
+  it("keeps lanes clear of the widest car, mirrors and all", () => {
+    const widest = Math.max(...configs.map(halfReach));
+    expect(widest).toBeGreaterThan(Math.max(...configs.map((config) => config.width)) / 2);
+    expect(trafficHalfWidth()).toBeCloseTo(widest * TRAFFIC.scale);
+  });
+
+  it("give decals, bumpers and mirrors corners no further apart than a crash bends (15 cm)", () => {
+    const longest = (/** @type {THREE.BufferGeometry} */ geometry, /** @type {number} */ t) => {
+      const p = geometry.getAttribute("position");
+      const v = [0, 1, 2].map((k) => new THREE.Vector3().fromBufferAttribute(p, 3 * t + k));
+      return Math.max(v[0].distanceTo(v[1]), v[1].distanceTo(v[2]), v[2].distanceTo(v[0]));
+    };
+    // a quad's diagonal 15 cm by 15 cm, or a small round shape
+    const most = 0.25 * TRAFFIC.scale;
+    models.forEach((model, i) => {
+      const label = configs[i].label;
+      const body = /** @type {THREE.Mesh} */ (model.children[0]).geometry;
+      const even = body.userData.even ?? [];
+      for (let t = 0; t < even.length; t++) {
+        if (even[t]) expect(longest(body, t), `${label} decal`).toBeLessThan(most);
+      }
+      for (const node of model.children.filter(({ userData }) => userData.part === "bumper")) {
+        // along the bar: its points every STATION across the car
+        const p = /** @type {THREE.Mesh} */ (node.children[0]).geometry.getAttribute("position");
+        const xs = [...new Set(Array.from({ length: p.count }, (_, k) => p.getX(k).toFixed(4)))]
+          .map(Number)
+          .sort((a, b) => a - b);
+        const gaps = xs.slice(1).map((x, k) => x - xs[k]);
+        expect(Math.max(...gaps) / TRAFFIC.scale, `${label} bumper`).toBeLessThanOrEqual(
+          0.15 + 1e-3,
+        );
+      }
+    });
   });
 
   it("clones keep the hitbox, the wireframe and the lit lamps, their outlines kept for a crash", () => {
     const clone = models[0].clone();
     expect(clone.userData.hitbox).toEqual(models[0].userData.hitbox);
     const lamps = /** @type {THREE.Mesh[]} */ (clone.getObjectsByProperty("name", "lamp"));
-    expect(lamps).toHaveLength(2 * Object.values(TRAFFIC_MODELS)[0].lamps.length);
+    expect(lamps).toHaveLength(2 * /** @type {TrafficModel} */ (configs[0]).lamps.length);
     for (const lamp of lamps) {
       expect(lamp.material).toBe(dressed.headlight);
       expect(lamp.children.map(({ visible }) => visible)).toEqual([false]);
@@ -196,6 +277,144 @@ describe("traffic models", () => {
     /** @type {THREE.Object3D[]} */
     const wires = [];
     clone.traverse((o) => o.userData.isWire && wires.push(o));
-    expect(wires.filter(({ visible }) => visible)).toHaveLength(1 + 6); // body, wheels, bumpers
+    expect(wires.filter(({ visible }) => visible)).toHaveLength(1 + 6 + 1); // body, wheels, bumpers, mirrors
+  });
+});
+
+describe("the Ramses, a van", () => {
+  const models = createTrafficModels(materials());
+  const car = models[Object.keys(TRAFFIC_MODELS).indexOf("ramses")];
+  const { van, length } = /** @type {import("../src/scene/trafficModels.js").VanModel} */ (
+    TRAFFIC_MODELS.ramses
+  );
+  const body = /** @type {THREE.Mesh} */ (car.children[0]).geometry;
+  const position = body.getAttribute("position");
+  /** A corner in metres: across, up, along from the car's end. @param {number} i */
+  const corner = (i) => ({
+    w: position.getX(i) / TRAFFIC.scale,
+    y: position.getY(i) / TRAFFIC.scale,
+    x: position.getZ(i) / TRAFFIC.scale + length / 2,
+  });
+  /** The ends of every edge a line is drawn along. */
+  const lines = () => {
+    const { inner } = body.userData.polygons;
+    return Array.from(inner).flatMap((mask, t) =>
+      [0, 1, 2]
+        .filter((k) => !(mask & (1 << k)))
+        .map((k) => [corner(3 * t + ((k + 1) % 3)), corner(3 * t + ((k + 2) % 3))]),
+    );
+  };
+
+  it("rounds its roof off from the gutter up to a crowned top", () => {
+    const top = car.userData.hitbox.max[1] / TRAFFIC.scale;
+    expect(top).toBeCloseTo(van.roof.edge + van.roof.crown, 3);
+  });
+
+  it("runs a line round the rear and along both sides at the belt and each rib", () => {
+    const drawn = lines();
+    for (const y of [...van.ribs, van.belt]) {
+      const level = drawn.filter(([a, b]) => Math.abs(a.y - y) < 1e-4 && Math.abs(b.y - y) < 1e-4);
+      const rear = level.filter(([a, b]) => Math.abs(a.x - van.ends[0]) < 1e-4 && a.w !== b.w);
+      expect(rear.length, `rear at ${y}`).toBeGreaterThan(0);
+      for (const side of [-1, 1]) {
+        const along = level.filter(([a, b]) => side * a.w > van.half - 1e-4 && a.x !== b.x);
+        expect(along.length, `side ${side} at ${y}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("cuts the sides round the wheel arches", () => {
+    /** Whether a side face covers the point (along, up) on the side `side`. */
+    const covered = (
+      /** @type {number} */ x,
+      /** @type {number} */ y,
+      /** @type {number} */ side,
+    ) => {
+      for (let i = 0; i < position.count; i += 3) {
+        const [a, b, c] = [i, i + 1, i + 2].map(corner);
+        if (![a, b, c].every(({ w }) => Math.abs(side * w - van.half) < 1e-4)) continue;
+        const sign = (/** @type {typeof a} */ p, /** @type {typeof a} */ q) =>
+          Math.sign((q.x - p.x) * (y - p.y) - (q.y - p.y) * (x - p.x));
+        const [s0, s1, s2] = [sign(a, b), sign(b, c), sign(c, a)];
+        if (s0 === s1 && s1 === s2) return true;
+      }
+      return false;
+    };
+    for (const side of [-1, 1]) {
+      for (const axle of TRAFFIC_MODELS.ramses.wheel.axles) {
+        expect(covered(axle, van.sill + 0.1, side)).toBe(false); // the arch's opening
+      }
+      expect(covered(2.2, van.sill + 0.1, side)).toBe(true); // the side between the wheels
+    }
+  });
+
+  it("lights its two headlamps and two fog lamps", () => {
+    expect(car.getObjectsByProperty("name", "lamp")).toHaveLength(4);
+  });
+});
+
+describe("the Ramses' build", () => {
+  const ramses = /** @type {import("../src/scene/trafficModels.js").VanModel} */ (
+    TRAFFIC_MODELS.ramses
+  );
+
+  it("shades its lamps alike on both sides: the mirrored ones keep their smooth normals", () => {
+    const { body } = vanGeometry(ramses);
+    const [p, n] = [body.getAttribute("position"), body.getAttribute("normal")];
+    /** Points whose normal is not their triangle's, on the left and on the right. */
+    const smooth = [0, 0];
+    const v = [0, 1, 2].map(() => new THREE.Vector3());
+    const normal = new THREE.Vector3();
+    for (let t = 0; t < p.count / 3; t++) {
+      v.forEach((corner, k) => corner.fromBufferAttribute(p, 3 * t + k));
+      const face = v[1].clone().sub(v[0]).cross(v[2].clone().sub(v[0])).normalize();
+      for (let k = 0; k < 3; k++) {
+        if (normal.fromBufferAttribute(n, 3 * t + k).dot(face) > 0.9999) continue;
+        if (Math.abs(v[k].x) > 1e-3) smooth[v[k].x > 0 ? 1 : 0]++;
+      }
+    }
+    expect(smooth[1]).toBeGreaterThan(0); // the fog and tail lamps' sides
+    expect(smooth[0]).toBe(smooth[1]);
+  });
+
+  it("refuses a side window across a door edge instead of leaving it out", () => {
+    const [seam] = ramses.van.seams;
+    const across = {
+      x: /** @type {[number, number]} */ ([seam - 0.2, seam + 0.05]),
+      y: ramses.van.windows[0].y,
+    };
+    const van = { ...ramses.van, windows: [...ramses.van.windows, across] };
+    expect(() => vanGeometry({ ...ramses, van })).toThrow(/door edge/);
+  });
+});
+
+describe("decals", () => {
+  it("keep their even shading through a dent", () => {
+    const i = Object.keys(TRAFFIC_MODELS).indexOf("kredens");
+    const car = createTrafficModels(materials())[i];
+    car.updateMatrixWorld(true);
+    const body = /** @type {THREE.Mesh} */ (car.children[0]);
+    const entries = dentable(body);
+    // a dent along the side, for every point
+    dent(entries, (_, v) => {
+      v.x *= 0.97 + 0.02 * Math.sin(v.z * 7);
+    });
+    const geometry = body.geometry;
+    const { even } = geometry.userData;
+    const { polygon } = geometry.userData.polygons;
+    const normal = geometry.getAttribute("normal");
+    /** @type {Map<number, THREE.Vector3>} */
+    const first = new Map();
+    let checked = 0;
+    for (let t = 0; t < even.length; t++) {
+      if (!even[t]) continue;
+      const v = new THREE.Vector3().fromBufferAttribute(normal, 3 * t);
+      const seen = first.get(polygon[t]);
+      if (seen) {
+        expect(v.distanceTo(seen)).toBeLessThan(1e-5);
+        checked++;
+      } else first.set(polygon[t], v);
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });

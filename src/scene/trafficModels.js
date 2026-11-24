@@ -7,13 +7,15 @@
 
 /**
  * @typedef {[number, number]} Point
- * @typedef {{ x: number, y: number, w: number, h: number, round?: number, bars?: number }} Mark a
- *   front or rear view rectangle: centre, size, corner cut (0.5: an ellipse), horizontal bars
+ * @typedef {{ x: number, y: number, w: number, h: number, round?: number, bars?: number, depth?: number }} Mark
+ *   a front or rear view rectangle: centre, size, corner cut (0.5: an ellipse), horizontal bars;
+ *   with `depth` it stands that far out of the face (a lamp in its housing)
  * @typedef {object} Bumper
  * @property {number} y centre height
  * @property {number} height
  * @property {Point[]} plan the outer edge in the top view, [across, back from the car's end],
  *   from the centre to one end (mirrored to the other)
+ * @property {number} [depth] how thick the bar is (scene/traffic.js BUMPER_DEPTH unless it says)
  * @property {{ x: number, width: number, y: [number, number] }} [guards] vertical overriders at
  *   ±x, from y[0] to y[1], from the car's end back through the bar
  *
@@ -44,9 +46,12 @@
  * @property {Point[]} body.bottom underside; wheel arches are cut into it
  * @property {Point[]} body.width top view: [x, half width] at the waist
  * @property {number} body.shoulderInset the shoulder is this much narrower than the waist
+ * @property {number} [body.flares] a flare this wide round each wheel arch
  * @property {number} body.tuck the underside is this much narrower than the waist
  * @property {{ lean: number, from: number }} [body.nose] the front leans forward above `from`
  *   (metres up), its top edge `lean` ahead of the face below (the grille and the lamps with it)
+ * @property {{ lean: number, from: number }} [body.tail] the rear leans back above `from`, its
+ *   top edge (where the deck has it) `lean` behind the face below (the marks and lamps with it)
  * @property {number[]} body.seams x of the door edges: lines down the sides
  * @property {object} cabin greenhouse on the deck
  * @property {Point[]} cabin.outline side view, its bottom edge on the shoulders, under the deck's
@@ -58,6 +63,8 @@
  * @property {{ windscreen: Screen, rearWindow: Screen }} [cabin.screens] how they curve; flat
  *   and square without
  * @property {number} [cabin.windowCorners] the side windows' corners rounded, metres
+ * @property {number} [cabin.frame] how wide the frame round the windscreen and the rear window is,
+ *   metres (scene/traffic.js FRAME unless it says)
  * @property {number} [cabin.crown] how much higher the middle of the roof is than its edges
  * @property {Point[][]} windows side windows, inside the cabin outline
  * @property {{ outline: Point[], bars?: number }[]} sideMarks convex outlines on the body sides,
@@ -65,184 +72,344 @@
  * @property {Mark[]} lamps headlamps (front view)
  * @property {Mark[]} frontMarks outlines on the front (front view)
  * @property {Mark[]} rearMarks outlines on the rear (rear view)
+ * @property {Decal[]} [decals] outlines drawn in a view, projected onto the body along it
  * @property {{ front: Bumper, rear: Bumper }} bumpers
+ * @property {Mirror} [mirrors]
+ *
+ * @typedef {object} Mirror outside mirrors (scene/traffic.js): a head with its corners cut, the
+ *   glass outlined at its back, on arms from the body. Points are [along, up, across] on the
+ *   car's left (+x, the driver's side), mirrored to the right for a side of -1. They stand out of
+ *   the car's hitbox (the physics' box), within its reach (what the Bolones must not touch);
+ *   in a crash they are dented with the body
+ * @property {number[]} sides 1 the car's left, -1 its right
+ * @property {Point} head its size: across, up
+ * @property {number} depth how deep the head is, along the car
+ * @property {number} corners how far its corners are cut
+ * @property {[number, number, number]} centre the head's middle
+ * @property {[number, number, number][][]} arms from the body to the head, each [from, to]
+ * @property {number} arm how thick the arms are
+ *
+ * @typedef {object} Decal an outline in one of the views, projected onto the body
+ * @property {"side" | "front" | "rear" | "top"} view
+ * @property {Point[]} [outline] side: [along, up]; front, rear: [across, up]; top: [along,
+ *   across]. All on one side of the centre line (front, rear, top): mirrored to the other; side
+ *   views: on both sides
+ * @property {Mark} [shape] a rectangle or an ellipse instead of the outline, in the same axes
+ * @property {number} [bars] cut into bars across its second coordinate
+ * @property {number} [columns] cut into bars across its first coordinate
+ * @property {number} [raise] a block instead: its face flat, square to the view, this far out past
+ *   the body under it (a lamp)
+ *
+ * @typedef {object} VanModel a van (scene/van.js): a box with rounded corners on wheels, the cab
+ *   at its front. Side views: x from the back of the tail lamps; top, front and rear views: w
+ *   across, from the centre line
+ * @property {string} label
+ * @property {number} mass kg
+ * @property {number} length overall, from the tail lamps to the front bumper
+ * @property {number} width overall: the lanes keep clear of it
+ * @property {Omit<TrafficModel["wheel"], "arches">} wheel tyres; per axle (rear, front): x, track
+ * @property {Van} van
+ * @property {{ front: Bumper, rear: Bumper }} bumpers
+ * @property {Mirror} [mirrors]
+ *
+ * @typedef {object} Van the body. Below the belt it runs round the plan in bands, between the
+ *   sill, the ribs pressed into it and the belt: a line all round at each; above the belt the
+ *   walls lean in up to the gutter, where the roof rounds off
+ * @property {[number, number]} ends x of the rear face and of the front face
+ * @property {number} half half width of the lower body, and of the walls at the belt
+ * @property {number} corner radius of the four corners, rounded in plan
+ * @property {number} sill height of the underside
+ * @property {number} belt height of the crease round the car where the walls begin to lean in
+ * @property {number[]} ribs heights of the ribs round the lower body, from the bottom up
+ * @property {{ y: number, half: number, rear: number }} gutter the walls' top edge: its height,
+ *   half width and the rear face's x there (the tailgate leans in from the belt up; its corners
+ *   tighten, their sides staying upright)
+ * @property {{ edge: number, crown: number, rounding: Point[] }} roof the line where its rounded
+ *   edge meets the top (height), how much higher the top's middle is, and the rounding: [how far
+ *   in from the gutter, share of the way up to the edge]
+ * @property {VanCab} cab
+ * @property {Point[][]} arches wheel arches (side view), from the rear foot on the sill over to
+ *   the front foot, their corners rounded by `archRound`; per axle (rear, front)
+ * @property {number} archRound
+ * @property {number} lip width of the flare round each arch
+ * @property {number[]} seams x of the door edges behind the cab's front doors: lines down the sides
+ * @property {{ x: Point, y: Point }[]} windows side windows (side view), corners rounded by
+ *   `windowCorners`
+ * @property {number} windowCorners
+ * @property {{ x: Point, y: Point }[]} blanks blind panels in the shape of windows, an outline
+ *   inside them `blankInset` in
+ * @property {number} blankInset
+ * @property {{ x: Point, y: Point, bars: number }[]} vents louvres on the sides, cut into bars
+ * @property {{ half: number, y: Point, corners: number }} rearWindow in the tailgate, its corners
+ *   rounded
+ * @property {number} panel half width of the front face's middle panel, round the grille and
+ *   the lamps, up to the belt
+ * @property {Mark[]} lamps headlamps (front view): lit
+ * @property {Mark[]} frontMarks outlines on the front face (front view)
+ * @property {{ x: number, y: number, r: number, depth: number }} fogLamps round, standing out of
+ *   the front face (front view): lit
+ * @property {{ w: number, y: number[], radius: Point }} tailLamps cut cones one over another at
+ *   each rear corner, from the rear face back to the car's end: across, the heights, the radius
+ *   at the body and at the lens
+ * @property {Mark[]} rearMarks outlines on the rear face (rear view)
+ * @property {{ x: number, w: Point, y: Point }} mudflaps behind the rear wheels
+ * @property {{ x: Point, half: number, y: Point }} frame the chassis under the body, between the
+ *   wheels
+ *
+ * @typedef {object} VanCab the cab's front above the belt: a ledge and a panel up from the front
+ *   face to the windscreen, corner windows wrapping round from the windscreen's sides to pillars
+ * @property {number} pillar x of the walls' front end, the front doors' front edge
+ * @property {Point} ledge x and height of the ledge's top over the front face
+ * @property {number} ledgeHalf its half width there
+ * @property {Point} screenBottom x and height of the windscreen's bottom edge
+ * @property {Point} screenTop x and height of its top edge
+ * @property {number} screenHalf half width of the windscreen
+ * @property {number} frame width of the frame round the windscreen and the corner windows
  */
 
-/** @type {Record<string, TrafficModel>} */
+/** @type {Record<string, TrafficModel | VanModel>} */
 export const TRAFFIC_MODELS = {
   polakito: {
     label: "Polakito",
-    mass: 580,
-    length: 3.054,
-    width: 1.377,
+    mass: 600,
+    // traced from the 126p Komfort's drawings (side, front, rear and top views): its big plastic
+    // bumpers
+    length: 3.129,
+    width: 1.382,
     wheel: {
-      radius: 0.252,
-      width: 0.14,
-      // a steel wheel: four round holes on the diagonals, a small hubcap
+      radius: 0.259,
+      width: 0.135,
+      // a steel wheel: six slots round a small hubcap
       rim: {
-        radius: 0.64,
-        hub: 0.18,
-        holes: { count: 4, at: 0.37, size: [0.2, 0.16], round: 0.5, turn: 0.5 },
+        radius: 0.62,
+        hub: 0.2,
+        holes: { count: 6, at: 0.42, size: [0.13, 0.24], round: 0.45, turn: 0 },
       },
-      axles: [0.691, 2.53],
+      axles: [0.732, 2.596],
       track: [1.203, 1.142],
       arches: [
-        [0.283, 0.283],
-        [0.335, 0.335],
+        [0.29, 0.256],
+        [0.307, 0.256],
       ],
     },
     body: {
-      // rear face, the engine lid up to the belt, the belt under the cabin, the bonnet, the nose
+      // the rear face, up the engine lid to the cabin, the belt under it, the bonnet, the nose
       top: [
-        [0.054, 0.671],
-        [0.204, 0.818],
-        [2.332, 0.859],
-        [2.416, 0.856],
-        [2.552, 0.848],
-        [2.688, 0.838],
-        [2.789, 0.824],
-        [2.878, 0.804],
-        [2.945, 0.778],
-        [2.986, 0.744],
-        [3.006, 0.704],
+        [0.082, 0.68],
+        [0.17, 0.78],
+        [0.36, 0.845],
+        [2.25, 0.85],
+        [2.364, 0.871],
+        [2.629, 0.843],
+        [2.904, 0.798],
+        [3.04, 0.758],
+        [3.08, 0.736],
+        [3.1, 0.7],
       ],
       shoulder: [
-        [0.054, 0.671],
-        [0.204, 0.818],
-        [2.212, 0.818],
-        [2.28, 0.811],
-        [2.552, 0.791],
-        [2.789, 0.764],
-        [2.925, 0.738],
-        [3.006, 0.704],
+        [0.082, 0.68],
+        [0.17, 0.775],
+        [0.36, 0.84],
+        [2.25, 0.845],
+        [2.364, 0.84],
+        [2.629, 0.815],
+        [2.904, 0.775],
+        [3.04, 0.735],
+        [3.1, 0.698],
       ],
-      // the crease around the car at the top of the headlamps, wrapping down at the rear
+      // the crease along the sides at the top of the lamps, down round the rear corners
       waist: [
-        [0.054, 0.524],
-        [0.156, 0.531],
-        [0.176, 0.591],
-        [0.21, 0.666],
-        [3.006, 0.674],
+        [0.082, 0.6],
+        [0.14, 0.64],
+        [0.25, 0.675],
+        [2.9, 0.68],
+        [3.04, 0.675],
+        [3.1, 0.66],
       ],
       bottom: [
-        [0.054, 0.351],
-        [0.122, 0.271],
-        [0.21, 0.197],
-        [2.789, 0.197],
-        [2.844, 0.237],
-        [2.945, 0.297],
-        [3.006, 0.377],
+        [0.082, 0.33],
+        [0.2, 0.26],
+        [0.4, 0.25],
+        [2.9, 0.25],
+        [3.02, 0.27],
+        [3.1, 0.33],
       ],
-      // rounded corners front and rear
+      // rounded ends
       width: [
-        [0.054, 0.573],
-        [0.115, 0.601],
-        [0.224, 0.64],
-        [0.414, 0.67],
-        [0.74, 0.687],
-        [1.384, 0.687],
-        [2.029, 0.682],
-        [2.416, 0.67],
-        [2.755, 0.648],
-        [2.884, 0.64],
-        [2.979, 0.58],
-        [3.006, 0.533],
+        [0.082, 0.5],
+        [0.11, 0.57],
+        [0.17, 0.625],
+        [0.27, 0.66],
+        [0.45, 0.674],
+        [1.2, 0.678],
+        [2.0, 0.676],
+        [2.6, 0.666],
+        [2.85, 0.65],
+        [2.98, 0.625],
+        [3.06, 0.59],
+        [3.1, 0.55],
       ],
-      shoulderInset: 0.045,
-      tuck: 0.051,
-      seams: [1.201, 2.178],
+      shoulderInset: 0.035,
+      tuck: 0.04,
+      flares: 0.055,
+      // the rear face leans back up to the engine lid, as in both side views of the drawings
+      tail: { lean: 0.035, from: 0.33 },
+      seams: [1.21, 2.232],
     },
-    // a fastback: the rear window runs down into the engine lid; the windscreen runs on under the
-    // bonnet's crown down to the shoulder
+    // a fastback: the rear window runs down into the engine lid; the windscreen wraps round its
+    // corners in front of the A pillars (as seen from the side), on under the bonnet's crown
     cabin: {
       outline: [
-        [0.204, 0.818],
-        [2.385, 0.807],
-        [1.912, 1.272],
-        [1.877, 1.308],
-        [1.771, 1.328],
-        [0.787, 1.328],
-        [0.659, 1.294],
-        [0.608, 1.224],
+        [0.17, 0.78],
+        [2.25, 0.82],
+        [2.052, 1.242],
+        [2.0, 1.268],
+        [1.9, 1.283],
+        [1.4, 1.293],
+        [0.9, 1.29],
+        [0.75, 1.272],
+        [0.68, 1.252],
+        [0.62, 1.225],
+        [0.33, 0.94],
       ],
-      base: 0.605,
-      roof: 0.489,
+      base: 0.59,
+      roof: 0.51,
+      crown: 0.04,
       windscreen: [
-        [2.332, 0.859],
-        [1.912, 1.272],
+        [2.233, 0.857],
+        [2.052, 1.242],
       ],
       rearWindow: [
-        [0.608, 1.224],
-        [0.334, 0.948],
+        [0.62, 1.225],
+        [0.33, 0.94],
       ],
+      screens: {
+        windscreen: { bow: [0.13, 0.02], corners: [0.03, 0.03] },
+        rearWindow: { bow: [0.04, 0], corners: [0.04, 0.03] },
+      },
+      windowCorners: 0.025,
+      frame: 0.045,
     },
     // quarter-light, door window, rear quarter window
     windows: [
       [
-        [2.043, 0.878],
-        [1.792, 1.208],
-        [1.781, 1.211],
-        [1.781, 0.861],
-        [2.056, 0.861],
+        [2.1, 0.885],
+        [1.93, 1.245],
+        [1.83, 1.245],
+        [1.83, 0.885],
       ],
       [
-        [1.753, 1.214],
-        [1.276, 1.228],
-        [1.237, 1.204],
-        [1.237, 0.861],
-        [1.753, 0.861],
+        [1.8, 1.245],
+        [1.285, 1.245],
+        [1.285, 0.885],
+        [1.8, 0.885],
       ],
       [
-        [1.167, 1.204],
-        [0.801, 1.198],
-        [0.584, 0.924],
-        [0.618, 0.864],
-        [1.154, 0.861],
+        [1.19, 1.232],
+        [0.78, 1.225],
+        [0.732, 1.205],
+        [0.616, 0.929],
+        [0.632, 0.885],
+        [1.19, 0.885],
       ],
     ],
     // the engine's air intake behind the rear quarter window
     sideMarks: [
       {
         outline: [
-          [0.584, 0.778],
-          [0.434, 0.778],
-          [0.38, 0.711],
-          [0.543, 0.711],
+          [0.661, 0.804],
+          [0.482, 0.804],
+          [0.402, 0.705],
+          [0.607, 0.705],
         ],
         bars: 4,
       },
     ],
-    // rectangular headlamps, indicators under them, a trim strip between
-    lamps: [{ x: 0.45, y: 0.614, w: 0.208, h: 0.14, round: 0.25 }],
+    // rectangular headlamps in housings, indicators under them, a trim strip between, the badge
+    lamps: [{ x: 0.44, y: 0.617, w: 0.22, h: 0.15, round: 0.15, depth: 0.012 }],
     frontMarks: [
-      { x: 0.442, y: 0.472, w: 0.155, h: 0.077, round: 0.2 },
-      { x: 0, y: 0.621, w: 0.642, h: 0.015 },
+      { x: 0.43, y: 0.48, w: 0.16, h: 0.08, round: 0.15, depth: 0.008 },
+      { x: 0, y: 0.623, w: 0.64, h: 0.014 },
+      { x: 0, y: 0.58, w: 0.13, h: 0.028, round: 0.4 },
     ],
-    // tail lamps at the corners, the number plate between them
-    rearMarks: [
-      { x: 0.44, y: 0.57, w: 0.11, h: 0.2 },
-      { x: 0, y: 0.556, w: 0.268, h: 0.2 },
+    // the light bar between the tail lamps (no number plate, as on the Bolones)
+    rearMarks: [{ x: 0, y: 0.598, w: 0.82, h: 0.086, round: 0.3 }],
+    decals: [
+      // the tail lamps round the rear corners
+      {
+        view: "rear",
+        outline: [
+          [0.47, 0.43],
+          [0.61, 0.43],
+          [0.61, 0.68],
+          [0.47, 0.68],
+        ],
+        bars: 3,
+        raise: 0.012,
+      },
+      // the louvres in the engine lid
+      {
+        view: "rear",
+        outline: [
+          [0.065, 0.775],
+          [0.36, 0.775],
+          [0.36, 0.865],
+          [0.065, 0.865],
+        ],
+        columns: 12,
+      },
+      // the door handle, the fuel cap, the indicator on the wing
+      { view: "side", shape: { x: 1.3, y: 0.765, w: 0.1, h: 0.035, round: 0.4 } },
+      { view: "side", shape: { x: 1.08, y: 0.625, w: 0.1, h: 0.1, round: 0.5 } },
+      { view: "side", shape: { x: 2.33, y: 0.7, w: 0.045, h: 0.018, round: 0.5 } },
+      // the rubbing strips along the door and the rear wing
+      { view: "side", shape: { x: 1.737, y: 0.367, w: 0.983, h: 0.1 } },
+      { view: "side", shape: { x: 1.11, y: 0.367, w: 0.16, h: 0.1 } },
     ],
-    // wrapped round the corners
+    // the driver's only (the drawings'): a small head on a short stalk from the door's front top
+    // corner, under the quarter-light
+    mirrors: {
+      sides: [1],
+      head: [0.13, 0.09],
+      depth: 0.035,
+      corners: 0.025,
+      centre: [2.12, 0.905, 0.73],
+      arms: [
+        [
+          [2.085, 0.82, 0.65],
+          [2.165, 0.82, 0.65],
+        ],
+        [
+          [2.12, 0.825, 0.66],
+          [2.12, 0.87, 0.69],
+        ],
+      ],
+      arm: 0.022,
+    },
+    // plastic, deep, wrapped round the corners
     bumpers: {
       front: {
-        y: 0.402,
-        height: 0.07,
+        y: 0.37,
+        height: 0.14,
+        depth: 0.07,
         plan: [
           [0, 0],
-          [0.48, 0.047],
-          [0.594, 0.098],
-          [0.632, 0.19],
+          [0.45, 0.01],
+          [0.6, 0.04],
+          [0.665, 0.11],
+          [0.685, 0.28],
         ],
       },
       rear: {
-        y: 0.367,
-        height: 0.07,
+        y: 0.35,
+        height: 0.14,
+        depth: 0.09,
         plan: [
           [0, 0],
-          [0.48, 0.027],
-          [0.594, 0.078],
-          [0.64, 0.176],
+          [0.45, 0.01],
+          [0.6, 0.04],
+          [0.665, 0.11],
+          [0.685, 0.31],
         ],
       },
     },
@@ -250,117 +417,122 @@ export const TRAFFIC_MODELS = {
   kredens: {
     label: "Kredens",
     mass: 1010,
-    // traced from the 1967 Fiat 125 Special's drawings (side, top, front and rear views)
-    length: 4.223,
-    width: 1.6,
+    // traced from the FSO 125p's drawings (side, front and rear views; the top view's plan from
+    // the 1967 Fiat 125 Special's drawings): the later one, its tail lamps across the rear
+    length: 4.226,
+    width: 1.63,
     wheel: {
-      radius: 0.285,
-      width: 0.17,
-      // a hubcap with eight slots round the hub
+      radius: 0.309,
+      width: 0.165,
+      // a hubcap with a ring of twelve holes round its middle
       rim: {
-        radius: 0.64,
-        hub: 0.13,
-        holes: { count: 8, at: 0.4, size: [0.13, 0.07], round: 0.2, turn: 0 },
+        radius: 0.6,
+        hub: 0.28,
+        holes: { count: 12, at: 0.43, size: [0.065, 0.065], round: 0.5, turn: 0 },
       },
-      axles: [1.063, 3.567],
-      track: [1.291, 1.313],
+      axles: [1.05, 3.559],
+      track: [1.276, 1.298],
+      // the rear one low over the tyre
       arches: [
-        [0.3, 0.245],
-        [0.373, 0.38],
+        [0.36, 0.242],
+        [0.35, 0.333],
       ],
     },
     body: {
-      // three boxes: the boot lid, the belt under the cabin, the bonnet rising to the scuttle
+      // three boxes: the boot lid, the belt under the cabin, the bonnet sloping down to the nose
       top: [
-        [0.095, 0.774],
-        [0.128, 0.807],
-        [0.161, 0.82],
-        [0.293, 0.837],
-        [0.491, 0.856],
-        [0.689, 0.872],
-        [0.83, 0.895],
-        [3.09, 0.92],
-        [3.231, 0.906],
-        [3.429, 0.897],
-        [3.627, 0.886],
-        [3.825, 0.869],
-        [3.957, 0.854],
-        [4.089, 0.831],
-        [4.155, 0.795],
+        [0.076, 0.76],
+        [0.093, 0.805],
+        [0.143, 0.856],
+        [0.3, 0.876],
+        [0.473, 0.888],
+        [0.721, 0.904],
+        [0.8, 0.935],
+        [3.0, 0.945],
+        [3.195, 0.929],
+        [3.393, 0.92],
+        [3.604, 0.9],
+        [3.79, 0.888],
+        [3.935, 0.88],
+        [4.04, 0.85],
+        [4.11, 0.789],
       ],
       shoulder: [
-        [0.095, 0.755],
-        [0.13, 0.767],
-        [0.353, 0.799],
-        [0.771, 0.837],
-        [0.95, 0.852],
-        [1.2, 0.862],
-        [1.5, 0.875],
-        [2.994, 0.877],
-        [3.134, 0.87],
-        [3.414, 0.858],
-        [3.692, 0.839],
-        [3.971, 0.82],
-        [4.117, 0.805],
-        [4.155, 0.79],
+        [0.076, 0.755],
+        [0.093, 0.795],
+        [0.143, 0.835],
+        [0.473, 0.86],
+        [0.8, 0.89],
+        [1.2, 0.9],
+        [2.9, 0.9],
+        [3.1, 0.895],
+        [3.393, 0.875],
+        [3.79, 0.85],
+        [3.935, 0.845],
+        [4.04, 0.82],
+        [4.11, 0.78],
       ],
-      // the moulding along the sides, over the wheel arches
+      // the crease along the sides under the windows
       waist: [
-        [0.095, 0.69],
-        [4.155, 0.735],
+        [0.076, 0.7],
+        [0.15, 0.8],
+        [0.5, 0.835],
+        [1.2, 0.86],
+        [3.0, 0.86],
+        [4.0, 0.81],
+        [4.11, 0.76],
       ],
       bottom: [
-        [0.095, 0.46],
-        [0.14, 0.32],
-        [0.3, 0.288],
-        [3.96, 0.287],
-        [4.06, 0.33],
-        [4.155, 0.44],
+        [0.076, 0.4],
+        [0.15, 0.3],
+        [0.5, 0.24],
+        [3.85, 0.24],
+        [4.0, 0.285],
+        [4.11, 0.43],
       ],
       width: [
-        [0.095, 0.715],
-        [0.425, 0.729],
-        [0.59, 0.743],
-        [0.755, 0.77],
-        [0.887, 0.783],
-        [1.052, 0.791],
-        [1.217, 0.795],
-        [3.4, 0.795],
-        [3.676, 0.788],
-        [3.825, 0.772],
-        [3.924, 0.755],
-        [4.05, 0.74],
-        [4.155, 0.7],
+        [0.076, 0.73],
+        [0.425, 0.745],
+        [0.59, 0.755],
+        [0.755, 0.775],
+        [0.887, 0.787],
+        [1.052, 0.795],
+        [1.217, 0.8],
+        [3.4, 0.8],
+        [3.79, 0.788],
+        [4.0, 0.77],
+        [4.11, 0.745],
       ],
       shoulderInset: 0.02,
       tuck: 0.05,
-      // the grille leans forward under the bonnet's edge, from its bottom up
-      nose: { lean: 0.05, from: 0.635 },
-      seams: [1.33, 2.094, 3.015],
+      // the front leans forward over the bumper, its top edge 7 cm ahead
+      nose: { lean: 0.07, from: 0.5 },
+      seams: [1.195, 2.065, 2.993],
     },
     // the windscreen and the rear window wrap round into slim pillars
     cabin: {
       outline: [
-        [2.958, 0.878],
-        [2.726, 1.269],
-        [2.69, 1.29],
-        [2.62, 1.3],
-        [2.3, 1.306],
-        [1.45, 1.302],
-        [1.28, 1.3],
-        [1.19, 1.29],
-        [0.949, 0.878],
+        [3.03, 0.895],
+        [2.73, 1.345],
+        [2.7, 1.362],
+        [2.62, 1.37],
+        [2.3, 1.374],
+        [1.6, 1.374],
+        [1.32, 1.37],
+        [1.22, 1.355],
+        [1.169, 1.336],
+        [0.75, 0.89],
       ],
-      base: 0.73,
-      roof: 0.651,
-      crown: 0.078,
+      base: 0.74,
+      roof: 0.635,
+      crown: 0.045,
       windscreen: [
-        [2.958, 0.878],
-        [2.726, 1.269],
+        [3.0, 0.94],
+        [2.73, 1.345],
       ],
       rearWindow: [
-        [1.19, 1.29],
-        [0.949, 0.878],
+        [1.169, 1.336],
+        [0.797, 0.94],
       ],
       screens: {
         windscreen: { bow: [0.135, 0.02], corners: [0.04, 0.03] },
@@ -368,80 +540,260 @@ export const TRAFFIC_MODELS = {
       },
       windowCorners: 0.03,
     },
-    // quarter-light, front door, rear door, the rear door's fixed glass round the C pillar
+    // quarter-light, front door, rear door, the rear door's fixed glass along the C pillar
     windows: [
       [
-        [2.901, 0.918],
-        [2.636, 1.25],
-        [2.64, 0.912],
+        [2.93, 0.965],
+        [2.665, 1.31],
+        [2.625, 1.31],
+        [2.625, 0.96],
       ],
       [
-        [2.61, 1.262],
-        [2.123, 1.266],
-        [2.131, 0.894],
-        [2.61, 0.899],
+        [2.59, 1.312],
+        [2.125, 1.316],
+        [2.125, 0.955],
+        [2.59, 0.955],
       ],
       [
-        [2.054, 1.263],
-        [1.521, 1.239],
-        [1.521, 0.885],
-        [2.054, 0.89],
+        [2.035, 1.31],
+        [1.53, 1.305],
+        [1.49, 1.28],
+        [1.49, 0.95],
+        [2.035, 0.95],
       ],
       [
-        [1.493, 1.231],
-        [1.447, 1.211],
-        [1.408, 1.175],
-        [1.369, 1.128],
-        [1.33, 1.066],
-        [1.292, 1.004],
-        [1.253, 0.942],
-        [1.232, 0.889],
-        [1.493, 0.884],
+        [1.468, 1.28],
+        [1.436, 1.28],
+        [1.25, 0.95],
+        [1.468, 0.95],
       ],
     ],
     sideMarks: [],
-    // four round headlamps in the grille, indicators at the corners
+    // four round headlamps standing out of a dark panel across the front, indicators at its ends
     lamps: [
-      { x: 0.371, y: 0.657, w: 0.167, h: 0.167, round: 0.5 },
-      { x: 0.544, y: 0.657, w: 0.167, h: 0.167, round: 0.5 },
+      { x: 0.382, y: 0.659, w: 0.16, h: 0.16, round: 0.5, depth: 0.012 },
+      { x: 0.55, y: 0.659, w: 0.16, h: 0.16, round: 0.5, depth: 0.012 },
     ],
     frontMarks: [
-      { x: 0, y: 0.66, w: 1.25, h: 0.22, bars: 5 },
-      { x: 0.655, y: 0.684, w: 0.05, h: 0.105 },
+      { x: 0, y: 0.653, w: 1.47, h: 0.2 },
+      { x: 0.687, y: 0.646, w: 0.09, h: 0.16, depth: 0.008 },
     ],
-    // tail lamps, the number plate between them
-    rearMarks: [
-      { x: 0.531, y: 0.628, w: 0.184, h: 0.188, round: 0.1 },
-      { x: 0, y: 0.646, w: 0.389, h: 0.13 },
+    // tail lamps across the rear (no number plate, as on the Bolones; no boot lock, too fine)
+    rearMarks: [{ x: 0.55, y: 0.622, w: 0.314, h: 0.157, bars: 2, depth: 0.015 }],
+    decals: [
+      // the grille between the headlamps
+      {
+        view: "front",
+        outline: [
+          [-0.263, 0.575],
+          [0.263, 0.575],
+          [0.263, 0.74],
+          [-0.263, 0.74],
+        ],
+        columns: 10,
+      },
+      // the chrome strip along the doors, the sill's, the door handles, the fuel flap
+      { view: "side", shape: { x: 2.315, y: 0.515, w: 1.77, h: 0.018 } },
+      { view: "side", shape: { x: 2.29, y: 0.317, w: 1.77, h: 0.03 } },
+      { view: "side", shape: { x: 2.2, y: 0.814, w: 0.14, h: 0.025, round: 0.4 } },
+      { view: "side", shape: { x: 1.317, y: 0.814, w: 0.15, h: 0.025, round: 0.4 } },
+      { view: "side", shape: { x: 0.374, y: 0.7, w: 0.18, h: 0.125, round: 0.15 } },
+      // the louvres in the C pillar
+      {
+        view: "side",
+        outline: [
+          [1.3, 1.2],
+          [1.25, 1.2],
+          [1.075, 0.95],
+          [1.165, 0.95],
+        ],
+        bars: 4,
+      },
     ],
-    // wrapped round the corners, with overriders
+    // as on the estate in the same drawings: both sides, a small head on a stalk from each front
+    // door's top corner, by the quarter-light
+    mirrors: {
+      sides: [-1, 1],
+      head: [0.13, 0.09],
+      depth: 0.035,
+      corners: 0.025,
+      centre: [2.93, 0.99, 0.81],
+      arms: [
+        [
+          [2.89, 0.885, 0.78],
+          [2.97, 0.885, 0.78],
+        ],
+        [
+          [2.93, 0.89, 0.775],
+          [2.93, 0.955, 0.765],
+        ],
+      ],
+      arm: 0.022,
+    },
+    // chrome bars wrapped round the corners
     bumpers: {
       front: {
-        y: 0.46,
-        height: 0.09,
+        y: 0.478,
+        height: 0.06,
+        depth: 0.1,
         plan: [
-          [0, 0.005],
-          [0.5, 0.013],
-          [0.63, 0.045],
-          [0.74, 0.095],
-          [0.775, 0.15],
-          [0.775, 0.275],
+          [0, 0],
+          [0.5, 0.008],
+          [0.65, 0.035],
+          [0.76, 0.09],
+          [0.805, 0.16],
+          [0.81, 0.3],
         ],
-        guards: { x: 0.556, width: 0.062, y: [0.36, 0.547] },
       },
       rear: {
-        y: 0.443,
-        height: 0.094,
+        y: 0.462,
+        height: 0.08,
+        depth: 0.08,
         plan: [
-          [0, 0.015],
-          [0.45, 0.022],
-          [0.672, 0.045],
-          [0.724, 0.067],
-          [0.76, 0.098],
-          [0.786, 0.143],
-          [0.79, 0.43],
+          [0, 0],
+          [0.5, 0.008],
+          [0.65, 0.035],
+          [0.76, 0.09],
+          [0.805, 0.17],
+          [0.81, 0.42],
         ],
-        guards: { x: 0.528, width: 0.059, y: [0.322, 0.544] },
+      },
+    },
+  },
+  ramses: {
+    label: "Ramses",
+    mass: 1600,
+    // traced from the Żuk A15M's drawings (Modelarz 3/1980: side, top, front and rear views),
+    // without the gear on its roof
+    length: 4.39,
+    width: 1.79,
+    wheel: {
+      radius: 0.367,
+      width: 0.17,
+      // a steel wheel, six oval windows round a big hubcap
+      rim: {
+        radius: 0.6,
+        hub: 0.3,
+        holes: { count: 6, at: 0.45, size: [0.17, 0.3], round: 0.45, turn: 0.5 },
+      },
+      axles: [1.026, 3.761],
+      track: [1.345, 1.4],
+    },
+    van: {
+      ends: [0.075, 4.334],
+      half: 0.894,
+      corner: 0.14,
+      sill: 0.47,
+      belt: 1.17,
+      ribs: [0.589, 0.69, 0.782, 0.881, 0.973, 1.069],
+      gutter: { y: 1.935, half: 0.775, rear: 0.147 },
+      roof: {
+        edge: 2.1,
+        crown: 0.043,
+        rounding: [
+          [0.03, 0.3],
+          [0.085, 0.7],
+          [0.175, 1],
+        ],
+      },
+      cab: {
+        pillar: 3.66,
+        ledge: [4.2, 1.24],
+        ledgeHalf: 0.68,
+        screenBottom: [4.12, 1.4],
+        screenTop: [3.78, 2.02],
+        screenHalf: 0.7,
+        frame: 0.05,
+      },
+      // trapezoids, their lips reaching the ribs over them
+      arches: [
+        [
+          [0.65, 0.47],
+          [0.812, 0.655],
+          [1.256, 0.655],
+          [1.425, 0.47],
+        ],
+        [
+          [3.38, 0.47],
+          [3.53, 0.747],
+          [3.969, 0.747],
+          [4.137, 0.47],
+        ],
+      ],
+      archRound: 0.08,
+      lip: 0.035,
+      seams: [2.635, 2.778],
+      // the front door's, the crew's
+      windows: [
+        { x: [2.799, 3.594], y: [1.39, 1.9] },
+        { x: [1.816, 2.577], y: [1.39, 1.9] },
+      ],
+      windowCorners: 0.035,
+      blanks: [
+        { x: [0.997, 1.761], y: [1.396, 1.9] },
+        { x: [0.28, 0.949], y: [1.396, 1.9] },
+      ],
+      blankInset: 0.07,
+      vents: [{ x: [0.28, 1.761], y: [1.218, 1.328], bars: 3 }],
+      rearWindow: { half: 0.525, y: [1.375, 1.88], corners: 0.06 },
+      panel: 0.66,
+      // round headlamps in square housings either side of a barred grille, sidelights under them
+      lamps: [{ x: 0.536, y: 0.878, w: 0.18, h: 0.18, round: 0.5 }],
+      frontMarks: [
+        { x: 0.536, y: 0.905, w: 0.212, h: 0.265, round: 0.1 },
+        { x: 0, y: 0.915, w: 0.786, h: 0.23, bars: 5 },
+        { x: 0.535, y: 0.687, w: 0.11, h: 0.09 },
+      ],
+      fogLamps: { x: 0.39, y: 0.7, r: 0.068, depth: 0.05 },
+      tailLamps: { w: 0.738, y: [0.638, 0.735, 0.832], radius: [0.045, 0.036] },
+      // no number plate, nor its lamp, as on the Bolones
+      rearMarks: [],
+      mudflaps: { x: 0.55, w: [0.54, 0.87], y: [0.15, 0.47] },
+      frame: { x: [1.5, 3.3], half: 0.42, y: [0.36, 0.465] },
+    },
+    // a lorry's: tall heads well out on two arms from each front door's front edge, beside the
+    // corner windows (232 x 145 mm, as the Żuk's)
+    mirrors: {
+      sides: [-1, 1],
+      head: [0.145, 0.232],
+      depth: 0.04,
+      corners: 0.02,
+      centre: [3.7, 1.56, 1.03],
+      arms: [
+        [
+          [3.62, 1.66, 0.81],
+          [3.7, 1.63, 0.97],
+        ],
+        [
+          [3.62, 1.46, 0.84],
+          [3.7, 1.49, 0.97],
+        ],
+      ],
+      arm: 0.022,
+    },
+    // plain bars wrapped round the corners
+    bumpers: {
+      front: {
+        y: 0.575,
+        height: 0.13,
+        plan: [
+          [0, 0],
+          [0.7, 0.005],
+          [0.8, 0.03],
+          [0.86, 0.09],
+          [0.885, 0.25],
+        ],
+      },
+      rear: {
+        y: 0.525,
+        height: 0.11,
+        plan: [
+          [0, 0.035],
+          [0.7, 0.04],
+          [0.8, 0.06],
+          [0.86, 0.11],
+          [0.885, 0.22],
+        ],
       },
     },
   },

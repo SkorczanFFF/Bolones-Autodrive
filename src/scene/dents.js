@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { evenNormals } from "./polygons.js";
 import { wireGeometry } from "./wire.js";
 
 /**
@@ -98,6 +99,7 @@ export function dent(meshes, move) {
     const position = /** @type {THREE.BufferAttribute} */ (geometry.getAttribute("position"));
     position.copyArray(shape(dents, true));
     geometry.computeVertexNormals();
+    evenNormals(geometry); // decals keep their even shading (scene/traffic.js)
     geometry.computeBoundingSphere();
     const wire = wireOf(mesh);
     if (wire) {

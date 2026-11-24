@@ -10,7 +10,7 @@ import { METRE, PARTS, POSTS, UP, groups } from "./physics.js";
  * @property {number} radius units
  * @property {number} [height] units; a palm's trunk is taller than any car
  * @property {boolean} [sways] a palm: hit, it leans and sways
- * @property {THREE.Color} color its shards
+ * @property {THREE.Color} [color] its shards; none, it sheds none (a rock does not break)
  *
  * @typedef {import("../crash.js").Party} Party
  */

@@ -46,7 +46,7 @@ export { ready } from "./crash/physics.js";
  * @typedef {import("../scene/crumple.js").Dent} Dent
  *
  * @typedef {import("./crash/crush.js").Solid & {
- *   color: THREE.Color,
+ *   color?: THREE.Color,
  *   struck: (hit: Hit, speed: number, time: number) => Dent | undefined,
  * }} Party a car or a palm in a crash: what it does to it
  */
@@ -398,6 +398,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const count = Math.round((spray.count * energy) / 1e4);
     const { shard, spark } = spray;
     for (const { color, body } of [a, b]) {
+      if (!color) continue; // a rock does not break
       const velocity = vector(body.linvel());
       const spread = shard.spread * speed;
       debris.burst(at, { count, velocity, spread, size: shard.size, life: Infinity, color });

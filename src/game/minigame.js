@@ -209,8 +209,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       const { x, z } = bounds.getCenter(new THREE.Vector3());
       const size = bounds.getSize(new THREE.Vector3());
       const at = new THREE.Vector3(x, bounds.min.y, z);
-      const color = colorOf(materials.wire.rock);
-      return { object: rock, at, radius: (size.x + size.z) / 4, height: size.y, color };
+      return { object: rock, at, radius: (size.x + size.z) / 4, height: size.y };
     };
     /**
      * @param {THREE.Object3D} object

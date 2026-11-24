@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
-import { MINIGAME, TRAFFIC } from "../src/config.js";
+import { MINIGAME, PALETTE, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
 import { createCrash as create, ready } from "../src/game/crash.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
@@ -434,20 +434,39 @@ describe("crash", () => {
     expect(palm.quaternion.angleTo(new THREE.Quaternion())).toBe(0);
   });
 
-  it("stops a car sliding off the road at a rock, low as it is: the rock does not move", () => {
+  it("stops a car sliding off the road at a rock, low as it is: the rock stands, unbroken", () => {
     const scene = new THREE.Scene();
     const bolones = car(0, 0, BOLONES, 1160, 0);
     const sliding = car(-8, 20, POLAKITO, 580, 0);
     sliding.velocity.set(-20, 0, 0); // sideways, off the road
+    const red = new THREE.Color(1, 0, 0);
+    sliding.color = red;
     const rock = new THREE.Object3D();
     const post = { object: rock, at: new THREE.Vector3(-14, 0, 20), radius: 1, height: 0.8 };
     scene.add(bolones.object, sliding.object, rock);
-    const crash = createCrash(scene, [bolones, sliding], () => [
-      { ...post, color: new THREE.Color() },
-    ]);
-    run(crash);
+    const crash = createCrash(scene, [bolones, sliding], () => [post]);
+    run(crash, 1);
     expect(sliding.object.position.x).toBeGreaterThan(-13); // stopped at it, not over or through
     expect(rock.quaternion.angleTo(new THREE.Quaternion())).toBe(0); // a rock does not lean
+    // shards of the car and sparks only, either fading: the rock sheds none
+    const debris = /** @type {THREE.Mesh} */ (
+      scene.children.find((child) => child instanceof THREE.Mesh)
+    );
+    const colors = debris.geometry.getAttribute("color");
+    const spark = new THREE.Color(PALETTE.headlight);
+    const of = new THREE.Color();
+    /** Whether a colour is this one, dimmed. @param {THREE.Color} like */
+    const dimmed = (like) => {
+      const k = Math.max(of.r, of.g, of.b) / Math.max(like.r, like.g, like.b);
+      return of.clone().sub(like.clone().multiplyScalar(k)).getHex() === 0;
+    };
+    let shards = 0;
+    for (let i = 0; i < colors.count; i++) {
+      of.fromBufferAttribute(colors, i);
+      if (of.equals(red)) shards++;
+      else expect(dimmed(red) || dimmed(spark)).toBe(true);
+    }
+    expect(shards).toBeGreaterThan(0);
   });
 
   it("stands up the palms that come along as the camera goes on, where they are", () => {

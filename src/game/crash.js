@@ -513,7 +513,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
 
     /**
      * Whether a car coming along there could stop for the cars ahead in its way, braking hard at
-     * most: else the road is jammed up to there.
+     * most: else the road is jammed up to there. One who will not see them in time (driving.seen)
+     * only comes along clear of them, the gap drivers keep (MINIGAME.crash.drivers).
      *
      * @param {Car} car upright on the road, in the scene
      */
@@ -524,8 +525,10 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
         velocity: car.velocity,
         half: size.toArray(),
       };
+      const seen = lookAhead(coming, looking);
+      if (car.driving?.seen) return !seen || seen.gap > MINIGAME.crash.drivers.gap * METRE;
       const hard = hardest(car.driving);
-      return stopping(lookAhead(coming, looking), hard) <= hard;
+      return stopping(seen, hard) <= hard;
     },
 
     /** How much power the Bolones' engine has left in the player's hands (0 to 1, stalling). */

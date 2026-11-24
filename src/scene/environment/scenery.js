@@ -32,9 +32,12 @@ export function createScenery({ scene, models, materials }) {
     dress(models[key], materials.solid.rock, materials.wire.rock),
   );
 
+  // on past the camera too (SPAWN.behind), where a crash can throw the cars
+  const endZ = SPAWN.endZ + SPAWN.behind;
   const palmSpawner = createSpawner({
     parent: scene,
     speed: WORLD.speed,
+    endZ,
     interval: () => palmCfg.interval,
     minInterval: palmCfg.minInterval,
     create: () => palmCfg.x.map((x) => place(palm, x)),
@@ -43,6 +46,7 @@ export function createScenery({ scene, models, materials }) {
   const rockSpawner = createSpawner({
     parent: scene,
     speed: WORLD.speed,
+    endZ,
     interval: () => rockCfg.interval,
     minInterval: rockCfg.minInterval,
     create: () => [place(pick(rocks), randomIn(pick(rockCfg.xRanges)), randomIn(rockCfg.scale))],

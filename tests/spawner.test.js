@@ -203,6 +203,28 @@ describe("spawner fade-in", () => {
     expect(mesh.material).toBe(shared);
   });
 
+  it("keeps its instances whole past endZ while keeping (a crash has them), till cleared", () => {
+    const shared = new THREE.MeshBasicMaterial();
+    const { spawner, parent } = setup({
+      speed: 100,
+      interval: () => 10,
+      fadeOut: 1,
+      create: () => [new THREE.Group().add(new THREE.Mesh(new THREE.BoxGeometry(), shared))],
+    });
+    run(spawner, 10); // spawned at z -100
+    const object = spawner.objects[0];
+    run(spawner, 1.5); // z 50: fading out
+    expect(meshOf(object).material).not.toBe(shared);
+    spawner.keeping = true;
+    spawner.update(1 / 60, 0);
+    expect(meshOf(object).material).toBe(shared); // whole again
+    object.position.z = 150; // pushed past endZ
+    spawner.update(1 / 60, 0);
+    expect(parent.children).toContain(object);
+    spawner.clear();
+    expect(spawner.keeping).toBe(false);
+  });
+
   it("restores shared materials when instances are cleared mid-fade", () => {
     const shared = new THREE.MeshBasicMaterial();
     const { spawner } = fadingSetup(shared);

@@ -54,7 +54,8 @@ export function createSpawner({
   function opacityOf(object) {
     const age = /** @type {number} */ (ages.get(object));
     const fadingIn = fadeIn > 0 ? age / fadeIn : 1;
-    const fadingOut = fadeOutDistance > 0 ? (endZ - object.position.z) / fadeOutDistance : 1;
+    const fadingOut =
+      fadeOutDistance > 0 && !spawner.keeping ? (endZ - object.position.z) / fadeOutDistance : 1;
     return MathUtils.smoothstep(Math.min(fadingIn, fadingOut), 0, 1); // eased, not linear
   }
 
@@ -64,6 +65,11 @@ export function createSpawner({
     density: 1,
     /** When false, existing objects keep moving but nothing new spawns. */
     spawning: true,
+    /**
+     * When true, objects stay past endZ, whole once faded in: something else moves them (after a
+     * crash the physics, which may still run into them) until clear().
+     */
+    keeping: false,
 
     /** @param {number} speedMultiplier */
     currentInterval(speedMultiplier) {
@@ -82,7 +88,7 @@ export function createSpawner({
       for (let i = objects.length - 1; i >= 0; i--) {
         const object = objects[i];
         object.position.z += velocity * dt;
-        if (object.position.z > endZ) {
+        if (object.position.z > endZ && !spawner.keeping) {
           fader.release(object);
           ages.delete(object);
           parent.remove(object);
@@ -139,6 +145,7 @@ export function createSpawner({
       objects.length = 0;
       ages.clear();
       due = 0;
+      spawner.keeping = false;
     },
   };
 

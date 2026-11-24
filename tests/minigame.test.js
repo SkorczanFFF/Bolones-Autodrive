@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CAR, MINIGAME, SPEED, WORLD } from "../src/config.js";
 import { ready } from "../src/game/crash.js";
-import { createLanePicker, createMinigame } from "../src/game/minigame.js";
+import { MOVING, createLanePicker, createMinigame } from "../src/game/minigame.js";
 import { createTrafficModels, widestReach } from "../src/scene/traffic.js";
 import { testCar, testMaterials } from "./helpers.js";
 
@@ -79,9 +79,11 @@ describe("crash", () => {
     const at = came[0].position.z;
     run(0.5);
     expect(came[0].position.z).toBeGreaterThan(at);
+    // and on while the camera goes on along the road, then no more
+    for (let t = 0; t < 10 && minigame.wreck(1 / 60, 0) > MOVING; t += 1 / 60);
     for (const other of traffic()) seen.add(other);
     run(3);
-    expect(traffic().filter((other) => !seen.has(other))).toEqual([]); // no more
+    expect(traffic().filter((other) => !seen.has(other))).toEqual([]);
     minigame.reset();
   });
 });

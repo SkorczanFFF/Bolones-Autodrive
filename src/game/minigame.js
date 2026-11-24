@@ -74,6 +74,9 @@ function hitboxOf(car, target, which = "hitbox") {
   return target;
 }
 
+/** Below this (of WORLD.speed) the camera has come to rest after a crash. */
+export const MOVING = 0.05;
+
 /** The heights a palm's trunk is measured at for a crash: where the cars hit it, units. */
 const TRUNK = [0.5, 1.8];
 
@@ -131,6 +134,9 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   /** @type {Mode} */
   let mode = "dodge";
   let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
+  let pileup = 0; // crash mode: the share of the late traffic that runs in, rolled each game
+  let keepComing = MINIGAME.crash.keepComing; // s, this game
+  let forward = 0; // after a crash: how fast the camera goes on along the road, of WORLD.speed
 
   /**
    * How fast the traffic towards the Bolones goes over the road (+z), units/s.
@@ -189,6 +195,12 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     other.position.set(x, TRAFFIC.y, SPAWN.startZ);
     other.rotation.y = sameWay ? Math.PI : 0;
     other.userData.sameWay = sameWay;
+    // after a crash, in crash mode as many as rolled do not see the wreck in time, coming in line
+    // with a car of it
+    other.userData.blind = Boolean(crash) && Math.random() < pileup;
+    if (crash && other.userData.blind) {
+      other.position.x = pick(crash.wrecks).object.getWorldPosition(new THREE.Vector3()).x;
+    }
     if (crash && !crash.room(asCar(other))) return [];
     other.userData.scored = false;
     spawned.push(other);
@@ -247,13 +259,17 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   };
 
   /**
-   * How the traffic's drivers react and brake after a crash (MINIGAME.modes' `drivers`).
+   * How a car's driver reacts and brakes after a crash (MINIGAME.modes' `drivers`): one who does
+   * not see it in time, `pileup.seen` seconds late.
    *
+   * @param {THREE.Object3D} other
    * @returns {import("./crash/drivers.js").Driving | undefined}
    */
-  const drivingOf = () => {
+  const drivingOf = (other) => {
     const rules = MINIGAME.modes[mode];
-    return "drivers" in rules ? rules.drivers : undefined;
+    const driving = "drivers" in rules ? rules.drivers : undefined;
+    if (!other.userData.blind || !("pileup" in rules)) return driving;
+    return { ...driving, seen: rules.pileup.seen };
   };
 
   /**
@@ -270,7 +286,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     color: colorOf(materials.wire.traffic),
     onCrash: lampsOut(other),
     label: other.userData.label,
-    driving: drivingOf(),
+    driving: drivingOf(other),
   });
 
   /**
@@ -286,8 +302,11 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     pace = level;
     coming = closing(world, level);
     since = 0;
+    forward = 0;
     spawned.length = 0; // the traffic there is goes in as it is
     sameWay.spawning = false; // going away from the crash
+    // the physics has the traffic now: wherever it goes, it stays to be seen (and hit)
+    for (const stream of streams) stream.keeping = true;
     const road = WORLD.speed * world;
     // every palm and rock by the road, measured where it is when it comes up
     /** @type {WeakMap<THREE.Object3D, import("./crash.js").Post>} */
@@ -377,7 +396,11 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       reset();
       mode = value;
       platoon = 0;
-      oncoming.density = MINIGAME.modes[mode].density;
+      const rules = MINIGAME.modes[mode];
+      oncoming.density = rules.density;
+      pileup = "pileup" in rules ? randomIn(rules.pileup.share) : 0;
+      const longer = "pileup" in rules ? rules.pileup.longer : 1;
+      keepComing = MINIGAME.crash.keepComing * (1 + (longer - 1) * pileup);
       if (mode !== "overtake") return;
       sameWay.spawning = true;
       sameWay.prewarm(0.25, -overtake.ahead);
@@ -473,13 +496,14 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     wreck(dt, which) {
       if (!crash) return 0;
       since += dt;
-      // the traffic keeps coming a while (MINIGAME.crash.keepComing), into the crash; the physics
-      // moves it, the spawner still fades it
-      oncoming.spawning = since < MINIGAME.crash.keepComing;
+      // the traffic keeps coming a while into the crash, and on while the camera goes on along
+      // the road; the physics moves it, the spawner fades it in
+      oncoming.spawning = since < keepComing || forward > MOVING;
       oncoming.update(dt, 0, coming);
       sameWay.update(dt, 0);
       for (const other of spawned.splice(0)) crash.join(asCar(other));
-      return crash.update(dt, which) / WORLD.speed;
+      forward = crash.update(dt, which) / WORLD.speed;
+      return forward;
     },
 
     /** What the cars that crashed are called, in the order they did (wreckCentre's numbers). */

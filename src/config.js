@@ -451,6 +451,7 @@ export const SPEED = {
 export const SPAWN = {
   startZ: -WORLD.length / 2,
   endZ: WORLD.length / 2,
+  behind: 150, // units palms and rocks go on past endZ, behind the camera, where crashes throw cars
   fadeIn: 0.8, // seconds spawned objects take to fade in (no popping up in front of the car)
   fadeOut: 0.8, // seconds (at speed 1) objects take to fade out before endZ (no popping out behind)
   palms: {
@@ -541,7 +542,7 @@ export const MINIGAME = {
      * up to `top` m/s until its engine stalls `stall` s after the crash; let go, it brakes
      * gently. */
     player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
-    keepComing: 2.5, // s the traffic keeps coming after a crash, where it can stop for the jam
+    keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
      * height up (unless the model says): cars are heavy low down, a hit pushes them more than it
      * tips them. It rides springs bouncing `bounce` times a second, damped `damping` of critical,
@@ -629,7 +630,11 @@ export const MINIGAME = {
      * Crash: the traffic comes at the Bolones at `start` km/h, and the crash is the goal. It
      * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel or
      * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
-     * Its drivers are a little slower to react: a few more pile in.
+     * Its drivers are a little slower to react: a few more pile in. How big the pile-up gets is
+     * rolled each game: a share (`pileup.share`) of the traffic coming along after the crash does
+     * not see the wreck in time (only `seen` seconds later) and runs into it, coming in line with
+     * a car of it, and the traffic keeps coming as much as `longer` times as long at a share of 1
+     * (MINIGAME.crash.keepComing).
      */
     crash: {
       every: 10,
@@ -639,6 +644,7 @@ export const MINIGAME = {
       part: 20,
       post: 20,
       drivers: { reaction: [1, 1.8] },
+      pileup: { share: [0.2, 0.9], seen: 3, longer: 2 },
     },
     /**
      * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the

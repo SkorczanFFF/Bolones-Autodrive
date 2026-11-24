@@ -254,6 +254,24 @@ describe("crash", () => {
     expect(late.object.position.z).toBeCloseTo(at, 2); // stopped
   });
 
+  it("runs a car coming along later into the wreck when its driver is slow to see it", () => {
+    const ends = (/** @type {number} */ seen) => {
+      const scene = new THREE.Scene();
+      const bolones = car(0, 0, BOLONES, 1160, 0);
+      const other = car(0, -8, POLAKITO, 580, 0); // the wreck, standing
+      scene.add(bolones.object, other.object);
+      const crash = create(scene, [bolones, other], undefined, () => 0.99);
+      run(crash, 1);
+      const late = { ...car(0, -60, POLAKITO, 580, 20), driving: { seen } };
+      scene.add(late.object);
+      crash.join(late);
+      run(crash, 6);
+      return crash.wrecks.includes(late);
+    };
+    expect(ends(0)).toBe(false); // sees it at once
+    expect(ends(3)).toBe(true);
+  });
+
   it("counts a car that only touched the wreck in it, not in its tally", () => {
     const scene = new THREE.Scene();
     const bolones = car(0, 0, BOLONES, 1160, 0);
@@ -291,6 +309,14 @@ describe("crash", () => {
     };
     expect(coming(-40)).toBe(false); // it could not stop for the wreck
     expect(coming(-200)).toBe(true);
+    // one who will not see the wreck in time: room just clear of it
+    const blind = (/** @type {number} */ z) => {
+      const late = { ...car(0, z, POLAKITO, 580, 28), driving: { seen: 3 } };
+      scene.add(late.object);
+      return crash.room(late);
+    };
+    expect(blind(-40)).toBe(true);
+    expect(blind(-14)).toBe(false); // on top of the wreck
   });
 
   it("has a driver who sees the wreck from afar stop well short of it, braking calmly, straight on", () => {

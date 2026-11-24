@@ -46,6 +46,8 @@ export function lookAhead(car, others) {
  * @typedef {object} Driving how a car's driver reacts and brakes, if not as MINIGAME.crash
  * @property {number[]} [reaction] seconds, at random
  * @property {number} [brake] the most they brake, of friction.brake
+ * @property {number} [seen] coming along after the crash, the seconds they take to see the wreck
+ *   (none: at once)
  */
 
 /**
@@ -80,13 +82,14 @@ export function stopping(seen, hard = hardest()) {
  * @param {boolean} swerves whether they may swerve (not the Bolones' driver: the player crashed)
  * @param {() => number} random in [0, 1)
  * @param {number} [joined] game seconds since the crash they came along at, having seen it ahead
- *   all the way: they act at once
+ *   (driving.seen)
  * @param {Driving} [driving] how they react and brake, if not as MINIGAME.crash
  */
 export function createDriver(vehicle, swerves, random, joined, driving) {
   const { friction, reaction, drivers, player } = MINIGAME.crash;
   const { randomIn } = createRandom(random);
-  const reactAt = joined ?? randomIn(driving?.reaction ?? reaction);
+  const reactAt =
+    joined === undefined ? randomIn(driving?.reaction ?? reaction) : joined + (driving?.seen ?? 0);
   const hard = hardest(driving);
   const steer =
     swerves && random() < drivers.share

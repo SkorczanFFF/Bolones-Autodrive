@@ -14,8 +14,9 @@ describe("game state machine", () => {
     expect(nextState("countdown", "start")).toBeNull();
   });
 
-  it("F enters free ride only from the menu or game over", () => {
+  it("F (or its card) enters free ride only from the menu, the list or game over", () => {
     expect(nextState("idle", "free")).toBe("free");
+    expect(nextState("select", "free")).toBe("free");
     expect(nextState("gameover", "free")).toBe("free");
     expect(nextState("playing", "free")).toBeNull();
   });

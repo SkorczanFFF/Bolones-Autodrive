@@ -18,4 +18,9 @@ export const ICONS = {
   arrowRight: svg('<path d="M4 12h16" /><path d="M14 6l6 6-6 6" />'),
   arrowUp: svg('<path d="M12 20V4" /><path d="M6 10l6-6 6 6" />'),
   arrowDown: svg('<path d="M12 4v16" /><path d="M6 14l6 6 6-6" />'),
+  /** The Tab key's two arrows, each to its stop: on to the next one and back. */
+  tab: svg(
+    '<path d="M3 8h15" /><path d="M14 4l4 4-4 4" /><path d="M21 3v10" />' +
+      '<path d="M21 16H6" /><path d="M10 12l-4 4 4 4" /><path d="M3 11v10" />',
+  ),
 };

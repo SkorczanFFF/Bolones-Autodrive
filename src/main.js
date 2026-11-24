@@ -2,7 +2,7 @@ import "@fontsource/yellowtail/latin.css";
 import "@fontsource/vt323/latin.css";
 import "./style.css";
 import * as THREE from "three";
-import { ASSETS, TEXT } from "./config.js";
+import { ASSETS, MINIGAME, TEXT } from "./config.js";
 import { createView } from "./core/renderer.js";
 import { createLoop } from "./core/loop.js";
 import { detectDevice } from "./core/device.js";
@@ -74,9 +74,19 @@ async function main() {
   const game = createGame({ view, world, car, minigame, tweens, input, hud, menu });
   const stats = createDevStats(view.renderer, input);
 
+  // touch screens play the minigames sideways; held upright, a minigame waits for the phone to
+  // turn (the HUD asks for it)
+  input.onPress((action) => {
+    if (action === "start" || action in MINIGAME.modes) device.sideways();
+  });
+  const waiting = () =>
+    device.touch &&
+    device.upright.matches &&
+    (game.state === "countdown" || game.state === "playing");
+
   loop.add(tweens.update);
-  loop.add(game.update); // sets the world's speed for this frame
-  loop.add(world.update);
+  loop.add((dt) => waiting() || game.update(dt)); // sets the world's speed for this frame
+  loop.add((dt) => waiting() || world.update(dt));
   loop.add(stats.update);
 
   loader.finish();

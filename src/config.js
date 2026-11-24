@@ -706,8 +706,9 @@ export const CRT = {
  * @property {string} [label] keycap text in the UI; actions without one are not advertised
  * @property {boolean} [optional] its keys keep doing what they do in the browser (Tab moves the
  *   focus) until the game arms the action (input.arm)
- * @property {"enter" | "arrowLeft" | "arrowRight" | "arrowUp" | "arrowDown"} [icon] drawn instead of the label (ui/icons.js):
- *   the UI font has no glyph for these keys; the label becomes the accessible name
+ * @property {"enter" | "arrowLeft" | "arrowRight" | "arrowUp" | "arrowDown" | "tab"} [icon] drawn
+ *   instead of the label (ui/icons.js): the UI font has no glyph for these keys; the label becomes
+ *   the accessible name
  */
 
 /** Player actions (core/input.js): their keys and how the UI shows them. @type {Record<Action, ActionKeys>} */
@@ -724,7 +725,7 @@ export const ACTIONS = {
   faster: { keys: ["ArrowUp", "KeyW"], label: "Up arrow", icon: "arrowUp" },
   // overtake's brake
   slower: { keys: ["ArrowDown", "KeyS"], label: "Down arrow", icon: "arrowDown" },
-  next: { keys: ["Tab"], label: "Tab", optional: true }, // the next car of a wreck
+  next: { keys: ["Tab"], label: "Tab", icon: "tab", optional: true }, // the next car of a wreck
   stats: { keys: ["F10"] }, // developer overlay, not advertised in the UI
   menu: { keys: ["KeyH"], label: "H" },
   glow: { keys: ["KeyG"], label: "G" },
@@ -841,13 +842,17 @@ export const TEXT = {
   loading: "LOADING",
   logoScript: "Bolones",
   logoCaps: "AUTODRIVE",
-  menuStart: "MINI GAME",
+  press: "PRESS", // PRESS ⏎ TO START
+  toStart: "TO START",
+  tapToStart: "TAP TO START",
+  sideways: "The game goes full screen and turns sideways",
   dodge: "DODGE",
   dodgeAbout: "Weave through the oncoming traffic: a point for every car you pass.",
   crash: "CRASH",
   crashAbout: "Crash into it on purpose: the bigger the wreck, the more points.",
   overtake: "OVERTAKE",
   overtakeAbout: "Pass the slow cars going your way through the oncoming lane: a point each.",
+  freeRideAbout: "Just drive, nothing to hit: recolor and reshape the scene in the side panel.",
   choose: "choose",
   play: "play",
   again: "AGAIN",
@@ -868,6 +873,8 @@ export const TEXT = {
   cars: "CARS",
   tally: { crush: "CRUSH", parts: "PARTS OFF", posts: "PALMS & ROCKS" },
   lookAround: "Drag to look around, scroll to pull back",
+  lookAroundTouch: "Drag to look around, pinch to pull back",
+  turnSideways: "Turn your phone sideways to play",
   driveOn: "drive the wreck on",
   nextCar: "Next car of the crash",
   bolones: "Bolones",

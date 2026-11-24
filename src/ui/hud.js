@@ -38,8 +38,8 @@ function replay(element, className) {
  * config.ACTIONS (`data-key`) and icons from ui/icons.js (`data-icon`). Buttons carry a
  * `data-action` and feed the same actions as the keyboard; `data-hold` buttons are held like keys.
  *
- * Touch screens (`html[data-input="touch"]`, core/device.js) get no minigame for now and no key
- * hints; free ride shows on-screen steering and an exit button instead.
+ * Touch screens (`html[data-input="touch"]`, core/device.js) get no key hints but the keys on
+ * screen, held like them (style.css shows them).
  *
  * @param {Pick<ReturnType<typeof import("../core/input.js").createInput>, "dispatch" | "hold">} input
  * @param {HTMLElement} [root]
@@ -155,6 +155,13 @@ export function createHud(
       setMenuVisible(document.body.dataset.menu === "hidden");
     },
 
+    /** Shows what H hid. @returns {boolean} whether it was hidden */
+    reveal() {
+      const hidden = document.body.dataset.menu === "hidden";
+      setMenuVisible(true);
+      return hidden;
+    },
+
     /** @param {import("../game/state.js").GameState} state */
     setState(state) {
       document.body.dataset.state = state;
@@ -178,9 +185,9 @@ export function createHud(
     },
 
     /**
-     * The minigame chosen in their list: lit up.
+     * What is chosen in the list, a minigame or free ride: lit up.
      *
-     * @param {Mode} chosen
+     * @param {Mode | "free"} chosen
      */
     setChoice(chosen) {
       for (const game of games) {
@@ -269,12 +276,14 @@ export function createHud(
     },
 
     /**
-     * The hint to drive the wreck on, while its engine runs (crash mode's game over).
+     * The hint to drive the wreck on, while its engine runs (game over); on a touch screen, the
+     * arrows and the pedals.
      *
      * @param {boolean} running
      */
     setDriveOn(running) {
       driveOn.hidden = !running;
+      root.toggleAttribute("data-drive-on", running);
     },
 
     /**

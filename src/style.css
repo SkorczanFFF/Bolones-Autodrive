@@ -552,7 +552,7 @@ kbd {
     0 0 8px var(--aqua);
 }
 
-/* equal-width button columns (menu: 2, game over: 3) */
+/* equal-width button columns (game over: 3, the list: 4) */
 /* columns share the widest content, so the grid is as narrow as its longest button */
 .button-grid {
   display: grid;
@@ -582,7 +582,58 @@ kbd {
   margin-top: auto;
 }
 
-/* MINI GAME: the minigames in place of the menu's buttons and best scores, a card each */
+.hud__start {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 1.5vh;
+}
+
+/* PRESS START: hard-edged and blinking, as a 90s arcade machine waits for a player */
+.hud__press {
+  padding: 0.1em 0.4em;
+  font: inherit;
+  font-size: clamp(30px, 4vw, 44px);
+  letter-spacing: 0.15em;
+  color: var(--yellow);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  text-shadow: 3px 3px 0 var(--red);
+}
+
+.hud__press > span {
+  animation: press-start 1.1s steps(1) infinite;
+}
+
+.hud__press kbd {
+  font-size: 0.75em;
+  box-shadow: 3px 3px 0 var(--red);
+}
+
+.hud__press:focus-visible {
+  outline: 2px solid var(--aqua);
+  outline-offset: 4px;
+}
+
+@keyframes press-start {
+  65% {
+    opacity: 0;
+  }
+}
+
+/* touch screens: what a minigame does with the screen */
+.hud__start-note {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+  text-shadow: 2px 2px 0 var(--ui-deep);
+}
+
+/* what to play in place of PRESS START and the best scores, a card each */
 .hud__games {
   display: none;
   flex-direction: column;
@@ -600,7 +651,25 @@ kbd {
 }
 
 .hud__games > .button-grid {
-  --columns: 3;
+  --columns: 4;
+}
+
+/* two by two where four would not fit side by side */
+@media (max-width: 1150px) {
+  .hud__games > .button-grid {
+    --columns: 2;
+  }
+}
+
+/* phones held sideways: the names alone, all four side by side */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hud__games > .button-grid {
+    --columns: 4;
+  }
+
+  .hud__game-about {
+    display: none;
+  }
 }
 
 /* the name on top, the record at the bottom, the cards as tall */
@@ -640,23 +709,6 @@ kbd {
 .hud__record:not([hidden]) ~ .hud__record:not([hidden])::before {
   content: "·";
   margin: 0 0.5em;
-}
-
-.hud__steer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  grid-column: 1 / -1;
-  margin: 0;
-  font-size: 18px;
-  text-shadow:
-    2px 2px 0 var(--ui-deep),
-    0 0 6px var(--aqua);
-}
-
-.hud__steer kbd {
-  margin: 0 0.25em;
 }
 
 .hud__dot {
@@ -928,16 +980,20 @@ kbd {
   animation: panel-in 0.3s ease-out var(--crash-lock, 0s) backwards;
 }
 
+/* the buttons take taps, the rest lets drags through to the wreck */
 .hud__gameover-actions {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  pointer-events: auto;
 }
 
-/* the car in view: its name and number, Tab for the next */
+/* the car in view: its name and number, Tab for the next; in the corner the scene panel leaves
+   free in game over */
 .hud__wreck {
+  position: fixed;
+  top: calc(var(--corner-gap) + var(--safe-top));
+  right: calc(var(--corner-gap) + var(--safe-right));
   color: var(--yellow);
 }
 
@@ -1663,21 +1719,21 @@ kbd {
 }
 
 /* ---------- touch screens (no keyboard; core/device.js sets data-input) ----------
-   No minigame for now (it needs the arrow keys), so no best score, and no key hints; free ride
-   gets on-screen controls (.hud__touch). */
-[data-input="touch"] .hud__menu [data-action="start"],
-[data-input="touch"] .hud__best,
+   No key hints, the keys on screen instead (.hud__touch), held like them: the arrows on the left,
+   in a minigame the pedals on the right, while the wreck can still be driven on too. */
 [data-input="touch"] .button kbd,
-[data-input="touch"] .hud__steer,
-[data-input="touch"] .hud__corner {
+[data-input="touch"] .hud__corner,
+[data-input="touch"] .hud__games-keys,
+[data-input="touch"] .hud__drive-on,
+[data-input="touch"] .hud__keys-only,
+[data-input="keys"] .hud__touch-only {
   display: none !important;
 }
 
-[data-input="touch"] .hud__menu .button-grid {
-  --columns: 1;
-}
-
-[data-input="touch"] [data-state="free"] .hud__touch {
+[data-input="touch"]
+  :is([data-state="free"], [data-state="countdown"], [data-state="playing"])
+  .hud__touch,
+[data-input="touch"] [data-state="gameover"] .hud[data-drive-on] .hud__touch {
   display: flex !important;
 }
 
@@ -1688,8 +1744,14 @@ kbd {
   left: calc(16px + var(--safe-left));
   z-index: var(--z-hud);
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   pointer-events: none;
+}
+
+.hud__touch-side {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
 }
 
 .hud__touch .button {
@@ -1699,11 +1761,140 @@ kbd {
   -webkit-touch-callout: none;
 }
 
-.hud__touch-steer {
+.hud__touch-key {
   width: 76px;
   height: 76px;
   padding: 0;
   font-size: 40px;
+}
+
+/* the gas pedal: tall, under the thumb */
+.hud__touch-gas {
+  height: 112px;
+}
+
+/* narrower phones: smaller keys, clear of game over's buttons between them */
+@media (max-width: 720px) {
+  .hud__touch-key {
+    width: 60px;
+    height: 60px;
+    font-size: 32px;
+  }
+
+  .hud__touch-gas {
+    height: 88px;
+  }
+}
+
+/* free ride has no pedals: the way back between the arrows and their place */
+[data-state="free"] .hud__touch-pedals {
+  visibility: hidden;
+}
+
+/* a minigame: the way back in the corner, clear of the thumbs; game over has its own */
+:is([data-state="countdown"], [data-state="playing"]) .hud__touch-exit {
+  position: fixed;
+  top: calc(var(--corner-gap) + var(--safe-top));
+  left: calc(var(--corner-gap) + var(--safe-left));
+}
+
+[data-state="gameover"] .hud__touch-exit {
+  visibility: hidden;
+}
+
+/* the speedometer between the arrows and the pedals */
+[data-input="touch"] .hud__speedometer {
+  right: 50%;
+  translate: 50% 0;
+  align-items: center;
+}
+
+/* held upright, a minigame waits for the phone to turn (main.js) */
+@media (orientation: portrait) {
+  [data-input="touch"] :is([data-state="countdown"], [data-state="playing"]) .hud__turn {
+    display: flex !important;
+  }
+}
+
+.hud__turn {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-hud) + 2);
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+  padding: 16px;
+  font-size: 28px;
+  text-align: center;
+  background-color: color-mix(in srgb, var(--ui-deep) 85%, transparent);
+  text-shadow: 0 0 6px var(--aqua);
+}
+
+.hud__turn-phone {
+  width: 44px;
+  height: 76px;
+  border: 3px solid var(--aqua);
+  border-radius: 8px;
+  box-shadow: 0 0 8px var(--aqua);
+  animation: turn-phone 2.4s ease-in-out infinite;
+}
+
+@keyframes turn-phone {
+  0%,
+  25% {
+    rotate: 0deg;
+  }
+  50%,
+  85% {
+    rotate: -90deg;
+  }
+  100% {
+    rotate: 0deg;
+  }
+}
+
+/* the car switcher's two arrows show on touch screens too, a plain icon there */
+[data-input="touch"] .hud__wreck kbd {
+  display: inline-block !important;
+  border: 0;
+}
+
+/* touch screens: every button big enough for a finger */
+[data-input="touch"] .button {
+  min-height: 40px;
+}
+
+/* low screens (phones held sideways): game over smaller, with room between its parts */
+@media (max-height: 500px) {
+  .hud__gameover {
+    padding-top: calc(4px + var(--safe-top));
+    padding-bottom: calc(12px + var(--safe-bottom));
+  }
+
+  .hud__gameover-title {
+    font-size: 48px;
+  }
+
+  .hud__result {
+    min-width: 150px;
+    padding: 2px 18px 4px;
+  }
+
+  .stat__value.hud__final-score {
+    font-size: 44px;
+  }
+
+  .hud__facts,
+  .hud__final-best,
+  .hud__gameover-hint {
+    margin-top: 4px;
+    font-size: 15px;
+  }
+
+  .hud__gameover-actions {
+    gap: 8px;
+  }
 }
 
 /* lil-gui sits in the top right corner; keep it out of the notch */

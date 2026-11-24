@@ -2,7 +2,7 @@
  * Game states and the only allowed transitions between them. Pure: no three.js, no DOM.
  *
  * idle      - menu, car parked, orbit camera
- * select    - the minigames to pick from (the menu's MINI GAME), as in the menu
+ * select    - what to play: the minigames and free ride, as in the menu
  * free      - free ride: steering without obstacles
  * countdown - 3-2-1 before the minigame
  * playing   - minigame running
@@ -15,7 +15,7 @@
 /** @type {Record<GameState, Partial<Record<GameEvent, GameState>>>} */
 const TRANSITIONS = {
   idle: { start: "select", free: "free" },
-  select: { start: "countdown", exit: "idle" },
+  select: { start: "countdown", free: "free", exit: "idle" },
   free: { start: "select", exit: "idle" },
   countdown: { exit: "idle", timeout: "playing" },
   playing: { exit: "idle", crash: "gameover" }, // start is ignored on purpose (v1 bug: reset mid-game)

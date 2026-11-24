@@ -56,13 +56,20 @@ function setup() {
   };
   /** @type {Record<string, any[][]>} the arguments of every HUD call, by its name */
   const hudCalls = {};
+  let hidden = false; // H hid the HUD, as ui/hud.js keeps it
   const hud = new Proxy(
     {},
     {
       get:
         (_, name) =>
-        (/** @type {any[]} */ ...args) =>
-          (hudCalls[String(name)] ??= []).push(args),
+        (/** @type {any[]} */ ...args) => {
+          (hudCalls[String(name)] ??= []).push(args);
+          if (name === "toggleMenu") hidden = !hidden;
+          if (name !== "reveal" && name !== "setState") return undefined;
+          const was = hidden;
+          hidden = false;
+          return was;
+        },
     },
   );
   const menu = { show: () => calls.menuShow++, hide() {}, randomize: () => calls.menuRandomize++ };
@@ -326,6 +333,17 @@ describe("crash", () => {
     expect(calls.menuShow).toBe(shows); // the scene GUI waits
   });
 
+  it("has ESC bring back the HUD H hid first, then leave", () => {
+    const { game, input, run, crash } = setup();
+    crash();
+    run(MINIGAME.crash.lock + 1 / 60);
+    input.dispatch("menu");
+    input.dispatch("exit");
+    expect(game.state).toBe("gameover");
+    input.dispatch("exit");
+    expect(game.state).toBe("idle");
+  });
+
   it("hands the camera over at once: turn it round and pull it back, H hides the HUD", () => {
     const { input, controls, run, crash, hudCalls } = setup();
     crash();
@@ -419,8 +437,11 @@ describe("minigames", () => {
     input.dispatch("start");
     expect(game.state).toBe("select");
     expect(hudCalls.setChoice.at(-1)).toEqual(["dodge"]);
-    input.dispatch("left"); // round to the last
+    input.dispatch("left"); // round to the last: free ride
+    expect(hudCalls.setChoice.at(-1)).toEqual(["free"]);
+    input.dispatch("left");
     expect(hudCalls.setChoice.at(-1)).toEqual(["overtake"]);
+    input.dispatch("right");
     input.dispatch("right");
     input.dispatch("right");
     expect(hudCalls.setChoice.at(-1)).toEqual(["crash"]);
@@ -435,6 +456,19 @@ describe("minigames", () => {
     input.dispatch("exit");
     input.dispatch("start"); // the list remembers the last one
     expect(hudCalls.setChoice.at(-1)).toEqual(["crash"]);
+  });
+
+  it("has free ride last in the list: ENTER on it rides, the list lights it next time", () => {
+    const { game, input, hudCalls } = setup();
+    input.dispatch("start");
+    input.dispatch("left");
+    input.dispatch("start");
+    expect(game.state).toBe("free");
+    input.dispatch("exit");
+    input.dispatch("start");
+    expect(hudCalls.setChoice.at(-1)).toEqual(["free"]);
+    input.dispatch("free"); // its card clicked
+    expect(game.state).toBe("free");
   });
 
   it("plays one clicked in the list at once; ESC goes back, the camera left be", () => {

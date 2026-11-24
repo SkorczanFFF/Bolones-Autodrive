@@ -61,20 +61,20 @@
             <span data-text="overtake"></span> <span data-value></span>
           </span>
         </p>
-        <!-- equal columns keep both buttons the same width; the steering hint spans both -->
-        <div class="button-grid hud__bottom">
-          <button class="button button--primary hud__fade" type="button" data-action="start">
-            <span data-text="menuStart"></span><kbd data-key="start"></kbd>
+        <!-- PRESS START, as an arcade machine waits for a player: ENTER (a tap) lists what to play;
+             on a touch screen, what a minigame does with it -->
+        <div class="hud__start hud__bottom hud__fade">
+          <button class="hud__press" type="button" data-action="start">
+            <span class="hud__keys-only"
+              ><span data-text="press"></span> <kbd data-key="start"></kbd>
+              <span data-text="toStart"></span
+            ></span>
+            <span class="hud__touch-only" data-text="tapToStart"></span>
           </button>
-          <button class="button hud__fade" type="button" data-action="free">
-            <span data-text="freeRide"></span><kbd data-key="free"></kbd>
-          </button>
-          <p class="hud__steer hud__fade">
-            <span><kbd data-key="left"></kbd><kbd data-key="right"></kbd></span>
-            <span data-text="steer"></span>
-          </p>
+          <p class="hud__start-note hud__touch-only" data-text="sideways"></p>
         </div>
-        <!-- MINI GAME: the minigames in place of the buttons, the chosen one lit (ui/hud.js) -->
+        <!-- what to play in place of PRESS START: the minigames and free ride, the chosen one lit
+             (ui/hud.js) -->
         <div class="hud__games hud__fade">
           <div class="button-grid">
             <button class="button hud__game" type="button" data-action="dodge">
@@ -98,6 +98,10 @@
                 <span data-text="best"></span> <span data-value></span>
               </span>
             </button>
+            <button class="button hud__game" type="button" data-action="free">
+              <span class="hud__game-name" data-text="freeRide"></span>
+              <span class="hud__game-about" data-text="freeRideAbout"></span>
+            </button>
           </div>
           <p class="hud__games-keys">
             <kbd data-key="left"></kbd><kbd data-key="right"></kbd> <span data-text="choose"></span>
@@ -110,7 +114,7 @@
         </div>
         <a
           class="hud__source hud__fade"
-          href="https://github.com/SkorczanFFF/Bolones-Autodrive"
+          href="https://github.com/SkorczanFFF"
           target="_blank"
           rel="noopener"
           data-text="source"
@@ -132,17 +136,39 @@
         <kbd data-key="exit"></kbd> <span data-text="exit"></span>
       </div>
 
-      <!-- Touch screens in free ride: steering held like the arrow keys, and a way back. -->
+      <!-- Touch screens: the keys on screen, held like them: the arrows on the left, in a minigame
+           the pedals on the right (the brake in Overtake only), and a way back -->
       <div class="hud__touch">
-        <button class="button hud__touch-steer" type="button" data-hold="left">
-          <span data-key="left"></span>
-        </button>
-        <button class="button" type="button" data-action="exit">
+        <div class="hud__touch-side">
+          <button class="button hud__touch-key" type="button" data-hold="left">
+            <span data-key="left"></span>
+          </button>
+          <button class="button hud__touch-key" type="button" data-hold="right">
+            <span data-key="right"></span>
+          </button>
+        </div>
+        <button class="button hud__touch-exit" type="button" data-action="exit">
           <span data-text="menu"></span>
         </button>
-        <button class="button hud__touch-steer" type="button" data-hold="right">
-          <span data-key="right"></span>
-        </button>
+        <div class="hud__touch-side hud__touch-pedals">
+          <button
+            class="button hud__touch-key"
+            type="button"
+            data-hold="slower"
+            data-modes="overtake"
+          >
+            <span data-key="slower"></span>
+          </button>
+          <button class="button hud__touch-key hud__touch-gas" type="button" data-hold="faster">
+            <span data-key="faster"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- a touch screen held upright: the minigame waits for it to turn (main.js) -->
+      <div class="hud__turn">
+        <span class="hud__turn-phone"></span>
+        <span data-text="turnSideways"></span>
       </div>
 
       <div class="hud__countdown sunset-text" hidden></div>
@@ -197,19 +223,19 @@
           <p class="hud__final-best"><span data-text="best"></span> <span data-best></span></p>
           <p class="hud__new-best" data-text="newBest" hidden></p>
         </header>
-        <footer class="hud__gameover-actions hud__fade">
-          <!-- the car the camera follows (the Bolones first), from the crash on -->
-          <button class="button button--small hud__wreck" type="button" data-action="next">
-            <span data-wreck></span><span class="hud__wreck-count" data-wreck-count></span>
-            <kbd data-key="next"></kbd>
-          </button>
+        <!-- the car the camera follows (the Bolones first), from the crash on, in the corner: it
+             stays with the rest hidden, as does how to look around, to watch the wreck -->
+        <button class="button button--small hud__wreck" type="button" data-action="next">
+          <span data-wreck></span><span class="hud__wreck-count" data-wreck-count></span>
+          <kbd data-key="next"></kbd>
+        </button>
+        <footer class="hud__gameover-actions">
           <!-- the Bolones is still the player's -->
-          <p class="hud__gameover-hint hud__drive-on" hidden>
+          <p class="hud__gameover-hint hud__drive-on hud__fade" hidden>
             <kbd data-key="left"></kbd><kbd data-key="right"></kbd><kbd data-key="faster"></kbd>
             <span data-text="driveOn"></span>
           </p>
-          <p class="hud__gameover-hint" data-text="lookAround"></p>
-          <div class="button-grid button-grid--3 hud__gameover-buttons">
+          <div class="button-grid button-grid--3 hud__gameover-buttons hud__fade">
             <button class="button button--primary" type="button" data-action="start">
               <span data-text="again"></span><kbd data-key="start"></kbd>
             </button>
@@ -220,6 +246,11 @@
               <span data-text="menu"></span><kbd data-key="exit"></kbd>
             </button>
           </div>
+          <!-- at the very bottom: it stays with the rest hidden -->
+          <p class="hud__gameover-hint">
+            <span class="hud__keys-only" data-text="lookAround"></span
+            ><span class="hud__touch-only" data-text="lookAroundTouch"></span>
+          </p>
         </footer>
       </section>
     </div>

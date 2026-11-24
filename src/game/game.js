@@ -8,6 +8,8 @@ import { createStateMachine } from "./state.js";
 /** @typedef {import("../config.js").Mode} Mode */
 /** The minigames, in their list's order. */
 const MODES = /** @type {Mode[]} */ (Object.keys(MINIGAME.modes));
+/** The list's cards (index.html), in order: the minigames, then free ride. */
+const CHOICES = /** @type {(Mode | "free")[]} */ ([...MODES, "free"]);
 
 /** The world's speed multiplier for the Bolones going this fast. @param {number} kmh */
 const worldAt = (kmh) => kmh / SPEED.kmh / WORLD.speed;
@@ -82,7 +84,9 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   let stateTime = 0;
   let boost = 1; // the minigame sped up while ↑ is held (MINIGAME.boost), eased
   /** @type {Mode} */
-  let mode = "dodge"; // the one played, or chosen in the list
+  let mode = "dodge"; // the one played
+  /** @type {Mode | "free"} the card lit in the list: what was played last, or picked */
+  let choice = mode;
   const best = Object.fromEntries(MODES.map((of) => [of, loadNumber(STORAGE.best[of])]));
   let own = 0; // overtake: the Bolones' own speed, km/h (MINIGAME.modes.overtake)
   let counted = 0; // how far game over has counted its score up
@@ -248,6 +252,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
 
     switch (next) {
       case "countdown":
+        choice = mode;
         boost = 1;
         car.reset(tweens);
         minigame.play(mode);
@@ -288,10 +293,11 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
 
       case "select":
         car.reset(tweens);
-        hud.setChoice(mode);
+        hud.setChoice(choice);
         break;
 
       case "free":
+        choice = "free";
         if (previous === "gameover") {
           car.reset(tweens);
           leaveMinigame();
@@ -316,21 +322,29 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     }
     switch (action) {
       case "start":
-        // the menu, free ride: the minigames; their list: the one chosen; game over: again
+        // the menu, free ride: the list; there: the card lit; game over: the same minigame again
         if (locked()) return;
+        if (machine.state === "select") {
+          if (choice === "free") {
+            machine.send("free");
+            break;
+          }
+          mode = choice;
+        }
         machine.send("start");
         break;
       case "left":
       case "right": {
         if (machine.state !== "select") return; // otherwise held, steering
-        const i = MODES.indexOf(mode) + (action === "left" ? -1 : 1);
-        mode = MODES[(i + MODES.length) % MODES.length];
-        hud.setChoice(mode);
+        const i = CHOICES.indexOf(choice) + (action === "left" ? -1 : 1);
+        choice = CHOICES[(i + CHOICES.length) % CHOICES.length];
+        hud.setChoice(choice);
         break;
       }
       case "free":
       case "exit":
         if (locked()) return;
+        if (action === "exit" && hud.reveal()) return; // ESC brings back what H hid, then leaves
         machine.send(action);
         break;
       case "menu":

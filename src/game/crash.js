@@ -179,6 +179,17 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const top = shift.y + y;
     const shape = RAPIER.ColliderDesc.cuboid(x, (top - bottom) / 2, z);
     world.createCollider(metal(shape).setTranslation(0, (top + bottom) / 2, 0), body);
+    // rolled over it lands on the rest of it, its roof: for the road and the parts only
+    const roof = roofOf(object, centre.y + top);
+    if (!roof.isEmpty()) {
+      const [middle, extent] = [
+        roof.getCenter(new THREE.Vector3()),
+        roof.getSize(new THREE.Vector3()),
+      ];
+      const { x: rx, y: ry, z: rz } = middle.sub(centre);
+      const cabin = RAPIER.ColliderDesc.cuboid(extent.x / 2, extent.y / 2, extent.z / 2);
+      world.createCollider(metal(cabin).setTranslation(rx, ry, rz), body);
+    }
     body.recomputeMassPropertiesFromColliders(); // so the crush and the springs weigh it at once
     const vehicle = createVehicle(world, body, rig, centre, groups(CARS, ROAD));
     const offset = translation(centre.clone().negate());
@@ -588,6 +599,36 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
 
 /** @param {THREE.Vector3} v */
 const translation = (v) => new THREE.Matrix4().makeTranslation(v);
+/** @type {WeakMap<THREE.BufferGeometry, THREE.Box3>} by the model's body: clones share it */
+const roofs = new WeakMap();
+
+/**
+ * A car's body above a height, in its own frame (not its wheels, its bumpers, nor its mirrors,
+ * which fold or come off): what it lands on rolled over, above the box it meets other cars with.
+ *
+ * @param {THREE.Object3D} object upright on the road, its world matrices up to date
+ * @param {number} from
+ */
+export function roofOf(object, from) {
+  const meshes = solidMeshes(object).filter(
+    (mesh) => !partOf(mesh, object) && mesh.name !== "mirrors",
+  );
+  const key = meshes[0]?.geometry;
+  let roof = key && roofs.get(key);
+  if (roof) return roof;
+  roof = new THREE.Box3();
+  const toObject = object.matrixWorld.clone().invert();
+  const p = new THREE.Vector3();
+  for (const mesh of meshes) {
+    const matrix = toObject.clone().multiply(mesh.matrixWorld);
+    const position = mesh.geometry.getAttribute("position");
+    for (let i = 0; i < position.count; i++) {
+      if (p.fromBufferAttribute(position, i).applyMatrix4(matrix).y > from) roof.expandByPoint(p);
+    }
+  }
+  if (key) roofs.set(key, roof);
+  return roof;
+}
 
 /**
  * How low a car's body comes (not its wheels, nor its bumpers), in its own frame.

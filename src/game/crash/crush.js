@@ -1,7 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME } from "../../config.js";
-import { boxOf, endOn, level, meeting, middleOf, overlap, penetration } from "./boxes.js";
+import { boxOf, endOn, extent, level, meeting, middleOf, overlap, penetration } from "./boxes.js";
 import {
   AHEAD,
   IDENTITY,
@@ -38,6 +38,7 @@ import {
  * @property {number} meetings how many times the pair has met (MEETINGS at most)
  * @property {(deepest: number) => void} dent shows how far the dents have gone in
  * @property {boolean} [nudge] they only touched (MINIGAME.crash.nudge): no crumple zones, no dents
+ * @property {number} [share] how wide they met, of the narrower one's width
  * @property {RAPIER.ImpulseJoint} [snag] holds the crushed fronts together, until `free`
  * @property {number} [free] game time the snag lets go
  */
@@ -102,6 +103,8 @@ export function createCrushes(world, met) {
     // as wide as they overlap halfway through the crush (where the dent is half as deep), there
     const stretch = meeting(boxA, boxB, ahead, (expected - depth) / 2);
     const reach = stretch?.half ?? penetration(boxA, boxB, across) / 2;
+    // of the narrower one's width
+    const share = reach / Math.min(extent(boxA, across), extent(boxB, across));
     const at = middleOf(boxA, boxB, ahead);
     if (stretch) at.addScaledVector(across, stretch.middle - at.dot(across));
     // each takes its share of the crush (the stiffer front gives less), from its face, half the
@@ -116,6 +119,7 @@ export function createCrushes(world, met) {
     const show = met(a, b, { normal, hits, at, speed, energy });
     return {
       ...crush,
+      share,
       capacity: expected,
       dent: (deepest) => show?.(Math.min(1, deepest / expected)),
     };
@@ -125,6 +129,7 @@ export function createCrushes(world, met) {
     /**
      * Two solids (a car, then a car or a post) that overlap: an elastic-plastic spring between
      * their crumple zones, pushing along the overlap's normal at its middle, with `scrape`
+      share,
      * friction along the faces.
      *
      * @param {T} a
@@ -208,7 +213,12 @@ export function createCrushes(world, met) {
           // turns as one for a while; sides swiped, a front in a side, a palm, a touch: they
           // slide on
           const caught =
-            !crush.nudge && !isPost(b) && endOn(a.body, normal) && endOn(b.body, normal);
+            !crush.nudge &&
+            !isPost(b) &&
+            endOn(a.body, normal) &&
+            endOn(b.body, normal) &&
+            crush.share !== undefined &&
+            crush.share >= interlock.overlap;
           if (caught) {
             // held as they are now: the first one's middle where it is from the second
             const back = rotation(b.body.rotation()).invert();
@@ -219,7 +229,7 @@ export function createCrushes(world, met) {
             crush.snag = world.createImpulseJoint(joint, a.body, b.body, true);
             snagged.add(crush);
           }
-          crush.free = time + (caught ? interlock : 0);
+          crush.free = time + (caught ? interlock.time : 0);
         }
       }
       crush.dent(crush.deepest);

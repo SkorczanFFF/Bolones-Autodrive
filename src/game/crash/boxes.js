@@ -32,7 +32,7 @@ export function boxOf({ body, half, shift }, turn = rotation(body.rotation())) {
  * @param {Box} box
  * @param {THREE.Vector3} n
  */
-const extent = (box, n) =>
+export const extent = (box, n) =>
   box.axes.reduce((sum, axis, k) => sum + box.half[k] * Math.abs(axis.dot(n)), 0);
 
 /**

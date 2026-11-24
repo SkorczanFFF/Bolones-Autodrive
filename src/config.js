@@ -597,7 +597,9 @@ export const MINIGAME = {
     /** Degrees off a car's length: a hit closer than the second is on its end (the ends caught in
      * each other turn as one), further than the first on its side; the dents blend between. */
     ends: [60, 30],
-    interlock: 0.6, // seconds the crushed fronts stay caught in each other
+    /** Crushed fronts overlapping by `overlap` of the narrower one's width or more stay caught in
+     * each other `time` seconds; by less (corners) they glance off. */
+    interlock: { time: 0.6, overlap: 0.5 },
     /** A palm hit at `full` m/s or faster leans `lean` for good (bending over in `bend` seconds)
      * and sways `swing` (radians) back and forth every `period` seconds, dying down over
      * `settle`. */

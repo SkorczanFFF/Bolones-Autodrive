@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
 import { MINIGAME, PALETTE, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
-import { createCrash as create, ready } from "../src/game/crash.js";
+import { createCrash as create, ready, roofOf } from "../src/game/crash.js";
 import { meeting, penetration } from "../src/game/crash/boxes.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
 import { testCar as car, testMaterials } from "./helpers.js";
@@ -115,6 +115,17 @@ describe("crash", () => {
     }
     expect(turn).toBeGreaterThan(0.05); // an offset hit does turn them
     expect(turn).toBeLessThan(Math.PI / 2);
+  });
+
+  it("catches fronts that meet wide in each other for a while: they turn as one", () => {
+    const { bolones, other, crash } = headOn(-0.5);
+    const yaw = (/** @type {THREE.Object3D} */ object) =>
+      new THREE.Euler().setFromQuaternion(object.quaternion, "YXZ").y;
+    const relative = () => yaw(bolones.object) - yaw(other.object);
+    run(crash, 0.25); // met and crushed
+    const from = relative();
+    run(crash, 0.3);
+    expect(Math.abs(relative() - from)).toBeLessThan(0.01);
   });
 
   it("puts out the lamps where the cars were hit, not the others", () => {
@@ -624,5 +635,24 @@ describe("where two cars meet", () => {
     const across = new THREE.Vector3(0, 0, 1);
     expect(met.half).toBeLessThan(0.75 * (penetration(corner, side, across) / 2));
     expect(met.half).toBeLessThan(2);
+  });
+});
+
+describe("a car rolled over", () => {
+  it("lands on its roof: the body above its box, up to the top, not its mirrors", () => {
+    const models = createTrafficModels(testMaterials());
+    for (const model of models) {
+      model.updateMatrixWorld(true);
+      const { hitbox } = model.userData;
+      const from = hitbox.min[1] + 0.7 * (hitbox.max[1] - hitbox.min[1]);
+      const roof = roofOf(model, from);
+      const label = model.userData.label;
+      expect(roof.max.y, label).toBeCloseTo(hitbox.max[1], 5);
+      expect(roof.min.y, label).toBeGreaterThan(from);
+      expect(roof.min.y, label).toBeLessThan(from + 0.1 * (hitbox.max[1] - hitbox.min[1]));
+      // as wide as the body there at most: not out to the mirrors
+      expect(roof.max.x, label).toBeLessThanOrEqual(hitbox.max[0] + 1e-6);
+      expect(roofOf(model.clone(), from), label).toBe(roof); // once per model
+    }
   });
 });

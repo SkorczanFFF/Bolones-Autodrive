@@ -1,6 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME, PALETTE, SPEED } from "../config.js";
+import { settle } from "../core/tween.js";
 import { crumple, reaches } from "../scene/crumple.js";
 import { createDebris } from "../scene/debris.js";
 import { wheelsOf } from "../scene/rig.js";
@@ -100,7 +101,11 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       .setCollisionGroups(groups(ROAD, CARS | PARTS)),
     world.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
   );
-  /** A car's sheet metal (its body, its hubs): it scrapes the road. @param {RAPIER.ColliderDesc} desc */
+  /**
+   * A car's sheet metal (its body, its hubs): it scrapes the road.
+   *
+   * @param {RAPIER.ColliderDesc} desc
+   */
   const metal = (desc) =>
     desc
       .setDensity(0)
@@ -228,6 +233,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   const stands = createPosts(world, posts, onRoad);
   /** @type {Party[]} the cars, then the palms and rocks there are now */
   let solids = bodies;
+  /** @type {THREE.Vector3[]} where the palms and rocks there are now stand */
+  let postsAt = [];
   /** @type {import("./crash/drivers.js").Looking[]} the cars as the drivers saw them last */
   let looking = [];
   let absorbed = 0; // J the crumple zones took up
@@ -435,8 +442,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     }
     // where each is, once: most pairs are too far apart to touch, not worth their boxes, nor are
     // two at rest
-    const at = solids.map(({ body }) => vector(body.translation()));
-    const still = solids.map(({ body }) => body.isSleeping() || body.isFixed());
+    const at = [...bodies.map(({ body }) => vector(body.translation())), ...postsAt];
+    const still = solids.map((solid, i) => i >= bodies.length || solid.body.isSleeping());
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < solids.length; j++) {
         if (still[i] && still[j]) continue;
@@ -464,7 +471,9 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
      * @returns {number} the camera's speed forward along the road, units/s
      */
     update(dt, which = 0) {
-      solids = [...bodies, ...stands.sync()];
+      const standing = stands.sync();
+      solids = [...bodies, ...standing];
+      postsAt = standing.map(({ body }) => vector(body.translation()));
       // what each driver sees ahead, once a frame
       looking = bodies.map(({ body, half }) => ({
         at: vector(body.translation()),
@@ -474,7 +483,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       bodies.forEach(({ driver }, i) => driver.see(lookAhead(looking[i], looking)));
       lag = Math.min(lag + dt, 30 * STEP); // further behind, the rest is dropped
       for (; lag >= STEP; lag -= STEP) step();
-      camera += (-wrecks[which].body.linvel().z - camera) * (1 - Math.exp(-dt / cameraLag));
+      camera += (-wrecks[which].body.linvel().z - camera) * settle(cameraLag, dt);
       travel += Math.max(0, camera) * dt;
 
       for (const { car, offset, body, vehicle } of bodies) {
@@ -559,7 +568,10 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       return inScene(posed(wrecks[which].body)[0], target);
     },
 
-    /** Removes the debris, takes the dents out, puts the parts torn off back, stands the palms up. */
+    /**
+     * Removes the debris, takes the dents out, puts the parts torn off back, stands the palms
+     * up.
+     */
     dispose() {
       for (const { vehicle } of bodies) vehicle.dispose();
       undo.reverse().forEach((restore) => restore());

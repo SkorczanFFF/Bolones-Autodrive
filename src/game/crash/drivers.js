@@ -144,6 +144,7 @@ export function createDriver(vehicle, swerves, random, joined, driving) {
      * @param {number} time game seconds since the crash
      */
     drive(time) {
+      if (!hands && vehicle.resting) return; // nothing to do, the player's may drive on
       const power = engine(time);
       const gas = (hands?.gas ?? false) && power > 0;
       let braking = friction.roll * GRAVITY; // rolling, until they react

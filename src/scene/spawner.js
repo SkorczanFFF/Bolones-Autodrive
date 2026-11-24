@@ -20,7 +20,7 @@ import { createFader } from "./fade.js";
  */
 
 /**
- * Spawns objects at startZ on a time accumulator and moves them towards endZ with the world
+ * Spawns objects at startZ by the way travelled and moves them towards endZ with the world
  * speed, all inside update(dt). Speed and density changes apply immediately, including to
  * objects already on the way. Instances fade in after spawning and fade out before endZ.
  *

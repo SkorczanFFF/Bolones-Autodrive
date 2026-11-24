@@ -1,5 +1,5 @@
 /**
- * The minigame's oncoming cars (scene/traffic.js builds them), traced from blueprints in metres.
+ * The minigames' traffic (scene/traffic.js builds it), traced from blueprints in metres.
  * Model data, not configuration, so it lives next to the code that reads it. Side views: x from
  * the car's rear end to the front, y up from the ground; front and rear views: offset from the
  * centre line (mirrored to the other side when not 0), y up.

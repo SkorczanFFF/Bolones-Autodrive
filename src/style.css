@@ -601,7 +601,7 @@ kbd {
   --columns: 3;
 }
 
-/* the name on top, the record at the bottom, both cards as tall */
+/* the name on top, the record at the bottom, the cards as tall */
 .button-grid > .button.hud__game {
   flex-direction: column;
   justify-content: flex-start;

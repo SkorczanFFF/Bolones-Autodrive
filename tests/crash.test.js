@@ -29,7 +29,11 @@ function headOn(offset = 0, speed = 1, others = /** @type {ReturnType<typeof car
   return { scene, bolones, other, crash: createCrash(scene, cars) };
 }
 
-/** Runs the crash for a while: the camera's speed then. @param {ReturnType<typeof createCrash>} crash */
+/**
+ * Runs the crash for a while: the camera's speed then.
+ *
+ * @param {ReturnType<typeof createCrash>} crash
+ */
 function run(crash, seconds = 4) {
   let speed = 0;
   for (let t = 0; t < seconds; t += 1 / 60) speed = crash.update(1 / 60);

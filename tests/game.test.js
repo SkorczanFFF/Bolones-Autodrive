@@ -352,7 +352,7 @@ describe("crash", () => {
     expect(camera.position.distanceTo(cameraAt)).toBeLessThan(1e-9);
   });
 
-  it("leaves the Bolones to the crash: its wheels stand still, dented as they are", () => {
+  it("leaves the Bolones to the crash: it poses the car and turns its wheels", () => {
     const { calls, run, crash } = setup();
     crash();
     const updates = calls.carUpdate;

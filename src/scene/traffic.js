@@ -54,7 +54,7 @@ export function trafficHalfWidth() {
 }
 
 /**
- * Low-poly oncoming cars of the communist era (Polakito, Kredens), traced from blueprints,
+ * The minigames' low-poly traffic of the communist era (Polakito, Kredens), traced from blueprints,
  * one template per TRAFFIC_MODELS entry; the front faces +z (towards the camera). The body is one
  * geometry (one draw call plus its wireframe twin), with `userData.polygons` like the FBX models
  * (core/fbx.js), so its lines follow the designed outlines, not every triangle. Each wheel and
@@ -338,7 +338,12 @@ function lowerBody(model) {
   const positions = [];
   /** @type {number[]} */
   const polygon = [];
-  /** Triangle facing away from `inside`. @param {THREE.Vector3[]} t @param {THREE.Vector3} inside */
+  /**
+   * Triangle facing away from `inside`.
+   *
+   * @param {THREE.Vector3[]} t
+   * @param {THREE.Vector3} inside
+   */
   const triangle = ([a, b, c], inside) => {
     const centre = a.clone().add(b).add(c).divideScalar(3);
     positions.push(...facingPositions([a, b, c], centre.sub(inside)));

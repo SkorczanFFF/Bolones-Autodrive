@@ -15,7 +15,10 @@ import { dent, dentable, moveNodes } from "./dents.js";
  */
 
 const { dents: sheet } = MINIGAME.crash;
-/** cos of the angles off the car's length: a side hit up to the first, a front's from the second. */
+/**
+ * cos of the angles off the car's length: a side hit up to the first, a front's from the
+ * second.
+ */
 export const ENDS = MINIGAME.crash.ends.map((angle) => Math.cos(THREE.MathUtils.degToRad(angle)));
 const UP = new THREE.Vector3(0, 1, 0);
 

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { MINIGAME, SCENE, SPEED, STORAGE, TEXT, WORLD } from "../config.js";
 import { loadNumber, saveNumber } from "../core/storage.js";
+import { settle } from "../core/tween.js";
 import { createStateMachine } from "./state.js";
 
 /** @typedef {import("./state.js").GameState} GameState */
@@ -158,7 +159,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     controls.target.sub(shakeOffset);
     camera.position.sub(shakeOffset);
     minigame.wreckCentre(aim, wreckFocus).sub(controls.target);
-    aim.multiplyScalar(1 - Math.exp(-dt / follow));
+    aim.multiplyScalar(settle(follow, dt));
     const left = Math.max(0, 1 - stateTime / shake);
     const random = () => Math.random() * 2 - 1;
     shakeOffset
@@ -262,7 +263,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         record = best[mode];
         counted = 0;
         hud.showGameOver(record);
-        world.speedMultiplier = 0; // the road stops with the crash: the palms stay where it found them
+        // the road stops with the crash: the palms stay where it found them
+        world.speedMultiplier = 0;
         wreckFocus = 0;
         shakeOffset.set(0, 0, 0);
         cameraTween?.cancel();
@@ -362,7 +364,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
     /** @param {number} dt */
     update(dt) {
       stateTime += dt;
-      // a wreck is the crash's: its wheels stand still, dented as they are (scene/crumple.js)
+      // a wreck is the crash's: it poses the car and turns its wheels (game/crash.js)
       if (machine.state !== "gameover") car.update(dt, world.speedMultiplier, steerInput());
       followCar();
 
@@ -389,7 +391,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
           } else {
             const { factor, rise, fall } = MINIGAME.boost;
             const target = input.isHeld("faster") ? factor : 1;
-            boost += (target - boost) * (1 - Math.exp(-dt / (target > boost ? rise : fall)));
+            boost += (target - boost) * settle(target > boost ? rise : fall, dt);
             world.speedMultiplier = speedOf(minigame.score, mode) * boost;
           }
           const { crashed, scored } = minigame.update(dt, world.speedMultiplier, level());

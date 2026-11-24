@@ -122,16 +122,17 @@ export function createHud(
   const speed = $("[data-speed]");
   /** @type {Mode} */
   let mode = "dodge";
-  const records = { dodge: 0, crash: 0, overtake: 0 };
+  /** @type {Partial<Record<Mode, number>>} as the game hands them over (setBest) */
+  const records = {};
   let record = 0; // game over's: to beat
   const menuToggle = $(".hud__toggle");
   const wreck = $("[data-wreck]");
   const wreckCount = $("[data-wreck-count]");
   wreck.parentElement?.setAttribute("title", withKey(TEXT.nextCar, "next"));
 
-  /** The best scores: of the mode in the game and game over, of both in the menu. */
+  /** The best scores: of the mode in the game and game over, of each in the menu. */
   function showBest() {
-    for (const element of bestValues) show(element, String(records[mode]));
+    for (const element of bestValues) show(element, String(records[mode] ?? 0));
     for (const [of, value] of Object.entries(records)) {
       for (const entry of $$(`[data-record="${of}"]`)) {
         entry.hidden = value <= 0;

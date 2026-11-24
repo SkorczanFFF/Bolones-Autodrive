@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { CAR, SPEED, WORLD } from "../config.js";
-import { easeInOutCubic } from "../core/tween.js";
+import { easeInOutCubic, settle } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
 import { mountWheel, wheelsOf } from "./rig.js";
 import { withPolygons } from "./traffic.js";
@@ -45,16 +45,6 @@ function addFuelCap(car, body, solid, wire) {
   cap.position.copy(mesh.worldToLocal(hit.point.clone())).addScaledVector(normal, PROUD / scale);
   mesh.add(dress(cap, solid, wire));
 }
-
-/**
- * The share of the way to a target covered in dt when approaching it exponentially with time
- * constant tau: `value += (target - value) * settle(tau, dt)` draws the same curve at any frame
- * rate.
- *
- * @param {number} tau seconds
- * @param {number} dt seconds
- */
-const settle = (tau, dt) => 1 - Math.exp(-dt / tau);
 
 /**
  * The Bolones. Each part of the motion lives on its own node, so nothing has to be synced:

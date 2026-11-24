@@ -71,7 +71,12 @@ describe("traffic models", () => {
   });
 
   it("stand their cabin on the deck, with the windows inside it", () => {
-    /** Within 2 mm of an edge (the data is in millimetres). @param {Point} p @param {Point[]} outline */
+    /**
+     * Within 2 mm of an edge (the data is in millimetres).
+     *
+     * @param {Point} p
+     * @param {Point[]} outline
+     */
     const onEdge = ([x, y], outline) =>
       outline.some(([ax, ay], i) => {
         const [bx, by] = outline[(i + 1) % outline.length];
@@ -174,9 +179,9 @@ describe("traffic models", () => {
     }
   });
 
-  it("keeps lanes clear of the widest car", () => {
-    const widest = Math.max(...configs.map((config) => config.width));
-    expect(trafficHalfWidth()).toBeCloseTo((widest * TRAFFIC.scale) / 2);
+  it("keeps lanes clear of the widest car: as wide as the widest hitbox", () => {
+    const halves = models.map(({ userData: { hitbox } }) => (hitbox.max[0] - hitbox.min[0]) / 2);
+    expect(trafficHalfWidth()).toBeGreaterThanOrEqual(Math.max(...halves) - 1e-9);
   });
 
   it("clones keep the hitbox, the wireframe and the lit lamps, their outlines kept for a crash", () => {

@@ -1,4 +1,14 @@
 /**
+ * The share of the way to a target covered in dt when approaching it exponentially with time
+ * constant tau: `value += (target - value) * settle(tau, dt)` draws the same curve at any frame
+ * rate.
+ *
+ * @param {number} tau seconds
+ * @param {number} dt seconds
+ */
+export const settle = (tau, dt) => 1 - Math.exp(-dt / tau);
+
+/**
  * @param {number} t progress 0..1
  */
 export function easeInOutCubic(t) {

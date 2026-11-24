@@ -14,7 +14,7 @@ import { createCrash } from "./crash.js";
  *
  * @param {number} [halfWidth] half the widest obstacle
  */
-export function lanesOf(halfWidth = trafficHalfWidth()) {
+function lanesOf(halfWidth = trafficHalfWidth()) {
   const { innerGap, outerMargin, safeZone } = MINIGAME;
   const reach = CAR.steer.maxOffset;
   const minLaneWidth = 0.1; // v1 guard for tiny steering ranges
@@ -174,6 +174,14 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
 
   /** @type {THREE.Object3D[]} the cars spawned since the last frame */
   const spawned = [];
+  /** @type {WeakMap<THREE.Object3D, import("../scene/rig.js").Wheel[]>} */
+  const rigs = new WeakMap();
+  /** A car's wheels on their rig, found once. @param {THREE.Object3D} other */
+  const rigOf = (other) => {
+    let rig = rigs.get(other);
+    if (!rig) rigs.set(other, (rig = wheelsOf(other)));
+    return rig;
+  };
   /**
    * A car of a random model coming along, turned round when it goes the Bolones' way; after a
    * crash none comes out of the haze where it could not stop for the jam.
@@ -317,7 +325,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
           object: car.wreck,
           box: car.box,
           mass: CAR.mass,
-          velocity: new THREE.Vector3(car.sideways, 0, -road), // where it went (its nose turns less)
+          // where it went (its nose turns less)
+          velocity: new THREE.Vector3(car.sideways, 0, -road),
           color: colorOf(materials.wire.bolones),
           label: TEXT.bolones,
         },
@@ -414,7 +423,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       const cars = traffic();
       for (const other of cars) {
         const rolled = Math.abs(overRoadOf(other, level)) * dt; // the wheels roll as far as it goes
-        for (const { spin, radius } of wheelsOf(other)) spin.rotation.x += rolled / radius;
+        for (const { spin, radius } of rigOf(other)) spin.rotation.x += rolled / radius;
       }
       if (cars.length === 0) return { crashed: false, scored: false };
 

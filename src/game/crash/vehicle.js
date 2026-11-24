@@ -123,6 +123,11 @@ export function createVehicle(world, body, rig, centre, groups) {
       );
     },
 
+    /** Whether it has come to rest (Rapier put it to sleep). */
+    get resting() {
+      return body.isSleeping();
+    },
+
     /** How fast it goes nose first, units/s. */
     get speed() {
       return ahead * controller.currentVehicleSpeed();
@@ -173,7 +178,8 @@ export function createVehicle(world, body, rig, centre, groups) {
      * A wheel torn off: it holds nothing up, grips nothing.
      *
      * @param {THREE.Object3D} mount
-     * @returns {{ at: THREE.Vector3, radius: number } | undefined} where it was, in the body's frame
+     * @returns {{ at: THREE.Vector3, radius: number } | undefined} where it was, in the
+     *   body's frame
      */
     lose(mount) {
       const i = wheels.findIndex((wheel) => wheel.mount === mount);

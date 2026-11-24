@@ -486,8 +486,8 @@ export const SPAWN = {
 };
 
 /**
- * Minigame obstacles: oncoming low-poly cars of the communist era, built in code
- * (scene/traffic.js) from real dimensions in metres (scene/trafficModels.js).
+ * The minigames' traffic: low-poly cars of the communist era, built in code (scene/traffic.js)
+ * from real dimensions in metres (scene/trafficModels.js).
  */
 export const TRAFFIC = {
   scale: 1.8, // metres -> scene units (the Bolones model is about 1.8x life size)
@@ -520,13 +520,14 @@ export const MINIGAME = {
     /** Tyre-road friction coefficients (game/crash/vehicle.js): how hard a tyre grips at most,
      * a driver braking hard, rolling. */
     friction: { side: 0.8, brake: 0.5, roll: 0.015 },
-    reaction: [0.8, 1.5], // seconds a driver takes to act on a crash (ahead, or their own), at random
+    // seconds a driver takes to act on a crash (ahead, or their own), at random
+    reaction: [0.8, 1.5],
     /** Until they act the wheels roll. Then a driver brakes as hard as it takes to stop `gap` m
      * short of the car ahead of them, should it brake hard (`margin` times that, to be sure), at
      * least `gently` (of friction.brake): they have seen the crash. Who cannot stop in time panics:
-     * brakes hard, and `share` of them swerve (`angle` degrees one way for `swerve` seconds, as long back, then
-     * straight on: about a lane over). A car hit on its side (not end on) has a broken wheel,
-     * pulling it `broken` degrees towards that side for good. */
+     * brakes hard, and `share` of them swerve (`angle` degrees one way for `swerve` seconds, as
+     * long back, then straight on: about a lane over). A car hit on its side (not end on) has a
+     * broken wheel, pulling it `broken` degrees towards that side for good. */
     drivers: {
       share: 0.5,
       angle: [1.5, 4],
@@ -551,7 +552,8 @@ export const MINIGAME = {
     stiffness: 700, // N/m per kg of car: a front crushes about 0.5 m into a wall at 56 km/h
     /** Coefficient of restitution falling off with the closing speed (m/s), as in crash tests:
      * taps bounce, crashes barely. */
-    restitution: { atRest: 0.4, falloff: 10, contact: 0.2 }, // contact: a car's body or a part on the road
+    // contact: a car's body or a part on the road
+    restitution: { atRest: 0.4, falloff: 10, contact: 0.2 },
     scrape: 0.5, // friction of sheet metal: crushing cars, a car's body on the road
     nudge: 2, // m/s: cars closing slower only touch (no crumple zones, no dents, no debris)
     /** A wheel or a bumper comes off a car crushed past it by `tear` of its size (the farthest of
@@ -608,7 +610,7 @@ export const MINIGAME = {
       shard: { size: 0.7, spread: 0.3 },
       spark: { size: 0.3, spread: 0.6, life: 0.6 },
     },
-    cameraLag: 0.06, // seconds: the camera's speed follows the car in view's this slowly, closing in
+    cameraLag: 0.06, // s: how slowly the camera's speed follows the car in view's, closing in
     follow: 0.25, // seconds: the orbit eases over to the car in view this slowly
     slowMotion: { freeze: 0.1, scale: 0.2, recover: 1.5 }, // s frozen, time scale, s back to 1
     shake: 0.45, // seconds of camera shake, fading out
@@ -634,11 +636,12 @@ export const MINIGAME = {
   },
   /**
    * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the
-   * Bolones' way, `slow`, `gaps` units apart, lined up no nearer than `ahead` in front of it
-   * (the first reaches it after the countdown); in the left lane the traffic towards it, `oncoming` (faster every SPEED.tierEvery cars
-   * overtaken), in groups of MINIGAME.batch `platoon` units apart, `window` units between the
-   * groups: room to overtake. The Bolones starts at `start`; ↑ adds `gas` a second up to `top`,
-   * ↓ takes `brake` a second down to theirs (it can wait behind one for a gap), let go it holds.
+   * Bolones' way, `slow`, `gaps` units apart, lined up no nearer than `ahead` in front of it (the
+   * first reaches it after the countdown); in the left lane the traffic towards it, `oncoming`
+   * (faster every SPEED.tierEvery cars overtaken), in groups of MINIGAME.batch `platoon` units
+   * apart, `window` units between the groups: room to overtake. The Bolones starts at `start`; ↑
+   * adds `gas` a second up to `top`, ↓ takes `brake` a second down to theirs (it can wait behind
+   * one for a gap), let go it holds.
    */
   overtake: {
     slow: 40,

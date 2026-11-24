@@ -14,6 +14,16 @@ const FADE = 0.5;
  * @property {number} life seconds; Infinity: stays where it lands
  */
 
+/** Every crash's debris draws with it: its shaders, compiled once (minigame warmUp), stay. */
+const material = new THREE.MeshBasicMaterial({
+  vertexColors: true,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+material.userData.glow = 1;
+
 /**
  * Glowing shards and sparks thrown off a crash: small triangles that tumble, fall and bounce on
  * the road (y = 0); the short-lived ones (sparks) fade out. One draw call, glowing (core/bloom.js).
@@ -27,14 +37,6 @@ export function createDebris(gravity) {
    */
   const shards = [];
   const geometry = new THREE.BufferGeometry();
-  const material = new THREE.MeshBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  material.userData.glow = 1;
   const object = new THREE.Mesh(geometry, material);
   object.frustumCulled = false;
   object.layers.enable(BLOOM.layer);
@@ -107,7 +109,6 @@ export function createDebris(gravity) {
 
     dispose() {
       geometry.dispose();
-      material.dispose();
     },
   };
 }

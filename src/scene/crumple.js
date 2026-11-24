@@ -98,9 +98,12 @@ export function crumple(root, hit) {
   const kink = (/** @type {number} */ at) =>
     sheet.kink * depth * offset * (1 - THREE.MathUtils.clamp((at - plane) / length, 0, 1)) ** 2;
 
+  // past the fold and the kink, behind the crush, the car stays as it is
+  const untouched = plane + Math.max(band, length);
   /** Moves a point of the body (world) where the crash takes it. @param {THREE.Vector3} v */
   const bend = (v) => {
     const { depth: at, across } = measure(v);
+    if (at >= untouched) return;
     const lateral = lateralOf(v) - middle;
     const height = (v.y - low) / (high - low || 1);
     let crushed = at;

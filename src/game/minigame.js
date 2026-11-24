@@ -409,6 +409,28 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
 
     reset,
 
+    /**
+     * Plays a crash once, unseen, while the game loads: the first one in play would stall on
+     * code running for the first time (the physics, the dents, their lines) and on the shaders
+     * of what a crash brings (the shards, the lamps out), drawn once with the crash in view.
+     *
+     * @param {() => void} render the scene, behind the loader
+     */
+    warmUp(render) {
+      // one runs into the back of the other, standing
+      const cars = models.slice(0, 2).map((model, i) => {
+        const other = model.clone();
+        other.position.set(0, TRAFFIC.y, -14 * i);
+        scene.add(other);
+        return { ...asCar(other), velocity: new THREE.Vector3(0, 0, 30 * i) };
+      });
+      const warm = createCrash(scene, cars);
+      for (let t = 0; t < 0.8; t += 1 / 60) warm.update(1 / 60);
+      render();
+      warm.dispose();
+      for (const { object } of cars) scene.remove(object);
+    },
+
     /** How much power the Bolones' engine has left after the crash, in the player's hands. */
     get engine() {
       return crash?.engine ?? 0;

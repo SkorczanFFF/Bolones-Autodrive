@@ -58,6 +58,7 @@ async function main() {
     rocks: world.parts.scenery.rocks.objects,
   });
 
+  minigame.warmUp(view.render);
   const tweens = createTweens();
   const input = createInput();
   const hud = createHud(input);

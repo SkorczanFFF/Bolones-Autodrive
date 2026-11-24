@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   BasicLineMaterial,
   lineGeometry,
+  movedLineGeometry,
   polygonLineGeometry,
   writeWireEdges,
   HIDDEN,
 } from "../src/scene/lines.js";
+import { createTrafficModels } from "../src/scene/traffic.js";
 import { addWireframe } from "../src/scene/wire.js";
+import { testMaterials } from "./helpers.js";
 
 /** Right triangle with legs 3 and 4 (hypotenuse 5). */
 function triangle() {
@@ -253,5 +256,26 @@ describe("line geometry", () => {
     expect(copy.side).toBe(THREE.DoubleSide);
     expect(copy.lineUniforms).toBe(material.lineUniforms); // GUI changes reach fading copies
     expect(copy.customProgramCacheKey()).toBe(material.customProgramCacheKey());
+  });
+});
+
+describe("a moved copy's lines", () => {
+  it("are the source's lines measured afresh: scaled, every distance scales alike", () => {
+    const [body] = /** @type {THREE.Mesh[]} */ (
+      createTrafficModels(testMaterials())[1].children.filter((c) => c instanceof THREE.Mesh)
+    );
+    const source = body.geometry;
+    const original = polygonLineGeometry(source);
+    const moved = movedLineGeometry(source.clone().scale(0.9, 0.9, 0.9), source);
+    for (const name of ["wireEdge", "wireNear", "wireNearEnd", "wireNearFar"]) {
+      const [a, b] = [original, moved].map((g) => g.getAttribute(name).array);
+      let worst = 0;
+      for (let i = 0; i < a.length; i++) {
+        if (a[i] >= HIDDEN / 2)
+          expect(b[i]).toBeGreaterThanOrEqual(HIDDEN / 2); // not drawn
+        else worst = Math.max(worst, Math.abs(b[i] - 0.9 * a[i]));
+      }
+      expect(worst, name).toBeLessThan(1e-4);
+    }
   });
 });

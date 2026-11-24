@@ -87,8 +87,8 @@ export function dent(meshes, move) {
     dentsOf.set(mesh, dents);
     dented.push({ mesh, dents, move: step });
 
-    // a new copy, its normals and lines for the full dent (scene/lines.js measures the shape
-    // afresh: not the edges the original came with)
+    // a new copy, its normals and lines for the full dent (the original's lines, measured
+    // afresh: scene/lines.js)
     const geometry = dents.original.clone();
     geometry.deleteAttribute("wireEdge");
     const position = /** @type {THREE.BufferAttribute} */ (geometry.getAttribute("position"));
@@ -98,7 +98,8 @@ export function dent(meshes, move) {
     geometry.computeBoundingSphere();
     const wire = wireOf(mesh);
     if (wire) {
-      const lines = wireGeometry(geometry, /** @type {THREE.Material} */ (wire.material));
+      const material = /** @type {THREE.Material} */ (wire.material);
+      const lines = wireGeometry(geometry, material, dents.original);
       if (wire.geometry !== dents.originalWire && wire.geometry !== mesh.geometry) {
         wire.geometry.dispose();
       }

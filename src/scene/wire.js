@@ -1,6 +1,12 @@
 import * as THREE from "three";
 import { BLOOM, WIRE } from "../config.js";
-import { isLineMaterial, lineGeometry, memoByGeometry, polygonLineGeometry } from "./lines.js";
+import {
+  isLineMaterial,
+  lineGeometry,
+  memoByGeometry,
+  movedLineGeometry,
+  polygonLineGeometry,
+} from "./lines.js";
 
 /**
  * Replaces every mesh material under root (disposing the loader's defaults) and sets up shadows.
@@ -66,15 +72,18 @@ export function addWireframe(root, material, shadows = true) {
 
 /**
  * The line twin's geometry for a mesh geometry (see addWireframe), also when the mesh gets a new
- * one (a dent, scene/crumple.js).
+ * one (a dent, scene/dents.js).
  *
  * @param {THREE.BufferGeometry} geometry
  * @param {THREE.Material} material the wireframe material
+ * @param {THREE.BufferGeometry} [source] what the geometry is a copy of, its points moved (a
+ *   dent): the same lines, measured afresh
  */
-export function wireGeometry(geometry, material) {
+export function wireGeometry(geometry, material, source) {
   if (material instanceof THREE.LineBasicMaterial) return edgesOf(geometry);
   if (!isLineMaterial(material)) return geometry;
-  return material.userData.wirePolygons ? polygonLineGeometry(geometry) : lineGeometry(geometry);
+  if (!material.userData.wirePolygons) return lineGeometry(geometry);
+  return source ? movedLineGeometry(geometry, source) : polygonLineGeometry(geometry);
 }
 
 /**

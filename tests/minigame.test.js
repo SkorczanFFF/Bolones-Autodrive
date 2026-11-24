@@ -104,7 +104,7 @@ describe("overtake", () => {
       /** @type {any} */ ({ scene, car, materials: testMaterials(), palms: [], rocks: [] }),
     );
     const cars = () => scene.children.filter(({ userData }) => userData.label);
-    const { speed, platoon, window } = MINIGAME.overtake;
+    const { speed, platoon, window, group } = MINIGAME.overtake;
     minigame.play("overtake");
     const lined = cars();
     expect(lined.length).toBeGreaterThan(0); // lined up ahead, going its way
@@ -134,7 +134,14 @@ describe("overtake", () => {
         .filter(({ userData }) => !userData.sameWay)
         .map(({ position }) => position.z)
         .sort((a, b) => a - b);
-      gaps.push(...towards.slice(1).map((z, i) => z - towards[i]));
+      const apart = towards.slice(1).map((z, i) => z - towards[i]);
+      gaps.push(...apart);
+      // no group bigger than `group`: no more short gaps in a row than one less
+      let row = 0;
+      for (const gap of apart) {
+        row = gap <= platoon[1] + 1 ? row + 1 : 0;
+        expect(row).toBeLessThan(group[1]);
+      }
     }
     // in groups, room to overtake between them
     for (const gap of gaps) expect(gap <= platoon[1] + 1 || gap >= window[0] - 1).toBe(true);

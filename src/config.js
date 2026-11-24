@@ -638,7 +638,7 @@ export const MINIGAME = {
    * Overtake: a two-lane road, speeds over it in km/h. In the right lane the cars going the
    * Bolones' way, `slow`, `gaps` units apart, lined up no nearer than `ahead` in front of it (the
    * first reaches it after the countdown); in the left lane the traffic towards it, `oncoming`
-   * (faster every SPEED.tierEvery cars overtaken), in groups of MINIGAME.batch `platoon` units
+   * (faster every SPEED.tierEvery cars overtaken), in groups of `group` cars `platoon` units
    * apart, `window` units between the groups: room to overtake. The Bolones starts at `start`; ↑
    * adds `gas` a second up to `top`, ↓ takes `brake` a second down to theirs (it can wait behind
    * one for a gap), let go it holds.
@@ -648,8 +648,9 @@ export const MINIGAME = {
     gaps: [20, 60],
     ahead: 40,
     oncoming: 60,
+    group: [1, 4],
     platoon: [25, 50],
-    window: [200, 400],
+    window: [120, 260],
     speed: { start: 70, top: 120, gas: 15, brake: 40 },
     /** After a crash its drivers (MINIGAME.crash.drivers) are slow to see it, `reaction` seconds,
      * and slow to stop, braking `brake` of friction.brake at most: the ones overtaken run into the

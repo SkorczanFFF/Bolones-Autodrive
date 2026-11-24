@@ -209,7 +209,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
         : apart(platoon > 0 ? overtake.platoon : overtake.window, roll),
     create: () => {
       if (mode !== "overtake") return arrive(nextX(), false);
-      platoon = platoon > 0 ? platoon - 1 : randomInt(MINIGAME.batch) - 1;
+      platoon = platoon > 0 ? platoon - 1 : randomInt(overtake.group) - 1;
       return arrive(randomIn(lanes.left), false);
     },
   });

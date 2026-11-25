@@ -290,7 +290,8 @@ export function createCity({ scene, materials, mountains }) {
   // The windows follow the lines' material (the GUI edits it): the same Color object, and
   // visibility and glow copied every frame (update).
   const lines = materials.wire.city;
-  const glass = new THREE.MeshBasicMaterial({ fog: false, transparent: true });
+  // the walls write the depth, the glow pass tests against it (core/bloom.js)
+  const glass = new THREE.MeshBasicMaterial({ fog: false, transparent: true, depthWrite: false });
   glass.color = lines.color;
   addHaze(materials.solid.city, haze);
   for (const material of [lines, glass]) addHaze(material, haze, true);

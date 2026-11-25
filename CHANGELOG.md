@@ -86,6 +86,8 @@ lets you recolor and tweak everything.
   body's anyway): the palms' and rocks' were faint on the dark ground, and everything casting one
   was drawn five times more a frame. After a crash a frame takes about half the draw calls.
 - The Bolones' fuel cap is an octagon, low-poly like the rest, and casts no shadow.
+- The glow no longer draws the whole scene a second time: it draws only the glowing lines,
+  hidden behind the solids by the depth of the scene drawn once (a quarter fewer draw calls).
 
 ### Fixed
 

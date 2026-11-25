@@ -77,6 +77,7 @@ export function createGridMaterial({
     vertexShader,
     fragmentShader,
     transparent: true,
+    depthWrite: false, // the terrain under it does: the glow pass tests against it (core/bloom.js)
     fog: true,
   });
 

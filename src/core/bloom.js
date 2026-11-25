@@ -1,7 +1,5 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { BLOOM, WIRE } from "../config.js";
 
@@ -25,47 +23,41 @@ const mixShader = {
 
 /**
  * Selective bloom: only objects on BLOOM.layer (the wireframe twins) glow, each as strong as its
- * material's `userData.glow` (0..1, per layer; dimmer lines are drawn with dimmed copies). The glow pass renders
- * the scene with every other drawable swapped for black, so solids still hide the lines behind
- * them, with black fog and background (far lines glow less, the sky not at all); the result is
- * blurred and added to the normal render.
+ * material's `userData.glow` (0..1, per layer; dimmer lines are drawn with dimmed copies). The
+ * scene is drawn once, into a multisampled target; the glow pass then draws only what is on the
+ * layer (the lights are on it too), against that pass's depth, so the solids hide the lines
+ * behind them without being drawn again; with black fog and no background (far lines glow less,
+ * the sky not at all). The result is blurred and added to the normal render.
  *
  * @param {THREE.WebGLRenderer} renderer
  * @param {THREE.Scene} scene
  * @param {THREE.Camera} camera
  */
 export function createBloom(renderer, scene, camera) {
-  const glowing = new THREE.Layers();
-  glowing.set(BLOOM.layer);
   const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-
-  const glowComposer = new EffectComposer(renderer);
-  glowComposer.renderToScreen = false;
-  glowComposer.addPass(new RenderPass(scene, camera));
-  const glow = new UnrealBloomPass(size, BLOOM.strength, BLOOM.radius, 0);
-  glowComposer.addPass(glow);
-
-  // Multisampled like the canvas (the renderer is created with antialias).
+  const depth = new THREE.DepthTexture(size.x, size.y);
+  // multisampled like the canvas (the renderer is created with antialias), its depth resolved into
+  // `depth`, which the glow pass tests against
   const target = new THREE.WebGLRenderTarget(size.x, size.y, {
     type: THREE.HalfFloatType,
     samples: 4,
+    depthTexture: depth,
   });
-  const composer = new EffectComposer(renderer, target);
-  composer.addPass(new RenderPass(scene, camera));
-  const mix = new ShaderPass(
+  const lines = new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.HalfFloatType,
+    depthTexture: depth,
+  });
+  const glow = new UnrealBloomPass(size, BLOOM.strength, BLOOM.radius, 0);
+  const mix = new FullScreenQuad(
     new THREE.ShaderMaterial({
       ...mixShader,
       uniforms: {
-        baseTexture: { value: null },
-        bloomTexture: { value: glowComposer.renderTarget2.texture },
+        baseTexture: { value: target.texture },
+        bloomTexture: { value: lines.texture },
       },
     }),
-    "baseTexture",
   );
-  composer.addPass(mix);
 
-  /** Black stand-ins keyed by what decides depth and visibility. @type {Map<string, THREE.Material>} */
-  const blacks = new Map();
   /** @type {Map<THREE.Mesh | THREE.Line, THREE.Material | THREE.Material[]>} */
   const swapped = new Map();
   const fogColor = new THREE.Color();
@@ -90,48 +82,15 @@ export function createBloom(renderer, scene, camera) {
     return dim;
   }
 
-  /** @param {THREE.Material} material */
-  function blackFor(material) {
-    const { polygonOffset, polygonOffsetFactor, polygonOffsetUnits, side, visible, depthWrite } =
-      material;
-    const key = [
-      polygonOffset,
-      polygonOffsetFactor,
-      polygonOffsetUnits,
-      side,
-      visible,
-      depthWrite,
-    ].join();
-    let black = blacks.get(key);
-    if (!black) {
-      black = new THREE.MeshBasicMaterial({
-        color: 0x000000,
-        fog: false,
-        polygonOffset,
-        polygonOffsetFactor,
-        polygonOffsetUnits,
-        side,
-        visible,
-        depthWrite,
-      });
-      blacks.set(key, black);
-    }
-    return black;
-  }
-
-  /** @param {THREE.Object3D} object */
-  function darken(object) {
+  /** Lines glowing less than fully: their dimmed copies. @param {THREE.Object3D} object */
+  function dim(object) {
     if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
     const { material } = object;
-    if (object.layers.test(glowing)) {
-      const factor = Array.isArray(material) ? 1 : (material.userData.glow ?? WIRE.glow);
-      if (factor >= 1 || !("color" in material)) return;
-      swapped.set(object, material);
-      object.material = dimmedFor(/** @type {any} */ (material), factor);
-      return;
-    }
+    if (!object.layers.isEnabled(BLOOM.layer) || Array.isArray(material)) return;
+    const factor = material.userData.glow ?? WIRE.glow;
+    if (factor >= 1 || !("color" in material)) return;
     swapped.set(object, material);
-    object.material = blackFor(Array.isArray(material) ? material[0] : material);
+    object.material = dimmedFor(/** @type {any} */ (material), factor);
   }
 
   return {
@@ -153,30 +112,41 @@ export function createBloom(renderer, scene, camera) {
 
     /** @param {number} width @param {number} height drawing buffer size */
     setSize(width, height) {
-      glowComposer.setSize(width, height);
-      composer.setSize(width, height);
+      target.setSize(width, height);
+      lines.setSize(width, height);
+      glow.setSize(width, height);
     },
 
     render() {
-      const background = scene.background;
+      renderer.setRenderTarget(target);
+      renderer.render(scene, camera);
+
+      const { background } = scene;
       const fog = /** @type {THREE.Fog | null} */ (scene.fog);
-      scene.traverse(darken);
+      const { mask } = camera.layers;
+      scene.traverse(dim);
       scene.background = null;
       if (fog) (fogColor.copy(fog.color), fog.color.set(0x000000));
-
-      // black and lines: no shadows to draw (the sun's maps each frame), the normal pass does
+      camera.layers.set(BLOOM.layer);
+      // lines only: no shadows to draw (the pass above did), the depth of the scene kept
       const { shadowMap } = renderer;
-      const updating = shadowMap.autoUpdate;
-      shadowMap.autoUpdate = false;
-      glowComposer.render();
+      const [updating, clearDepth] = [shadowMap.autoUpdate, renderer.autoClearDepth];
+      shadowMap.autoUpdate = renderer.autoClearDepth = false;
+      renderer.setRenderTarget(lines);
+      renderer.render(scene, camera);
       shadowMap.autoUpdate = updating;
+      renderer.autoClearDepth = clearDepth;
 
+      camera.layers.mask = mask;
       for (const [object, material] of swapped) object.material = material;
       swapped.clear();
       scene.background = background;
       if (fog) fog.color.copy(fogColor);
 
-      composer.render();
+      // blurred, added onto the lines (no write buffer)
+      glow.render(renderer, lines, lines, 0, false);
+      renderer.setRenderTarget(null);
+      mix.render(renderer);
     },
   };
 }

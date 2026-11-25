@@ -361,8 +361,8 @@ export const WIRE = {
 };
 
 /**
- * Glow on the wireframes only (core/bloom.js): the wire twins sit on `layer`, everything else is
- * black in the glow pass. strength / radius as in UnrealBloomPass.
+ * Glow on the wireframes only (core/bloom.js): the wire twins sit on `layer`, the glow pass draws
+ * nothing else (the lights light it). strength / radius as in UnrealBloomPass.
  */
 export const BLOOM = {
   enabled: true,

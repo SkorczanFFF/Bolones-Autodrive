@@ -110,6 +110,11 @@ lets you recolor and tweak everything.
 - The first crash after loading is as smooth as the next ones: the crash test behind the loading
   screen has the Bolones run into by the traffic, hard enough to tear parts off, so every part of
   a crash has run once before the game starts.
+- A car sliding sideways leans over onto the wheels it slides towards and can roll over: the
+  Polakito and the Kredens from about 36 km/h sideways, the Ramses sooner; the Bolones, low and
+  wide, only leans. The tyres' grip tips a car as it does at the road (the physics put it at the
+  height of the car's weight, so nothing ever leant), and the anti-roll bars work through the
+  springs: they no longer hold a car up once a wheel is off the road.
 
 ### Fixed
 

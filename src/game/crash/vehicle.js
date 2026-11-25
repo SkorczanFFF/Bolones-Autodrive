@@ -1,7 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME } from "../../config.js";
-import { GRAVITY, STEP } from "./physics.js";
+import { GRAVITY, STEP, UP } from "./physics.js";
 
 /** A wheel's suspension and axle, in the car's frame (Rapier's ray-cast vehicle). */
 const [DOWN, AXLE] = [
@@ -12,9 +12,10 @@ const [DOWN, AXLE] = [
 /**
  * A car on its wheels (Rapier's ray-cast vehicle): each wheel a spring holding its share of the
  * car's weight (the nearer the centre of mass, the more), so the car stands where it stood, and a
- * tyre gripping the road (MINIGAME.crash.friction.side), braking and steering; an anti-roll bar
- * across each axle (MINIGAME.crash.car.springs). The rig's wheels follow: they roll, steer and
- * ride their springs.
+ * tyre gripping the road (MINIGAME.crash.friction.side), braking and steering, its grip tipping
+ * the car from down there (MINIGAME.crash.car.tip: sliding sideways it can roll over); an
+ * anti-roll bar across each axle (MINIGAME.crash.car.springs). The rig's wheels follow: they
+ * roll, steer and ride their springs.
  *
  * @param {RAPIER.World} world
  * @param {RAPIER.RigidBody} body its middle at the centre of mass, turned as the car is
@@ -56,7 +57,9 @@ export function createVehicle(world, body, rig, centre, groups) {
     // the wheel's bottom over the road, the car upright: its spring takes that up
     const above = height + at.y - radius;
     const point = new THREE.Vector3(at.x, at.y + travel, at.z); // where its spring is fixed
-    controller.addWheel(point, DOWN, AXLE, travel + above + (load * GRAVITY) / stiffness, radius);
+    const axle = AXLE.clone(); // in the car's frame, not steered
+    const rest = travel + above + (load * GRAVITY) / stiffness; // its spring's length, unloaded
+    controller.addWheel(point, DOWN, axle, rest, radius);
     controller.setWheelSuspensionStiffness(i, stiffness);
     controller.setWheelSuspensionCompression(i, damping);
     controller.setWheelSuspensionRelaxation(i, damping);
@@ -68,6 +71,8 @@ export function createVehicle(world, body, rig, centre, groups) {
       load,
       travel,
       point,
+      axle,
+      rest,
       toe: 0, // radians: a wheel broken or pushed askew
       lost: false,
       from: { spin: spin.rotation.x, steer: steer.rotation.y },
@@ -82,10 +87,20 @@ export function createVehicle(world, body, rig, centre, groups) {
       .filter(([, , right]) => right.mount.position.x * left.mount.position.x < 0)
       .map(([, j]) => /** @type {const} */ ([i, j])),
   );
-  const bar = car.springs.antiRoll * stiffness * mass; // force per unit the two differ
+  const { tip } = car;
+  const { antiRoll } = car.springs;
   /** How far a wheel's spring is out (in full, a wheel off the road). @param {number} i */
   const length = (i) => controller.wheelSuspensionLength(i) ?? wheels[i].travel;
-  const [turn, arm, torque] = [new THREE.Quaternion(), new THREE.Vector3(), new THREE.Vector3()];
+  /**
+   * How far a wheel's spring is pressed in, as its load: none off the road (Rapier then gives its
+   * length as its rest length, the bar's) or lost.
+   *
+   * @param {number} i
+   */
+  const pressed = (i) =>
+    wheels[i].lost || !controller.wheelIsInContact(i) ? 0 : Math.max(0, wheels[i].rest - length(i));
+  const turn = new THREE.Quaternion();
+  const [rise, side, torque] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 
   return {
     /**
@@ -164,12 +179,11 @@ export function createVehicle(world, body, rig, centre, groups) {
     skew(mount, position, quaternion) {
       const i = wheels.findIndex((wheel) => wheel.mount === mount);
       if (i < 0) return;
-      const { point, travel } = wheels[i];
+      const { point, travel, axle } = wheels[i];
       point.copy(position).sub(centre);
       point.y += travel;
       controller.setWheelChassisConnectionPointCs(i, point);
-      const axle = AXLE.clone().applyQuaternion(quaternion);
-      controller.setWheelAxleCs(i, axle);
+      controller.setWheelAxleCs(i, axle.copy(AXLE).applyQuaternion(quaternion));
     },
 
     /**
@@ -196,17 +210,36 @@ export function createVehicle(world, body, rig, centre, groups) {
         const steered = mount.userData.steers ? from.steer + steering : 0;
         controller.setWheelSteering(i, steered + toe);
       });
-      controller.updateVehicle(STEP, undefined, groups);
-      // a bar twisted as one side goes down more than the other lifts that side, lowers the other:
-      // as much force up at one spring as down at the other, so only the turn they give the car
-      // (one call into Rapier, not four, each a vector or two it makes and frees)
-      body.rotation(turn);
+      // an anti-roll bar moves weight onto the wheel pressed further in, through the springs: no
+      // more than the other one carries (none once it is off the road)
       for (const [i, j] of bars) {
-        if (wheels[i].lost || wheels[j].lost) continue;
-        const force = bar * (length(j) - length(i)); // i pressed further in than j: up at i
-        arm.subVectors(wheels[i].point, wheels[j].point).applyQuaternion(turn);
-        body.addTorque(torque.set(-arm.z * force, 0, arm.x * force), false); // arm × (0, force, 0)
+        const a = pressed(i);
+        const b = pressed(j);
+        const shift = THREE.MathUtils.clamp(antiRoll * (a - b), -a, b);
+        controller.setWheelSuspensionRestLength(i, wheels[i].rest + shift);
+        controller.setWheelSuspensionRestLength(j, wheels[j].rest - shift);
       }
+      controller.updateVehicle(STEP, undefined, groups);
+      // a tyre's side force tips the car from the road, under the centre of mass: Rapier puts it
+      // about level with the centre (a ray-cast vehicle's guard against rolling over), so `tip`
+      // of the turn it leaves out is added, all the wheels' in one
+      body.rotation(turn);
+      rise.copy(UP).applyQuaternion(turn); // the car's up
+      torque.set(0, 0, 0);
+      wheels.forEach(({ point, radius, axle }, i) => {
+        const impulse = controller.wheelSideImpulse(i);
+        if (!impulse) return;
+        const below = point.y - length(i) - radius; // where it grips, from the centre of mass
+        // its force: along its axle, steered, level with the (flat) road; its turn: up × force
+        side
+          .copy(axle)
+          .applyAxisAngle(UP, controller.wheelSteering(i) ?? 0)
+          .applyQuaternion(turn)
+          .setY(0)
+          .normalize();
+        torque.addScaledVector(side.crossVectors(rise, side), (below * tip * impulse) / STEP);
+      });
+      body.addTorque(torque, false);
     },
 
     /** The rig's wheels where the vehicle's are: rolled, steered, up or down on their springs. */

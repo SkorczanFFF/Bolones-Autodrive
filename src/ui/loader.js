@@ -1,6 +1,5 @@
 import * as THREE from "three";
 import { LOADER, TEXT } from "../config.js";
-import { randomIn } from "../core/random.js";
 
 /**
  * Text progress bar, e.g. `LOADING: [=====               ] 25%`.
@@ -19,9 +18,26 @@ export function formatProgress(loaded, total, barLength = LOADER.barLength) {
 /** @param {string} url */
 const fileName = (url) => (url.split("/").pop() ?? url).toUpperCase();
 
+/** @typedef {keyof typeof TEXT.loaderSteps} LoaderStep */
+
+/** The steps of the startup after the files, in the order they run (TEXT.loaderSteps). */
+const STEPS = /** @type {LoaderStep[]} */ (Object.keys(TEXT.loaderSteps));
+
 /**
- * 80s terminal loading screen driven by a THREE.LoadingManager. Typing and removal run on the
- * main loop (`update`), so there are no timers and no reliance on CSS events.
+ * Once the browser has painted what was just set. A hidden page paints nothing: after 100 ms then
+ * (a second, where the browser slows a hidden page's timers down).
+ */
+const painted = () =>
+  new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve));
+    setTimeout(resolve, 100);
+  });
+
+/**
+ * 80s terminal loading screen: what is being done (the files loading through a
+ * THREE.LoadingManager, then each step of the startup, step()) and a bar over all of it. The steps
+ * hold the main thread, so each is shown before it runs. Removal runs on the main loop (`update`),
+ * so there is no reliance on CSS events.
  *
  * @param {HTMLElement} [root]
  */
@@ -36,14 +52,21 @@ export function createLoader(
 
   $(".loader__header").textContent = TEXT.loaderHeader;
   text.textContent = TEXT.loaderIntro;
-  progress.textContent = formatProgress(0, 0);
   root.style.setProperty("--loader-fade-delay", `${LOADER.fadeDelay}s`);
   root.style.setProperty("--loader-fade-duration", `${LOADER.fadeDuration}s`);
   root.style.setProperty("--loader-line-opacity", String(LOADER.lineOpacity));
 
+  let files = { loaded: 0, total: 0 };
+  let done = 0; // steps
+  const draw = () => {
+    progress.textContent = formatProgress(files.loaded + done, files.total + STEPS.length);
+  };
+  draw();
+
   const manager = new THREE.LoadingManager();
   manager.onProgress = (url, loaded, total) => {
-    progress.textContent = formatProgress(loaded, total);
+    files = { loaded, total };
+    draw();
     status.textContent = `${TEXT.loading}: ${fileName(url)}`;
   };
   manager.onError = (url) => {
@@ -52,47 +75,41 @@ export function createLoader(
 
   /** @type {"loading" | "fading" | "removed" | "failed"} */
   let state = "loading";
-  let messageIndex = 0;
-  let charIndex = 0;
-  let wait = 0;
   let fadeLeft = 0;
-
-  function typeNext() {
-    const message = TEXT.loaderMessages[messageIndex];
-    if (charIndex < message.length) {
-      charIndex++;
-      text.textContent = message.slice(0, charIndex);
-      wait += randomIn(LOADER.typeDelay);
-    } else {
-      messageIndex = (messageIndex + 1) % TEXT.loaderMessages.length;
-      charIndex = 0;
-      wait += LOADER.messagePause;
-    }
-  }
 
   return {
     manager,
 
+    /**
+     * Shows a step of the startup about to run (the ones before it are done), once it is on the
+     * screen.
+     *
+     * @param {LoaderStep} step
+     */
+    step(step) {
+      done = STEPS.indexOf(step);
+      draw();
+      text.textContent = TEXT.loaderSteps[step];
+      status.textContent = "";
+      return painted();
+    },
+
     /** @param {number} dt */
     update(dt) {
-      if (state === "loading") {
-        wait -= dt;
-        while (wait <= 0) typeNext();
-      } else if (state === "fading") {
-        fadeLeft -= dt;
-        if (fadeLeft <= 0) {
-          root.remove();
-          state = "removed";
-        }
-      }
+      if (state !== "fading") return;
+      fadeLeft -= dt;
+      if (fadeLeft > 0) return;
+      root.remove();
+      state = "removed";
     },
 
     /** Shows "ready", fades out (CSS transition) and removes itself once the fade is over. */
     finish() {
       state = "fading";
       fadeLeft = LOADER.fadeDelay + LOADER.fadeDuration;
+      done = STEPS.length;
+      draw();
       status.textContent = TEXT.loaderReady;
-      progress.textContent = formatProgress(1, 1);
       root.classList.add("is-done");
     },
 

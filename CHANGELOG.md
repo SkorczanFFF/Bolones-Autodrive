@@ -93,6 +93,10 @@ lets you recolor and tweak everything.
 - The traffic farther ahead than 50 units is drawn as one mesh a car (its lamps another): four
   draw calls instead of about 25, the same picture (only its wheels, a few pixels there, stand
   still). Close up and in a crash every car is whole, its parts on its rig.
+- The loading screen shows what it is doing: the files loading, then building the landscape,
+  preparing the Bolones, assembling the traffic and a crash test, each step on the screen before
+  it runs, its bar going through all of it. It no longer types made-up messages, frozen while the
+  game was being built.
 
 ### Fixed
 

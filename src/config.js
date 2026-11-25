@@ -816,8 +816,6 @@ export const DEVSTATS = {
 export const LOADER = {
   barLength: 20, // characters in the progress bar
   lineOpacity: 0.25, // dark scan lines over the loading screen (the CRT overlay has its own, CRT)
-  typeDelay: [0.03, 0.06], // seconds per typed character (random in range)
-  messagePause: 0.5, // seconds between messages
   fadeDelay: 0.3, // seconds "SYSTEM READY!" stays before fading
   fadeDuration: 1, // seconds of the fade-out
 };
@@ -837,14 +835,14 @@ export const ASSETS = {
 
 export const TEXT = {
   loaderHeader: "AUTODRIVE.SYS",
-  loaderIntro: "INITIALIZING BOLONES AUTODRIVE SYSTEM...",
-  loaderMessages: [
-    "BOOTING SYSTEM...",
-    "INITIALIZING GRAPHICS...",
-    "LOADING VECTOR DATA...",
-    "CHECKING SYSTEM...",
-    "LOADING ASSETS...",
-  ],
+  loaderIntro: "INITIALIZING BOLONES AUTODRIVE SYSTEM...", // while the files load
+  /** The startup after the files, step by step, in this order (ui/loader.js, main.js). */
+  loaderSteps: {
+    world: "BUILDING THE LANDSCAPE...",
+    car: "PREPARING THE BOLONES...",
+    traffic: "ASSEMBLING TRAFFIC...",
+    warmUp: "CRASH TEST...",
+  },
   loaderReady: "SYSTEM READY!",
   loaderError: "ERROR",
   loaderFailed: "SYSTEM FAILURE: REFRESH TO RETRY",

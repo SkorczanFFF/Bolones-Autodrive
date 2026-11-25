@@ -47,9 +47,12 @@ async function main() {
   }
 
   const { models, textures } = assets;
+  await loader.step("world");
   const materials = createMaterials(textures, view.renderer.capabilities.getMaxAnisotropy());
   const world = createWorld({ scene: view.scene, materials, models });
+  await loader.step("car");
   const car = createCar({ scene: view.scene, materials, models });
+  await loader.step("traffic");
   const minigame = createMinigame({
     scene: view.scene,
     car,
@@ -58,6 +61,7 @@ async function main() {
     rocks: world.parts.scenery.rocks.objects,
   });
 
+  await loader.step("warmUp");
   minigame.warmUp(view.warmUp);
   const tweens = createTweens();
   const input = createInput();

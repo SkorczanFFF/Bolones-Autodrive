@@ -52,6 +52,9 @@ lets you recolor and tweak everything.
   button on a touch screen is big enough for a finger.
 - `?stats` at the end of the app's address shows the developer stats (FPS, draw calls, triangles)
   from the start: on a phone, which has no F10, compact, at the left edge clear of the thumbs.
+- A car rolled over crushes its roof where it comes down on it, as deep as it comes down fast:
+  on the edge it lands on first, the rest less or not at all, so a roof does not come out flat.
+  It then lies on its roof as crushed, its roof shaped as the model's is (a box round it before).
 
 ### Changed
 

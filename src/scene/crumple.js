@@ -7,7 +7,8 @@ import { partOf } from "./rig.js";
 /**
  * @typedef {object} Hit where a car was hit, in world space
  * @property {THREE.Vector3} point the middle of where the cars met
- * @property {THREE.Vector3} into unit, level: into the car
+ * @property {THREE.Vector3} into unit, level: into the car (or up: a car coming down on its roof,
+ *   crushed wherever the plane takes it, `reach` and `tall` Infinity)
  * @property {number} plane how far along `into` from the point the crushed face ends up: about
  *   as deep as the car is crushed
  * @property {number} reach half the width crushed, round the point

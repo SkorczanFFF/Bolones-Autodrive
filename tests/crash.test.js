@@ -764,20 +764,45 @@ describe("a car's ends", () => {
 });
 
 describe("a car rolled over", () => {
-  it("lands on its roof: the body above its box, up to the top, not its mirrors", () => {
+  it("crushes its roof where it comes down on it, and lies on it as crushed", () => {
+    const scene = new THREE.Scene();
+    const sliding = car(0, 0, POLAKITO, 580, 0);
+    sliding.velocity.set(36, 0, 0); // 20 m/s sideways: it rolls over (above)
+    const far = car(0, -400, BOLONES, CAR.mass, 0);
+    scene.add(sliding.object, far.object);
+    const crash = createCrash(scene, [sliding, far]);
+    const shell = /** @type {THREE.Mesh} */ (sliding.object.children[0]);
+    const before = shell.geometry.getAttribute("position").clone();
+    for (let t = 0; t < 4; t += 1 / 60) crash.update(1 / 60);
+    expect(leanOf(sliding.object)).toBeGreaterThan(135); // on its roof
+    const after = shell.geometry.getAttribute("position");
+    let dent = 0;
+    for (let i = 0; i < before.count; i++) {
+      if (before.getY(i) < POLAKITO[1] - 0.1) continue; // the roof
+      const moved = new THREE.Vector3().fromBufferAttribute(after, i);
+      dent = Math.max(dent, moved.distanceTo(new THREE.Vector3().fromBufferAttribute(before, i)));
+    }
+    expect(dent).toBeGreaterThan(0.05);
+    expect(dent).toBeLessThan(0.5); // dented, not flattened
+    sliding.object.updateWorldMatrix(true, true);
+    const lowest = new THREE.Box3().setFromObject(shell, true).min.y;
+    expect(Math.abs(lowest)).toBeLessThan(0.05); // on the road: not in it, not above it
+  });
+
+  it("lands on its roof: the body above its box, from it up to the top, not its mirrors", () => {
     const models = createTrafficModels(testMaterials());
     for (const model of models) {
       model.updateMatrixWorld(true);
       const { hitbox } = model.userData;
       const from = hitbox.min[1] + 0.7 * (hitbox.max[1] - hitbox.min[1]);
-      const roof = roofOf(model, from);
+      const hull = roofOf(model, from);
+      const roof = new THREE.Box3().setFromPoints(hull.corners);
       const label = model.userData.label;
       expect(roof.max.y, label).toBeCloseTo(hitbox.max[1], 5);
-      expect(roof.min.y, label).toBeGreaterThan(from);
-      expect(roof.min.y, label).toBeLessThan(from + 0.1 * (hitbox.max[1] - hitbox.min[1]));
+      expect(roof.min.y, label).toBeCloseTo(from, 5); // down to the box: it has a floor
       // as wide as the body there at most: not out to the mirrors
       expect(roof.max.x, label).toBeLessThanOrEqual(hitbox.max[0] + 1e-6);
-      expect(roofOf(model.clone(), from), label).toBe(roof); // once per model
+      expect(roofOf(model.clone(), from), label).toBe(hull); // once per model
     }
   });
 });

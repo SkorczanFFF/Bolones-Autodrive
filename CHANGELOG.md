@@ -104,6 +104,9 @@ lets you recolor and tweak everything.
   in turn), its lamps still going out at once, and denting a car takes about a quarter less time
   (its lines and normals worked out straight from its points, its bounds from how far the dent
   moves them).
+- A crash leaves less garbage for the browser to clear up, a pause each time (about 40 % less in a
+  pile-up): a car's anti-roll bars turn it in one go (they pushed it four times a step, each push
+  two vectors made and freed), and the loops over every point of a car keep no throwaway arrays.
 
 ### Fixed
 

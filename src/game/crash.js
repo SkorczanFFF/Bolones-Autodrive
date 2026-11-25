@@ -299,6 +299,19 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   }
 
   /**
+   * Where a body is before a step, for posed(): written into the same vectors every step (Rapier
+   * fills what it is given, makes new ones otherwise).
+   *
+   * @param {RAPIER.RigidBody} body
+   */
+  function remember(body) {
+    let was = before.get(body);
+    if (!was) before.set(body, (was = { at: new THREE.Vector3(), turn: new THREE.Quaternion() }));
+    body.translation(was.at);
+    body.rotation(was.turn);
+  }
+
+  /**
    * Where a body is shown: between where it was a step ago and is now, as far as the time not
    * stepped yet goes (steps do not come every frame in slow motion).
    *
@@ -473,24 +486,26 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    * torn off and the snags.
    */
   function step() {
-    for (const { body } of [...bodies, ...loose]) {
-      before.set(body, { at: vector(body.translation()), turn: rotation(body.rotation()) });
-    }
+    for (const { body } of bodies) remember(body);
+    for (const { body } of loose) remember(body);
     for (const { body, driver, vehicle } of bodies) {
       body.resetForces(false);
       body.resetTorques(false);
       driver.drive(time);
       vehicle.update();
     }
-    // where each is, once: most pairs are too far apart to touch, not worth their boxes, nor are
-    // two at rest
-    const at = [...bodies.map(({ body }) => vector(body.translation())), ...postsAt];
+    // where each is (just remembered): most pairs are too far apart to touch, not worth their
+    // boxes, nor are two at rest
+    const at = (/** @type {number} */ i) =>
+      i < bodies.length
+        ? /** @type {{ at: THREE.Vector3 }} */ (before.get(bodies[i].body)).at
+        : postsAt[i - bodies.length];
     const still = solids.map((solid, i) => i >= bodies.length || solid.body.isSleeping());
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < solids.length; j++) {
         if (still[i] && still[j]) continue;
         const reach = reachOf(solids[i]) + reachOf(solids[j]);
-        if (at[i].distanceToSquared(at[j]) > reach ** 2) continue;
+        if (at(i).distanceToSquared(at(j)) > reach ** 2) continue;
         crushes.collide(solids[i], solids[j], time);
       }
     }

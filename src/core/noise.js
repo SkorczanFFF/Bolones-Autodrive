@@ -106,6 +106,9 @@ export function createRidged(seed) {
   };
 }
 
+/** Eased 0..1 (smoothstep). @param {number} t */
+const smooth = (t) => t * t * (3 - 2 * t);
+
 /**
  * 3D value noise: a smooth 0..1 value over space, per seed, from values on a lattice `cell` apart
  * blended in between (points close together get close values).
@@ -115,18 +118,25 @@ export function createRidged(seed) {
  * @param {number} cell
  */
 export function valueNoise({ x, y, z }, seed, cell) {
-  const at = [x, y, z].map((v) => v / cell);
-  const corner = at.map(Math.floor);
-  const [tx, ty, tz] = at.map((v, k) => {
-    const t = v - corner[k];
-    return t * t * (3 - 2 * t);
-  });
+  // plain numbers, no arrays: a crash takes it twice for every point it crushes
+  const fx = x / cell;
+  const fy = y / cell;
+  const fz = z / cell;
+  const cx = Math.floor(fx);
+  const cy = Math.floor(fy);
+  const cz = Math.floor(fz);
+  const tx = smooth(fx - cx);
+  const ty = smooth(fy - cy);
+  const tz = smooth(fz - cz);
   let sum = 0;
   for (let k = 0; k < 8; k++) {
-    const [dx, dy, dz] = [k & 1, (k >> 1) & 1, (k >> 2) & 1];
+    const dx = k & 1;
+    const dy = (k >> 1) & 1;
+    const dz = (k >> 2) & 1;
     const weight = (dx ? tx : 1 - tx) * (dy ? ty : 1 - ty) * (dz ? tz : 1 - tz);
-    const [i, j, l] = [corner[0] + dx, corner[1] + dy, corner[2] + dz];
-    const s = Math.sin(i * 127.1 + j * 311.7 + l * 74.7 + seed * 19.19) * 43758.5453;
+    const s =
+      Math.sin((cx + dx) * 127.1 + (cy + dy) * 311.7 + (cz + dz) * 74.7 + seed * 19.19) *
+      43758.5453;
     sum += weight * (s - Math.floor(s));
   }
   return sum;

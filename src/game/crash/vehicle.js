@@ -55,13 +55,8 @@ export function createVehicle(world, body, rig, centre, groups) {
     const at = mount.position.clone().sub(centre);
     // the wheel's bottom over the road, the car upright: its spring takes that up
     const above = height + at.y - radius;
-    controller.addWheel(
-      { x: at.x, y: at.y + travel, z: at.z },
-      DOWN,
-      AXLE,
-      travel + above + (load * GRAVITY) / stiffness,
-      radius,
-    );
+    const point = new THREE.Vector3(at.x, at.y + travel, at.z); // where its spring is fixed
+    controller.addWheel(point, DOWN, AXLE, travel + above + (load * GRAVITY) / stiffness, radius);
     controller.setWheelSuspensionStiffness(i, stiffness);
     controller.setWheelSuspensionCompression(i, damping);
     controller.setWheelSuspensionRelaxation(i, damping);
@@ -72,6 +67,7 @@ export function createVehicle(world, body, rig, centre, groups) {
       ...wheel,
       load,
       travel,
+      point,
       toe: 0, // radians: a wheel broken or pushed askew
       lost: false,
       from: { spin: spin.rotation.x, steer: steer.rotation.y },
@@ -87,6 +83,9 @@ export function createVehicle(world, body, rig, centre, groups) {
       .map(([, j]) => /** @type {const} */ ([i, j])),
   );
   const bar = car.springs.antiRoll * stiffness * mass; // force per unit the two differ
+  /** How far a wheel's spring is out (in full, a wheel off the road). @param {number} i */
+  const length = (i) => controller.wheelSuspensionLength(i) ?? wheels[i].travel;
+  const [turn, arm, torque] = [new THREE.Quaternion(), new THREE.Vector3(), new THREE.Vector3()];
 
   return {
     /**
@@ -165,12 +164,10 @@ export function createVehicle(world, body, rig, centre, groups) {
     skew(mount, position, quaternion) {
       const i = wheels.findIndex((wheel) => wheel.mount === mount);
       if (i < 0) return;
-      const at = position.clone().sub(centre);
-      controller.setWheelChassisConnectionPointCs(i, {
-        x: at.x,
-        y: at.y + wheels[i].travel,
-        z: at.z,
-      });
+      const { point, travel } = wheels[i];
+      point.copy(position).sub(centre);
+      point.y += travel;
+      controller.setWheelChassisConnectionPointCs(i, point);
       const axle = AXLE.clone().applyQuaternion(quaternion);
       controller.setWheelAxleCs(i, axle);
     },
@@ -200,18 +197,15 @@ export function createVehicle(world, body, rig, centre, groups) {
         controller.setWheelSteering(i, steered + toe);
       });
       controller.updateVehicle(STEP, undefined, groups);
-      // a bar twisted as one side goes down more than the other lifts that side, lowers the other
+      // a bar twisted as one side goes down more than the other lifts that side, lowers the other:
+      // as much force up at one spring as down at the other, so only the turn they give the car
+      // (one call into Rapier, not four, each a vector or two it makes and frees)
+      body.rotation(turn);
       for (const [i, j] of bars) {
         if (wheels[i].lost || wheels[j].lost) continue;
-        const [a, b] = [i, j].map((k) => controller.wheelSuspensionLength(k) ?? wheels[k].travel);
-        const force = bar * (b - a); // a pressed further in than b: up at a
-        for (const [k, sign] of /** @type {const} */ ([
-          [i, 1],
-          [j, -1],
-        ])) {
-          const point = controller.wheelHardPoint(k);
-          if (point) body.addForceAtPoint({ x: 0, y: sign * force, z: 0 }, point, false);
-        }
+        const force = bar * (length(j) - length(i)); // i pressed further in than j: up at i
+        arm.subVectors(wheels[i].point, wheels[j].point).applyQuaternion(turn);
+        body.addTorque(torque.set(-arm.z * force, 0, arm.x * force), false); // arm × (0, force, 0)
       }
     },
 

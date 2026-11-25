@@ -15,6 +15,9 @@ import { createFader } from "./fade.js";
  * @property {number} [fadeIn] seconds new instances take to fade in from transparent (0 = pop in)
  * @property {number} [fadeOut] seconds instances take to fade out before endZ at speedMultiplier 1;
  *   a fixed distance, so faster objects fade quicker (0 = vanish at endZ)
+ * @property {Pick<ReturnType<typeof createFader>, "set" | "release" | "clear">} [fader] how the
+ *   instances fade: their own copies of their materials (scene/fade.js) unless given (instances
+ *   drawn as copies of a model fade per copy, scene/instances.js)
  *
  * startZ, endZ, fadeIn and fadeOut default to SPAWN.
  */
@@ -36,6 +39,7 @@ export function createSpawner({
   endZ = SPAWN.endZ,
   fadeIn = SPAWN.fadeIn,
   fadeOut = SPAWN.fadeOut,
+  fader = createFader(),
 }) {
   /** @type {import("three").Object3D[]} */
   const objects = [];
@@ -43,7 +47,6 @@ export function createSpawner({
   const ages = new Map();
   let due = 0; // seconds at speed 1 since the last spawn
   let roll = Math.random();
-  const fader = createFader();
   const fadeOutDistance = speed * fadeOut;
 
   /**

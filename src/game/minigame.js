@@ -4,6 +4,7 @@ import { createRandom, pick, randomIn, randomInt } from "../core/random.js";
 import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
 import { createTrafficModels, widestReach } from "../scene/traffic.js";
+import { boundsOf } from "../scene/instances.js";
 import { solidMeshes } from "../scene/wire.js";
 import { createCrash } from "./crash.js";
 
@@ -84,7 +85,7 @@ const TRUNK = [0.5, 1.8];
  * A palm's trunk where the cars hit it (TRUNK), in the palm's frame: the middle and half the
  * width of what is there (the trunk, leaning a little).
  *
- * @param {THREE.Object3D} palm
+ * @param {THREE.Object3D} palm the model of the palms
  */
 function trunkOf(palm) {
   palm.updateWorldMatrix(true, true);
@@ -121,6 +122,7 @@ function trunkOf(palm) {
  * bounds (scene/traffic.js).
  *
  * @param {{ scene: THREE.Scene, car: ReturnType<typeof import("../scene/car.js").createCar>, materials: import("../scene/materials.js").Materials, palms: THREE.Object3D[], rocks: THREE.Object3D[] }} deps
+ *   palms, rocks: the nodes of their copies (scene/instances.js)
  */
 export function createMinigame({ scene, car, materials, palms, rocks }) {
   /** The colour of a wireframe material. @param {THREE.Material} material */
@@ -135,7 +137,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   let mode = "dodge";
   let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
   /** @type {ReturnType<typeof trunkOf> | undefined} */
-  let trunk; // the palms are clones of one model: one trunk, measured at the first crash
+  let trunk; // the palms are copies of one model: one trunk, measured at the first crash
   let pileup = 0; // crash mode: the share of the late traffic that runs in, rolled each game
   let keepComing = MINIGAME.crash.keepComing; // s, this game
   let forward = 0; // after a crash: how fast the camera goes on along the road, of WORLD.speed
@@ -315,7 +317,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     const measured = new WeakMap();
     /** @param {THREE.Object3D} palm */
     const palmPost = (palm) => {
-      const { centre, radius } = (trunk ??= trunkOf(palm));
+      const { centre, radius } = (trunk ??= trunkOf(palm.userData.model)); // scene/instances.js
       palm.updateWorldMatrix(true, false);
       const at = palm.localToWorld(centre.clone()).setY(0);
       const color = colorOf(materials.wire.palm);
@@ -323,7 +325,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     };
     /** @param {THREE.Object3D} rock */
     const rockPost = (rock) => {
-      const bounds = new THREE.Box3().setFromObject(rock);
+      const bounds = boundsOf(rock);
       const { x, z } = bounds.getCenter(new THREE.Vector3());
       const size = bounds.getSize(new THREE.Vector3());
       const at = new THREE.Vector3(x, bounds.min.y, z);

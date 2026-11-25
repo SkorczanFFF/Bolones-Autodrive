@@ -88,6 +88,8 @@ lets you recolor and tweak everything.
 - The Bolones' fuel cap is an octagon, low-poly like the rest, and casts no shadow.
 - The glow no longer draws the whole scene a second time: it draws only the glowing lines,
   hidden behind the solids by the depth of the scene drawn once (a quarter fewer draw calls).
+- The palms and the rocks are drawn as copies of their models, all of a model at once: a few
+  draw calls for all of them instead of three each (the menu went from 243 draw calls to 80).
 
 ### Fixed
 

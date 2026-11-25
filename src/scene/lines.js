@@ -360,9 +360,13 @@ const LINE_VERTEX = /* glsl */ `
   varying vec3 vWireNear, vWireNearEnd, vWireNearFar;
   #endif`;
 
-// object space -> world units (instances are scaled, e.g. rocks)
+// object space -> world units (objects and instances are scaled, e.g. rocks)
 const LINE_VERTEX_MAIN = /* glsl */ `
-  float wireScale = pow(abs(determinant(mat3(modelMatrix))), 1.0 / 3.0);
+  mat3 wireMatrix = mat3(modelMatrix);
+  #ifdef USE_INSTANCING
+  wireMatrix *= mat3(instanceMatrix);
+  #endif
+  float wireScale = pow(abs(determinant(wireMatrix)), 1.0 / 3.0);
   vWireEdge = wireEdge * wireScale;
   #ifdef WIRE_NEAR
   vWireNear = wireNear * wireScale;

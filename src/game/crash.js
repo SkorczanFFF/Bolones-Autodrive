@@ -50,7 +50,7 @@ export { ready } from "./crash/physics.js";
  * @typedef {import("./crash/crush.js").Solid & {
  *   color?: THREE.Color,
  *   struck: (hit: Hit, speed: number, time: number) => Dent | undefined,
- * }} Party a car or a palm in a crash: what it does to it
+ * }} Party a car or a palm in a crash: what it does to it (the hit on the road)
  */
 
 const SPARKS = new THREE.Color(PALETTE.headlight);
@@ -212,20 +212,40 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       stiffness: stiffness * mass,
       driver: createDriver(vehicle, swerves, random, joined ? time : undefined, car.driving),
       color: car.color,
-      /** @param {Hit} hit @param {number} speed */
+      /**
+       * Crumples the car where it was hit, in a frame of its own (crumpling): a crash dents two
+       * cars at once, a pile-up more, and each takes a while. Till then, it shows how far its
+       * crush has gone in as soon as it is there.
+       *
+       * @param {Hit} hit on the road
+       * @param {number} speed
+       * @returns {Dent}
+       */
       struck(hit, speed) {
-        // as they meet, not as last shown
-        put(car.object, offset, vector(body.translation()), rotation(body.rotation()));
-        car.onCrash?.(reaches(hit)); // before the dent moves the points
-        const dent = crumple(car.object, hit);
-        for (const { node, position, quaternion } of dent.moved) {
-          vehicle.skew(node, position, quaternion);
-        }
-        for (const node of dent.torn) {
-          if (tearing.some((tear) => tear.node === node)) continue; // torn in this frame already
-          tearing.push({ car: entry, node, into: hit.into, speed });
-        }
-        return dent;
+        const [at, turn] = [vector(body.translation()), rotation(body.rotation())]; // as they met
+        /** The hit in the scene, which rides along with the camera. */
+        const met = () => ({ ...hit, point: inScene(hit.point) });
+        put(car.object, offset, at, turn);
+        car.onCrash?.(reaches(met())); // its lamps go out at once, before the dent moves them
+        /** @type {ReturnType<typeof crumple> | undefined} */
+        let dent;
+        let progress = 0;
+        crumpling.push(() => {
+          put(car.object, offset, at, turn);
+          dent = crumple(car.object, met());
+          dent.set(progress);
+          for (const { node, position, quaternion } of dent.moved) {
+            vehicle.skew(node, position, quaternion);
+          }
+          for (const node of dent.torn) tearing.push({ car: entry, node, into: hit.into, speed });
+        });
+        return {
+          set(value) {
+            progress = value;
+            dent?.set(value);
+          },
+          undo: () => dent?.undo(),
+        };
       },
     };
     return entry;
@@ -238,6 +258,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    * @type {{ car: Body, node: THREE.Object3D, into: THREE.Vector3, speed: number }[]}
    */
   const tearing = [];
+  /** The cars hit, to crumple: one a frame (struck). @type {(() => void)[]} */
+  const crumpling = [];
   /**
    * The parts torn off: on their own, clear of the car they came off (then they hit it too) or not
    * yet.
@@ -274,6 +296,19 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   function put(object, offset, at, turn, size = new THREE.Vector3(1, 1, 1)) {
     place(object, pose.compose(inScene(at), turn, size).multiply(offset));
     object.updateWorldMatrix(true, true);
+  }
+
+  /**
+   * Where a body is before a step, for posed(): written into the same vectors every step (Rapier
+   * fills what it is given, makes new ones otherwise).
+   *
+   * @param {RAPIER.RigidBody} body
+   */
+  function remember(body) {
+    let was = before.get(body);
+    if (!was) before.set(body, (was = { at: new THREE.Vector3(), turn: new THREE.Quaternion() }));
+    body.translation(was.at);
+    body.rotation(was.turn);
   }
 
   /**
@@ -421,7 +456,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const crushed = [];
     for (const [i, solid] of [a, b].entries()) {
       const hit = crash.hits[i];
-      const dent = solid.struck({ ...hit, point: inScene(hit.point) }, crash.speed, time);
+      const dent = solid.struck(hit, crash.speed, time);
       if (!dent) continue;
       undo.push(dent.undo);
       crushed.push({ set: dent.set, progress: 0, shown: 0 });
@@ -451,24 +486,26 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    * torn off and the snags.
    */
   function step() {
-    for (const { body } of [...bodies, ...loose]) {
-      before.set(body, { at: vector(body.translation()), turn: rotation(body.rotation()) });
-    }
+    for (const { body } of bodies) remember(body);
+    for (const { body } of loose) remember(body);
     for (const { body, driver, vehicle } of bodies) {
       body.resetForces(false);
       body.resetTorques(false);
       driver.drive(time);
       vehicle.update();
     }
-    // where each is, once: most pairs are too far apart to touch, not worth their boxes, nor are
-    // two at rest
-    const at = [...bodies.map(({ body }) => vector(body.translation())), ...postsAt];
+    // where each is (just remembered): most pairs are too far apart to touch, not worth their
+    // boxes, nor are two at rest
+    const at = (/** @type {number} */ i) =>
+      i < bodies.length
+        ? /** @type {{ at: THREE.Vector3 }} */ (before.get(bodies[i].body)).at
+        : postsAt[i - bodies.length];
     const still = solids.map((solid, i) => i >= bodies.length || solid.body.isSleeping());
     for (let i = 0; i < bodies.length; i++) {
       for (let j = i + 1; j < solids.length; j++) {
         if (still[i] && still[j]) continue;
         const reach = reachOf(solids[i]) + reachOf(solids[j]);
-        if (at[i].distanceToSquared(at[j]) > reach ** 2) continue;
+        if (at(i).distanceToSquared(at(j)) > reach ** 2) continue;
         crushes.collide(solids[i], solids[j], time);
       }
     }
@@ -503,6 +540,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       bodies.forEach(({ driver }, i) => driver.see(lookAhead(looking[i], looking)));
       lag = Math.min(lag + dt, 30 * STEP); // further behind, the rest is dropped
       for (; lag >= STEP; lag -= STEP) step();
+      crumpling.shift()?.();
       camera += (-wrecks[which].body.linvel().z - camera) * settle(cameraLag, dt);
       travel += Math.max(0, camera) * dt;
 

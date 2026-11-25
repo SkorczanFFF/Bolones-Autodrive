@@ -21,6 +21,7 @@ const material = new THREE.MeshBasicMaterial({
   blending: THREE.AdditiveBlending,
   depthWrite: false,
   side: THREE.DoubleSide,
+  forceSinglePass: true, // added up, in any order: one pass (scene/lines.js LINE_PARAMETERS)
 });
 material.userData.glow = 1;
 

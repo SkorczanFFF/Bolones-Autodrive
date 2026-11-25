@@ -65,12 +65,15 @@ export function crumple(root, hit) {
   const q = new THREE.Vector3();
   for (const { world } of entries) {
     for (let i = 0; i < world.length; i += 3) {
-      q.fromArray(world, i);
-      [low, high] = [Math.min(low, q.y), Math.max(high, q.y)];
+      q.set(world[i], world[i + 1], world[i + 2]); // not fromArray(): scene/dents.js
+      low = Math.min(low, q.y);
+      high = Math.max(high, q.y);
       const lateral = lateralOf(q);
-      [left, right] = [Math.min(left, lateral), Math.max(right, lateral)];
+      left = Math.min(left, lateral);
+      right = Math.max(right, lateral);
       const { depth: at } = measure(q);
-      [near, far] = [Math.min(near, at), Math.max(far, at)];
+      near = Math.min(near, at);
+      far = Math.max(far, at);
     }
   }
   const middle = (left + right) / 2;
@@ -110,7 +113,8 @@ export function crumple(root, hit) {
     const reached = reachedAt(across);
     if (at < plane && reached) {
       const back = (plane - at) * reached;
-      const [buckle, lift] = [noise(v, 1), noise(v, 2)];
+      const buckle = noise(v, 1);
+      const lift = noise(v, 2);
       v.addScaledVector(into, back * (1 + 0.2 * buckle));
       const wave = back * 0.3 * (lift - 0.5); // buckling up and down on a front, along a side
       v.addScaledVector(UP, wave * end).addScaledVector(side, wave * (1 - end));
@@ -140,7 +144,7 @@ export function crumple(root, hit) {
       count: 0,
     };
     for (let i = 0; i < world.length; i += 3) {
-      piece.centre.add(q.fromArray(world, i));
+      piece.centre.add(q.set(world[i], world[i + 1], world[i + 2]));
       piece.front = Math.min(piece.front, measure(q).depth);
       piece.count++;
     }
@@ -151,7 +155,8 @@ export function crumple(root, hit) {
     const piece = node && pieces.get(node);
     if (!piece) continue;
     for (let i = 0; i < world.length; i += 3) {
-      piece.size = Math.max(piece.size, q.fromArray(world, i).distanceTo(piece.centre));
+      q.set(world[i], world[i + 1], world[i + 2]);
+      piece.size = Math.max(piece.size, q.distanceTo(piece.centre));
     }
   }
   /** @type {THREE.Object3D[]} */

@@ -1,12 +1,6 @@
 import * as THREE from "three";
-import { BLOOM, WIRE } from "../config.js";
-import {
-  isLineMaterial,
-  lineGeometry,
-  memoByGeometry,
-  movedLineGeometry,
-  polygonLineGeometry,
-} from "./lines.js";
+import { BLOOM } from "../config.js";
+import { isLineMaterial, lineGeometry, movedLineGeometry, polygonLineGeometry } from "./lines.js";
 
 /**
  * Replaces every mesh material under root (disposing the loader's defaults) and sets up shadows.
@@ -26,11 +20,9 @@ export function applyMaterial(root, material, shadows = true) {
   });
 }
 
-/** One EdgesGeometry per source geometry: clones share geometries, so they share outlines. */
-const edgesOf = memoByGeometry((geometry) => new THREE.EdgesGeometry(geometry, WIRE.edgeAngle));
-
 /**
- * The solid meshes under a root (and it, if one): not their wireframe twins.
+ * The solid meshes under a root (and it, if one): not their wireframe twins, nor what stands in
+ * for a car far away (`userData.far`, scene/traffic.js): a crash dents and measures the real ones.
  *
  * @param {THREE.Object3D} root
  * @returns {THREE.Mesh[]}
@@ -39,16 +31,24 @@ export function solidMeshes(root) {
   /** @type {THREE.Mesh[]} */
   const meshes = [];
   root.traverse((object) => {
-    if (object instanceof THREE.Mesh && !object.userData.isWire) meshes.push(object);
+    const { isWire, far } = object.userData;
+    if (object instanceof THREE.Mesh && !isWire && !far) meshes.push(object);
   });
   return meshes;
 }
 
 /**
- * Adds a line twin as a child of every mesh under root: outlines (LineSegments over the
- * mesh's creases) for line materials, shader-drawn lines for the materials of scene/lines.js
- * (triangle edges, or polygon outlines per the material's userData.wirePolygons), the plain
- * geometry otherwise. The twin inherits the transform and animation of its parent, so nothing
+ * A mesh's wireframe twin (addWireframe), if it has one.
+ *
+ * @param {THREE.Object3D} mesh
+ */
+export const wireOf = (mesh) =>
+  /** @type {THREE.Mesh | undefined} */ (mesh.children.find((child) => child.userData.isWire));
+
+/**
+ * Adds a line twin as a child of every mesh under root: shader-drawn lines for the materials of
+ * scene/lines.js (triangle edges, or polygon outlines per the material's userData.wirePolygons),
+ * the plain geometry otherwise. The twin inherits the transform and animation of its parent, so nothing
  * has to be kept in sync.
  *
  * @param {THREE.Object3D} root
@@ -57,11 +57,7 @@ export function solidMeshes(root) {
  */
 export function addWireframe(root, material, shadows = true) {
   for (const mesh of solidMeshes(root)) {
-    const geometry = wireGeometry(mesh.geometry, material);
-    const wire =
-      material instanceof THREE.LineBasicMaterial
-        ? new THREE.LineSegments(geometry, material)
-        : new THREE.Mesh(geometry, material);
+    const wire = new THREE.Mesh(wireGeometry(mesh.geometry, material), material);
     wire.userData.isWire = true;
     wire.layers.enable(BLOOM.layer); // glows (core/bloom.js)
     wire.castShadow = false; // thin lines add no visible shadow, only shadow-pass draw calls
@@ -80,7 +76,6 @@ export function addWireframe(root, material, shadows = true) {
  *   dent): the same lines, measured afresh
  */
 export function wireGeometry(geometry, material, source) {
-  if (material instanceof THREE.LineBasicMaterial) return edgesOf(geometry);
   if (!isLineMaterial(material)) return geometry;
   if (!material.userData.wirePolygons) return lineGeometry(geometry);
   return source ? movedLineGeometry(geometry, source) : polygonLineGeometry(geometry);

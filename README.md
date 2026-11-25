@@ -50,7 +50,8 @@ npm run typecheck  # JSDoc type check (tsc)
 npm run format     # Prettier
 ```
 
-Press **F10** in the app for the developer stats overlay (FPS, draw calls, triangles, memory).
+Press **F10** in the app, or add `?stats` to its address (a phone has no F10), for the developer
+stats overlay (FPS, draw calls, triangles, memory).
 
 ### Tests
 

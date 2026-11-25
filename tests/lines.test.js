@@ -254,6 +254,7 @@ describe("line geometry", () => {
     expect(copy).toBeInstanceOf(BasicLineMaterial);
     expect(copy.transparent).toBe(true);
     expect(copy.side).toBe(THREE.DoubleSide);
+    expect(copy.forceSinglePass).toBe(true); // drawn once, not back faces then front ones
     expect(copy.lineUniforms).toBe(material.lineUniforms); // GUI changes reach fading copies
     expect(copy.customProgramCacheKey()).toBe(material.customProgramCacheKey());
   });

@@ -50,6 +50,8 @@ lets you recolor and tweak everything.
   upright, it waits, asking to turn the phone; TAP TO START says so. Game over says to pinch, not
   scroll, to pull back, fits a phone held sideways (smaller, with room for the wreck), and every
   button on a touch screen is big enough for a finger.
+- `?stats` at the end of the app's address shows the developer stats (FPS, draw calls, triangles)
+  from the start: on a phone, which has no F10, compact, at the left edge clear of the thumbs.
 
 ### Changed
 
@@ -74,6 +76,51 @@ lets you recolor and tweak everything.
 - Tyres grip sideways as on dry asphalt (from 0.8 to 1 g): a car sliding sideways stops sooner.
 - The Bolones' rear lamps: the lower row is one long lamp, without the division the upper row
   keeps.
+- Smoother, above all after a crash and on phones: every line is drawn in one go, not twice over
+  (its back faces, then its front ones, its material set up afresh each time). A desktop
+  draws a frame in about a third of the time (after a crash in 5 ms instead of 14).
+- Crashes stutter less: a car crumples about a quarter faster, its dent no longer copies all of
+  its points every frame, and a device too slow to keep up plays the crash in slower motion
+  rather than in ever longer frames (at most 1/30 s of it a frame).
+- Only the cars cast shadows, and only their bodies (the wheels', bumpers' and lamps' fell in the
+  body's anyway): the palms' and rocks' were faint on the dark ground, and everything casting one
+  was drawn five times more a frame. After a crash a frame takes about half the draw calls.
+- The Bolones' fuel cap is an octagon, low-poly like the rest, and casts no shadow.
+- The glow no longer draws the whole scene a second time: it draws only the glowing lines,
+  hidden behind the solids by the depth of the scene drawn once (a quarter fewer draw calls).
+- The palms and the rocks are drawn as copies of their models, all of a model at once: a few
+  draw calls for all of them instead of three each (the menu went from 243 draw calls to 80).
+- The traffic farther ahead than 50 units is drawn as one mesh a car (its lamps another): four
+  draw calls instead of about 25, the same picture (only its wheels, a few pixels there, stand
+  still). Close up and in a crash every car is whole, its parts on its rig.
+- The loading screen shows what it is doing: the files loading, then building the landscape,
+  preparing the Bolones, assembling the traffic and a crash test, each step on the screen before
+  it runs, its bar going through all of it. It no longer types made-up messages, frozen while the
+  game was being built.
+- The side mountains are a little coarser: their cells three ground cells wide (were two), their
+  lines on every third grid line, half the triangles, in 8 longer stretches instead of 16 (a
+  quarter fewer draw calls); their outer ridge a little further out (328 from 320).
+- Pile-ups stutter less: a crash dents one car a frame (the two of a hit, the many of a pile-up,
+  in turn), its lamps still going out at once, and denting a car takes about a quarter less time
+  (its lines and normals worked out straight from its points, its bounds from how far the dent
+  moves them).
+- A crash leaves less garbage for the browser to clear up, a pause each time (about 40 % less in a
+  pile-up): a car's anti-roll bars turn it in one go (they pushed it four times a step, each push
+  two vectors made and freed), and the loops over every point of a car keep no throwaway arrays.
+- The first crash after loading is as smooth as the next ones: the crash test behind the loading
+  screen has the Bolones run into by the traffic, hard enough to tear parts off, so every part of
+  a crash has run once before the game starts.
+- A car sliding sideways leans over onto the wheels it slides towards and can roll over: the
+  Polakito and the Kredens from about 36 km/h sideways, the Ramses sooner; the Bolones, low and
+  wide, only leans. The tyres' grip tips a car as it does at the road (the physics put it at the
+  height of the car's weight, so nothing ever leant), and the anti-roll bars work through the
+  springs: they no longer hold a car up once a wheel is off the road.
+
+### Removed
+
+- The ink-outline look (`WIRE.mode = "edges"` in the config, never on): the lines along the
+  modelled polygons draw clean outlines already, and the palms, the rocks and the far traffic
+  could no longer be drawn that way.
 
 ### Fixed
 
@@ -82,6 +129,8 @@ lets you recolor and tweak everything.
   they stay in each other.
 - Corners hit no longer spin the cars round like tops: a corner takes up only its share of the
   crash, by how wide the fronts overlap, and glances off.
+- The first look at the city behind the car (the camera turned round a wreck, or in the menu) and
+  the first countdown no longer stall: every shader compiles while the game loads.
 
 ## [2.5.0] – November 2026
 

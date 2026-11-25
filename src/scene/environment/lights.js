@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { SCENE, SUN } from "../../config.js";
+import { BLOOM, SCENE, SUN } from "../../config.js";
 
 /** Golden angle: spreads disc samples evenly (Vogel disc). */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
@@ -41,7 +41,13 @@ export function sunDirections({ samples, spread } = SCENE.lights.sun) {
 export function createLights({ scene }) {
   const { color, ambient, sun, shadow, legacyScale } = SCENE.lights;
 
-  scene.add(new THREE.AmbientLight(color, ambient * legacyScale));
+  /** @param {THREE.Light} light on the glow layer too: it lights the lines there (core/bloom.js) */
+  const add = (light) => {
+    light.layers.enable(BLOOM.layer);
+    scene.add(light);
+  };
+
+  add(new THREE.AmbientLight(color, ambient * legacyScale));
 
   const directions = sunDirections();
   for (const direction of directions) {
@@ -62,7 +68,7 @@ export function createLights({ scene }) {
     camera.right = camera.top = shadow.extent;
     camera.updateProjectionMatrix();
 
-    scene.add(light);
+    add(light);
   }
 
   return {};

@@ -155,7 +155,7 @@ export const GRID = {
 
 /**
  * Procedural mountains (scene/mountains.js): ridged noise on cells of the ground grid (every
- * other line), each cell split into two triangles along its more natural diagonal
+ * third line), each cell split into two triangles along its more natural diagonal
  * (scene/heightField.js). Across the road the ground stays flat up to `start` (palms and rocks
  * live there), the mountains rise over `ramp` and keep growing to the outer ridge. Along the
  * road they grow out of the ground as they come closer (`grow`), rising out of the horizon
@@ -168,17 +168,21 @@ export const MOUNTAINS = {
   get start() {
     return MOUNTAINS.minStart;
   },
-  /** Grid cell of the side band: two ground cells, so its lines meet every other grid line. */
+  /** Grid cell of the side band: three ground cells, so its lines meet every third grid line. */
   get cell() {
-    return 2 * WORLD.cellSize;
+    return 3 * WORLD.cellSize;
   },
   ramp: 48, // width over which they rise from the ground
-  outer: 320, // |x| of the outer ridge; the sky is behind it
+  /** |x| of the outer ridge; the sky is behind it. Whole side-band cells past `minStart`, and the
+   * horizon range (as wide, a cell more) whole cells of its own. */
+  outer: 328,
   height: 70, // highest peaks
   roughness: 0.5, // amplitude kept per noise octave: 0 = smooth shapes, 1 = all detail
   octaves: 4,
   scale: 90, // feature size: units per noise period
-  chunkRows: 16, // cells per side-band chunk along the road
+  /** Cells per side-band chunk along the road: few chunks (draw calls), the conveyor still ending
+   * before the city (environment/sideHills.js CONVEYOR_END). */
+  chunkRows: 24,
   /** Along the road, the side mountains rise from flat ground over `length` from `from`. */
   grow: { from: -0.6 * WORLD.length, length: 160 }, // from inside the horizon range
   /** Behind the car, they sink back into the ground over this before the conveyor ends. */
@@ -342,17 +346,15 @@ export const SCENE = {
 };
 
 /**
- * Line overlay on models. "triangles": every triangle edge, as in v1; the dense lines also hide
- * small model flaws. "edges": ink-like outlines, only creases sharper than `edgeAngle`
- * (coloring-book look) — clean, but it exposes the off-centre wheel rims of wheel.fbx, so it
- * waits for a model fix.
+ * Line overlay on models (scene/lines.js): every triangle edge, as in v1, or the modelled
+ * polygons' outlines (Layer.wirePolygons); the dense lines also hide small model flaws.
+ * edgeAngle: a turn this sharp or more is a corner of a polygon's outline (scene/polygons.js).
  * width: triangle lines in world units, so they thin out with distance, never below a pixel
  * (scene/lines.js). fade: lines of triangles whose inradius on screen is below `fade` render
  * pixels fade out (gone at a quarter of it), so dense meshes far away show their fill; 0 = off.
  * fade, min and glow are the defaults a layer can override (Layer.lineFade, lineMin, glow).
  */
 export const WIRE = {
-  mode: /** @type {"edges" | "triangles"} */ ("triangles"),
   edgeAngle: 20, // degrees
   width: 0.02,
   fade: 2,
@@ -361,8 +363,8 @@ export const WIRE = {
 };
 
 /**
- * Glow on the wireframes only (core/bloom.js): the wire twins sit on `layer`, everything else is
- * black in the glow pass. strength / radius as in UnrealBloomPass.
+ * Glow on the wireframes only (core/bloom.js): the wire twins sit on `layer`, the glow pass draws
+ * nothing else (the lights light it). strength / radius as in UnrealBloomPass.
  */
 export const BLOOM = {
   enabled: true,
@@ -493,6 +495,9 @@ export const SPAWN = {
  */
 export const TRAFFIC = {
   scale: 1.8, // metres -> scene units (the Bolones model is about 1.8x life size)
+  /** Farther ahead than this (units), a car is drawn as one mesh (scene/traffic.js drawFar), its
+   * wheels standing still: too small there to see them turn. */
+  far: 50,
   /** Above the road, like the Bolones. */
   get y() {
     return CAR.lift;
@@ -546,11 +551,21 @@ export const MINIGAME = {
     player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
     keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
-     * height up: cars are heavy low down, a hit pushes them more than it tips them. It rides
+     * height up: cars are heavy low down, a hit pushes them more than it tips them. Its tyres'
+     * side grip tips it as if it held `tip` of the way down from the centre of mass to the road
+     * (1: as there, everything sliding sideways rolls over; 0: Rapier's, nothing does): a small
+     * car or the van sliding sideways fast rolls over, the Bolones, low and wide, leans. It rides
      * springs bouncing `bounce` times a second, damped `damping` of critical, an anti-roll bar
-     * across each axle `antiRoll` times as stiff as a wheel's spring; down a wheel, that corner
-     * sinks onto the hub (`hub` of the wheel's radius). */
-    car: { box: 0.7, com: 0.4, springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 }, hub: 0.4 },
+     * across each axle `antiRoll` times as stiff as a wheel's spring (through the springs: it
+     * moves weight from one wheel onto the other, no more than that one carries); down a wheel,
+     * that corner sinks onto the hub (`hub` of the wheel's radius). */
+    car: {
+      box: 0.7,
+      com: 0.4,
+      tip: 0.75,
+      springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 },
+      hub: 0.4,
+    },
     stiffness: 700, // N/m per kg of car: a front crushes about 0.5 m into a wall at 56 km/h
     /** Coefficient of restitution falling off with the closing speed (m/s), as in crash tests:
      * taps bounce, crashes barely. */
@@ -616,7 +631,10 @@ export const MINIGAME = {
     },
     cameraLag: 0.06, // s: how slowly the camera's speed follows the car in view's, closing in
     follow: 0.25, // seconds: the orbit eases over to the car in view this slowly
-    slowMotion: { freeze: 0.1, scale: 0.2, recover: 1.5 }, // s frozen, time scale, s back to 1
+    /** `freeze` s frozen, then `scale` of the time, back to 1 over `recover` s; at most `frame` s
+     * of the crash a frame: a device too slow for it plays it slower still, rather than ever
+     * longer frames of ever more physics steps (game/crash/physics.js STEP). */
+    slowMotion: { freeze: 0.1, scale: 0.2, recover: 1.5, frame: 1 / 30 },
     shake: 0.45, // seconds of camera shake, fading out
     shakeAmount: 0.3, // largest camera offset at the first level, units
     lock: 2.5, // seconds before game over takes keys and clicks (and shows its score and buttons)
@@ -810,8 +828,6 @@ export const DEVSTATS = {
 export const LOADER = {
   barLength: 20, // characters in the progress bar
   lineOpacity: 0.25, // dark scan lines over the loading screen (the CRT overlay has its own, CRT)
-  typeDelay: [0.03, 0.06], // seconds per typed character (random in range)
-  messagePause: 0.5, // seconds between messages
   fadeDelay: 0.3, // seconds "SYSTEM READY!" stays before fading
   fadeDuration: 1, // seconds of the fade-out
 };
@@ -831,14 +847,14 @@ export const ASSETS = {
 
 export const TEXT = {
   loaderHeader: "AUTODRIVE.SYS",
-  loaderIntro: "INITIALIZING BOLONES AUTODRIVE SYSTEM...",
-  loaderMessages: [
-    "BOOTING SYSTEM...",
-    "INITIALIZING GRAPHICS...",
-    "LOADING VECTOR DATA...",
-    "CHECKING SYSTEM...",
-    "LOADING ASSETS...",
-  ],
+  loaderIntro: "INITIALIZING BOLONES AUTODRIVE SYSTEM...", // while the files load
+  /** The startup after the files, step by step, in this order (ui/loader.js, main.js). */
+  loaderSteps: {
+    world: "BUILDING THE LANDSCAPE...",
+    car: "PREPARING THE BOLONES...",
+    traffic: "ASSEMBLING TRAFFIC...",
+    warmUp: "CRASH TEST...",
+  },
   loaderReady: "SYSTEM READY!",
   loaderError: "ERROR",
   loaderFailed: "SYSTEM FAILURE: REFRESH TO RETRY",

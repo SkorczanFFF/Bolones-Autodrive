@@ -1319,6 +1319,36 @@ kbd {
   text-shadow: 0 0 6px var(--pink);
 }
 
+/* touch screens: compact, at the left edge between the corner's button and the arrows, clear of
+   the thumbs; no title, the FPS a row like the rest */
+[data-input="touch"] .devstats {
+  top: 50%;
+  bottom: auto;
+  translate: 0 -50%;
+  min-width: 0;
+  font-size: 14px;
+  border-width: 1px;
+}
+
+[data-input="touch"] .devstats__header {
+  display: none;
+}
+
+[data-input="touch"] .devstats__fps {
+  justify-content: flex-start;
+  padding: 4px 8px 0;
+}
+
+[data-input="touch"] .devstats__fps-value {
+  font-size: 22px;
+  text-shadow: 0 0 6px currentColor;
+}
+
+[data-input="touch"] .devstats__rows {
+  gap: 0 10px;
+  padding: 0 8px 4px;
+}
+
 /* ---------- scene GUI (lil-gui), v1 colors ---------- */
 .lil-gui {
   --background-color: color-mix(in srgb, var(--ui-deep) 73%, transparent);

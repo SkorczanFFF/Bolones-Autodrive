@@ -19,9 +19,8 @@ import { createSunMaterial } from "./sunMaterial.js";
  * @typedef {object} Materials
  * @property {Record<string, THREE.MeshToonMaterial | THREE.MeshPhongMaterial | THREE.MeshBasicMaterial>} solid
  *   per layer: SHADING.mode, or unlit (Layer.unlit)
- * @property {Record<string, THREE.MeshPhongMaterial | THREE.MeshBasicMaterial | THREE.LineBasicMaterial | ReturnType<typeof createGridMaterial>>} wire
- *   per layer: textured overlay (road), procedural grid (terrain), outline lines or a triangle
- *   wireframe (WIRE.mode)
+ * @property {Record<string, THREE.MeshPhongMaterial | THREE.MeshBasicMaterial | ReturnType<typeof createGridMaterial>>} wire
+ *   per layer: textured overlay (road), procedural grid (terrain) or lines (scene/lines.js)
  * @property {ReturnType<typeof createSunMaterial>} sun
  * @property {THREE.MeshBasicMaterial} headlight minigame traffic lamps
  */
@@ -67,8 +66,6 @@ export function createMaterials(textures, anisotropy) {
         map: textures[layer.wireMap],
         transparent: true,
       });
-    } else if (WIRE.mode === "edges") {
-      wire[key] = new THREE.LineBasicMaterial({ color: layer.wire });
     } else {
       const Material = layer.wireType === "basic" ? BasicLineMaterial : PhongLineMaterial;
       const lines = new Material({ color: layer.wire });

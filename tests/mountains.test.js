@@ -13,6 +13,15 @@ const average = (f, from, to) => {
   return sum / 100;
 };
 
+describe("mountain grids", () => {
+  it("are whole cells: the side band from its start to the outer ridge, the horizon range", () => {
+    const { minStart, outer, cell, horizon } = MOUNTAINS;
+    expect(Number.isInteger((outer - minStart) / cell)).toBe(true);
+    expect(Number.isInteger((2 * horizon.halfWidth) / horizon.cell)).toBe(true);
+    expect(Number.isInteger(horizon.depth / horizon.cell)).toBe(true);
+  });
+});
+
 describe("mountain height", () => {
   it("is the flat lift up to the start, mountains past it", () => {
     const heightAt = createMountainHeight(createMountainParams(1));

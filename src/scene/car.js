@@ -4,6 +4,7 @@ import { easeInOutCubic, settle } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
 import { mountWheel, wheelsOf } from "./rig.js";
 import { withPolygons } from "./polygons.js";
+import { HOLE_SEGMENTS } from "./traffic.js";
 import { dress, solidMeshes } from "./wire.js";
 
 /** @typedef {-1 | 0 | 1} SteerInput left, none, right */
@@ -14,8 +15,8 @@ const UPRIGHT = new THREE.Quaternion();
 const PROUD = 0.01; // units the fuel cap stands off the wing
 
 /**
- * The fuel cap (CAR.fuelCap): a round lid where a ray from the right meets the body, a little
- * proud of it, outlined. A part of the body's mesh, so it dents with it.
+ * The fuel cap (CAR.fuelCap): a round lid (an octagon) where a ray from the right meets the body,
+ * a little proud of it, outlined. A part of the body's mesh, so it dents with it.
  *
  * @param {THREE.Object3D} car its world matrices up to date
  * @param {THREE.Object3D} body
@@ -36,12 +37,15 @@ function addFuelCap(car, body, solid, wire) {
   const normal = hit.face.normal.clone();
   if (normal.clone().transformDirection(mesh.matrixWorld).dot(left) > 0) normal.negate();
   const scale = mesh.getWorldScale(new THREE.Vector3()).x;
-  const segments = 20;
-  const disc = new THREE.CircleGeometry(radius / scale, segments).toNonIndexed();
-  const cap = new THREE.Mesh(withPolygons([{ geometry: disc, polygon: Array(segments).fill(0) }]));
+  const segments = HOLE_SEGMENTS; // low poly, as the traffic's round holes
+  // turned half a segment: a flat side up (the turn onto the normal keeps the disc's y up)
+  const disc = new THREE.CircleGeometry(radius / scale, segments, Math.PI / segments);
+  const polygon = Array(segments).fill(0);
+  const cap = new THREE.Mesh(withPolygons([{ geometry: disc.toNonIndexed(), polygon }]));
   cap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
   cap.position.copy(mesh.worldToLocal(hit.point.clone())).addScaledVector(normal, PROUD / scale);
   mesh.add(dress(cap, solid, wire));
+  cap.castShadow = false; // only the body casts a shadow (see the wheels)
 }
 
 /**
@@ -73,6 +77,8 @@ export function createCar({ scene, models, materials }) {
   // Spin around the modelled axle (through the model origin) and steer around the middle of
   // the wheel's width, which is off the origin in wheel.fbx.
   const wheelModel = dress(pruneEmpty(models.wheel), solid, wire);
+  // only the body casts a shadow: the wheels' fall in its (five sun shadow passes each saved)
+  for (const mesh of solidMeshes(wheelModel)) mesh.castShadow = false;
   const center = wheelCenter(wheelModel);
   const radius = new THREE.Box3().setFromObject(wheelModel).getSize(new THREE.Vector3()).y / 2;
 

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
-import { MINIGAME, MOUNTAINS, PALETTE, TRAFFIC } from "../src/config.js";
+import { CAR, MINIGAME, MOUNTAINS, PALETTE, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
 import { createCrash as create, ready, roofOf } from "../src/game/crash.js";
 import { meeting, penetration } from "../src/game/crash/boxes.js";
@@ -15,6 +15,13 @@ import { testCar as car, testMaterials } from "./helpers.js";
 const createCrash = (...[scene, cars, palms]) => create(scene, cars, palms, mulberry32(1));
 
 const BOLONES = /** @type {number[]} */ ([3, 2.6, 7.8]);
+/** How far a car leans from upright, degrees. @param {THREE.Object3D} object */
+const leanOf = (object) =>
+  THREE.MathUtils.radToDeg(
+    new THREE.Vector3(0, 1, 0)
+      .applyQuaternion(object.quaternion)
+      .angleTo(new THREE.Vector3(0, 1, 0)),
+  );
 const POLAKITO = /** @type {number[]} */ ([2.5, 2.4, 5.5]);
 
 /**
@@ -145,6 +152,19 @@ describe("crash", () => {
     scene.add(bolones.object, thrown.object);
     run(createCrash(scene, [bolones, thrown]), 3);
     expect(thrown.object.position.x).toBeLessThan(MOUNTAINS.start);
+  });
+
+  it("crumples one car a frame: the two of a crash in turn", () => {
+    const { bolones, other, crash } = headOn();
+    const bodies = [bolones, other].map(
+      ({ object }) => /** @type {THREE.Mesh} */ (object.children[0]),
+    );
+    const originals = bodies.map(({ geometry }) => geometry);
+    const dented = () => bodies.map((mesh, i) => mesh.geometry !== originals[i]);
+    for (let frame = 0; frame < 120 && !dented().includes(true); frame++) crash.update(1 / 60);
+    expect(dented().filter(Boolean)).toHaveLength(1);
+    crash.update(1 / 60);
+    expect(dented()).toEqual([true, true]);
   });
 
   it("puts out the lamps where the cars were hit, not the others", () => {
@@ -433,24 +453,50 @@ describe("crash", () => {
 
   it("pushes a small car hit on its side away sideways: it leans, but stays on its wheels", () => {
     const scene = new THREE.Scene();
-    const truck = car(0.3, -9, [2.9, 2.6, 7.6], 1010, 36);
+    const truck = car(0.3, -9, [2.9, 2.6, 7.6], 1010, 12);
     const small = car(0, 0, POLAKITO, 580, 0);
     small.object.rotation.y = THREE.MathUtils.degToRad(70); // its side to the truck, at an angle
     scene.add(truck.object, small.object);
     const crash = createCrash(scene, [truck, small]);
     let roll = 0;
-    /** How far the small car leans, degrees. */
-    const lean = () => {
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(small.object.quaternion);
-      return THREE.MathUtils.radToDeg(up.angleTo(new THREE.Vector3(0, 1, 0)));
-    };
     for (let t = 0; t < 4; t += 1 / 60) {
       crash.update(1 / 60);
-      roll = Math.max(roll, lean());
+      roll = Math.max(roll, leanOf(small.object));
     }
     expect(small.object.position.z).toBeGreaterThan(2); // pushed away
     expect(roll).toBeLessThan(30); // its tyres trip it, its springs lean it: not over
-    expect(lean()).toBeLessThan(10); // back on its wheels (or a hub, a wheel torn off)
+    expect(leanOf(small.object)).toBeLessThan(10); // back on its wheels (or a hub, one torn off)
+  });
+
+  it("tips a car sliding sideways towards where it slides: a small one, fast, rolls over", () => {
+    /**
+     * A car sliding sideways (+x) on its own: the most it leans, which way, how it ends up.
+     *
+     * @param {number[]} size @param {number} mass @param {number} speed units/s
+     */
+    const slide = (size, mass, speed) => {
+      const scene = new THREE.Scene();
+      const sliding = car(0, 0, size, mass, 0);
+      sliding.velocity.set(speed, 0, 0);
+      const far = car(0, -400, BOLONES, CAR.mass, 0); // a crash takes two: this one stays out of it
+      scene.add(sliding.object, far.object);
+      const crash = createCrash(scene, [sliding, far]);
+      const most = { lean: 0, towards: 0 };
+      for (let t = 0; t < 4; t += 1 / 60) {
+        crash.update(1 / 60);
+        const lean = leanOf(sliding.object);
+        if (lean <= most.lean) continue;
+        most.lean = lean;
+        most.towards = new THREE.Vector3(0, 1, 0).applyQuaternion(sliding.object.quaternion).x;
+      }
+      return { ...most, end: leanOf(sliding.object) };
+    };
+    const slow = slide(POLAKITO, 580, 9);
+    expect(slow.towards).toBeGreaterThan(0); // its tyres grip at the road, below its weight
+    expect(slow.lean).toBeLessThan(45);
+    expect(slow.end).toBeLessThan(5); // back on its wheels
+    expect(slide(POLAKITO, 580, 36).end).toBeGreaterThan(80); // on its side or its roof
+    expect(slide(BOLONES, CAR.mass, 36).lean).toBeLessThan(30); // low and wide, it only leans
   });
   it("pulls a car hit on its side towards it: a wheel there is broken", () => {
     const { drivers } = MINIGAME.crash;

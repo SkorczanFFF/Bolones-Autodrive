@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { solidMeshes } from "./wire.js";
+import { solidMeshes, wireOf } from "./wire.js";
 
 /** Copies of one model drawn at most: far more than the road holds at the densest (GUI). */
 const CAPACITY = 256;
@@ -57,9 +57,7 @@ export function createInstances(parent, models) {
     model.updateWorldMatrix(true, true);
     const toModel = model.matrixWorld.clone().invert();
     return solidMeshes(model).map((mesh) => {
-      const wire = /** @type {THREE.Mesh} */ (
-        mesh.children.find(({ userData }) => userData.isWire)
-      );
+      const wire = /** @type {THREE.Mesh} */ (wireOf(mesh));
       const fade = new THREE.InstancedBufferAttribute(new Float32Array(CAPACITY), 1);
       const solid = new THREE.InstancedMesh(mesh.geometry, mesh.material, CAPACITY);
       const lines = new THREE.InstancedMesh(wire.geometry, wire.material, CAPACITY);

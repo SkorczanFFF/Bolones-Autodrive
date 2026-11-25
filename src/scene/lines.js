@@ -122,12 +122,13 @@ function edgeDistances(position, { hidden = 0, sizes }, target) {
 /**
  * Lines along the modelled polygons (`userData.polygons`, core/fbx.js) instead of every
  * triangle; other geometries get every triangle edge, still with the wireNear attributes their
- * material reads. One per source geometry, sharing its attributes.
+ * material reads. One per source geometry, sharing its attributes; one that has them already
+ * (parts' lines put together, scene/traffic.js) is used as is.
  *
  * @type {(geometry: THREE.BufferGeometry) => THREE.BufferGeometry}
  */
 export const polygonLineGeometry = memoByGeometry((geometry) =>
-  measuredLines(geometry, planOf(geometry)),
+  geometry.hasAttribute("wireNear") ? geometry : measuredLines(geometry, planOf(geometry)),
 );
 
 /**

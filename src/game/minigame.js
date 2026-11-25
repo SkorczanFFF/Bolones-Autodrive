@@ -3,7 +3,7 @@ import { CAR, MINIGAME, SPAWN, SPEED, TEXT, TRAFFIC, WORLD } from "../config.js"
 import { createRandom, pick, randomIn, randomInt } from "../core/random.js";
 import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
-import { createTrafficModels, widestReach } from "../scene/traffic.js";
+import { createTrafficModels, drawFar, widestReach } from "../scene/traffic.js";
 import { boundsOf } from "../scene/instances.js";
 import { solidMeshes } from "../scene/wire.js";
 import { createCrash } from "./crash.js";
@@ -282,16 +282,19 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
    * @param {THREE.Object3D} other
    * @returns {import("./crash.js").Car}
    */
-  const asCar = (other) => ({
-    object: other,
-    box: hitboxOf(other, new THREE.Box3()),
-    mass: other.userData.mass,
-    velocity: new THREE.Vector3(0, 0, overRoadOf(other, pace)),
-    color: colorOf(materials.wire.traffic),
-    onCrash: lampsOut(other),
-    label: other.userData.label,
-    driving: drivingOf(other),
-  });
+  const asCar = (other) => {
+    drawFar(other, false); // whole in a crash: its parts move
+    return {
+      object: other,
+      box: hitboxOf(other, new THREE.Box3()),
+      mass: other.userData.mass,
+      velocity: new THREE.Vector3(0, 0, overRoadOf(other, pace)),
+      color: colorOf(materials.wire.traffic),
+      onCrash: lampsOut(other),
+      label: other.userData.label,
+      driving: drivingOf(other),
+    };
+  };
 
   /**
    * The Bolones ran into a car: they and the rest of the traffic go over to the physics
@@ -481,6 +484,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       for (const other of cars) {
         const rolled = Math.abs(overRoadOf(other, level)) * dt; // the wheels roll as far as it goes
         for (const { spin, radius } of rigOf(other)) spin.rotation.x += rolled / radius;
+        drawFar(other, other.position.z < -TRAFFIC.far);
       }
       if (cars.length === 0) return { crashed: false, scored: false };
 

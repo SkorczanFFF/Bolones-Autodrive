@@ -493,6 +493,9 @@ export const SPAWN = {
  */
 export const TRAFFIC = {
   scale: 1.8, // metres -> scene units (the Bolones model is about 1.8x life size)
+  /** Farther ahead than this (units), a car is drawn as one mesh (scene/traffic.js drawFar), its
+   * wheels standing still: too small there to see them turn. */
+  far: 50,
   /** Above the road, like the Bolones. */
   get y() {
     return CAR.lift;

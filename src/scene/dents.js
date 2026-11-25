@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { evenNormals } from "./polygons.js";
-import { solidMeshes, wireGeometry } from "./wire.js";
+import { solidMeshes, wireGeometry, wireOf } from "./wire.js";
 
 /**
  * @typedef {object} Dent
@@ -170,10 +170,6 @@ export function moveNodes(moves) {
     },
   };
 }
-
-/** @param {THREE.Mesh} mesh */
-const wireOf = (mesh) =>
-  /** @type {THREE.Mesh | undefined} */ (mesh.children.find((child) => child.userData.isWire));
 
 /**
  * A mesh's points with its dents as far as they have gone, or in full.

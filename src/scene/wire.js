@@ -30,7 +30,8 @@ export function applyMaterial(root, material, shadows = true) {
 const edgesOf = memoByGeometry((geometry) => new THREE.EdgesGeometry(geometry, WIRE.edgeAngle));
 
 /**
- * The solid meshes under a root (and it, if one): not their wireframe twins.
+ * The solid meshes under a root (and it, if one): not their wireframe twins, nor what stands in
+ * for a car far away (`userData.far`, scene/traffic.js): a crash dents and measures the real ones.
  *
  * @param {THREE.Object3D} root
  * @returns {THREE.Mesh[]}
@@ -39,10 +40,19 @@ export function solidMeshes(root) {
   /** @type {THREE.Mesh[]} */
   const meshes = [];
   root.traverse((object) => {
-    if (object instanceof THREE.Mesh && !object.userData.isWire) meshes.push(object);
+    const { isWire, far } = object.userData;
+    if (object instanceof THREE.Mesh && !isWire && !far) meshes.push(object);
   });
   return meshes;
 }
+
+/**
+ * A mesh's wireframe twin (addWireframe), if it has one.
+ *
+ * @param {THREE.Object3D} mesh
+ */
+export const wireOf = (mesh) =>
+  /** @type {THREE.Mesh | undefined} */ (mesh.children.find((child) => child.userData.isWire));
 
 /**
  * Adds a line twin as a child of every mesh under root: outlines (LineSegments over the

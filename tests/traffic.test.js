@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { TRAFFIC } from "../src/config.js";
 import { prism } from "../src/scene/polygons.js";
 import { dent, dentable } from "../src/scene/dents.js";
-import { createTrafficModels, widestReach } from "../src/scene/traffic.js";
+import { createTrafficModels, drawFar, widestReach } from "../src/scene/traffic.js";
 import { TRAFFIC_MODELS } from "../src/scene/trafficModels.js";
 import { vanGeometry } from "../src/scene/van.js";
-import { solidMeshes } from "../src/scene/wire.js";
+import { solidMeshes, wireOf } from "../src/scene/wire.js";
 import { testMaterials as materials } from "./helpers.js";
 
 /**
@@ -288,8 +288,36 @@ describe("traffic models", () => {
     }
     /** @type {THREE.Object3D[]} */
     const wires = [];
-    clone.traverse((o) => o.userData.isWire && wires.push(o));
+    clone.traverse((o) => o.userData.isWire && !o.parent?.userData.far && wires.push(o));
     expect(wires.filter(({ visible }) => visible)).toHaveLength(1 + 6 + 1); // body, wheels, bumpers, mirrors
+  });
+
+  it("stand in far away as one mesh of their parts where they are, the lamps another", () => {
+    for (const model of models) {
+      const car = model.clone();
+      const far = car.children.filter(({ userData }) => userData.far);
+      expect(far.map(({ visible }) => visible)).toEqual([false, false]); // whole until drawn far
+      expect(solidMeshes(car).some(({ userData }) => userData.far)).toBe(false); // a crash's
+      drawFar(car, true);
+      expect(car.children.filter(({ visible }) => visible)).toEqual(far);
+      const [body, lamps] = /** @type {THREE.Mesh[]} */ (far);
+      const parts = solidMeshes(car).filter(({ name }) => name !== "lamp");
+      const count = (/** @type {THREE.Mesh[]} */ meshes) =>
+        meshes.reduce((sum, { geometry }) => sum + geometry.getAttribute("position").count, 0);
+      expect(body.geometry.getAttribute("position").count).toBe(count(parts));
+      expect(lamps.geometry.getAttribute("position").count).toBe(
+        count(solidMeshes(car).filter(({ name }) => name === "lamp")),
+      );
+      // where the parts are, drawn with the lines they draw
+      car.updateMatrixWorld(true);
+      const whole = new THREE.Box3();
+      for (const part of parts) whole.expandByObject(part);
+      const stand = new THREE.Box3().setFromObject(body);
+      expect(stand.min.distanceTo(whole.min) + stand.max.distanceTo(whole.max)).toBeLessThan(1e-5);
+      expect(/** @type {THREE.Mesh} */ (wireOf(body)).geometry).toBe(body.geometry);
+      drawFar(car, false);
+      expect(far.map(({ visible }) => visible)).toEqual([false, false]);
+    }
   });
 });
 

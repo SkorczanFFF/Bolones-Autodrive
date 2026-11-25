@@ -90,6 +90,9 @@ lets you recolor and tweak everything.
   hidden behind the solids by the depth of the scene drawn once (a quarter fewer draw calls).
 - The palms and the rocks are drawn as copies of their models, all of a model at once: a few
   draw calls for all of them instead of three each (the menu went from 243 draw calls to 80).
+- The traffic farther ahead than 50 units is drawn as one mesh a car (its lamps another): four
+  draw calls instead of about 25, the same picture (only its wheels, a few pixels there, stand
+  still). Close up and in a crash every car is whole, its parts on its rig.
 
 ### Fixed
 

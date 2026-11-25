@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { TRAFFIC } from "../config.js";
 import {
   OFFSET,
@@ -35,7 +36,7 @@ import {
 import { mountWheel } from "./rig.js";
 import { TRAFFIC_MODELS } from "./trafficModels.js";
 import { vanGeometry } from "./van.js";
-import { dress, solidMeshes } from "./wire.js";
+import { dress, solidMeshes, wireOf } from "./wire.js";
 
 /**
  * @typedef {import("./trafficModels.js").TrafficModel} TrafficModel
@@ -170,8 +171,52 @@ export function createTrafficModels(materials) {
     car.userData.reach = { min: reach.min.toArray(), max: reach.max.toArray() };
     car.userData.mass = model.mass;
     car.userData.label = model.label;
+    car.add(...farMeshes(car, materials));
     return car;
   });
+}
+
+/**
+ * What stands in for a car far away (drawFar): the car as one mesh, its lamps as another, its
+ * parts where they are at rest and their lines as measured (they do not change when a part only
+ * moves), `userData.far`, hidden until drawFar() shows them.
+ *
+ * @param {THREE.Group} car built, its parts on the rig
+ * @param {import("./materials.js").Materials} materials
+ */
+function farMeshes(car, materials) {
+  car.updateMatrixWorld(true);
+  /** @type {(geometry: THREE.BufferGeometry, mesh: THREE.Mesh) => THREE.BufferGeometry} */
+  const placed = (geometry, mesh) => geometry.clone().applyMatrix4(mesh.matrixWorld);
+  const meshes = solidMeshes(car);
+  const lamps = meshes.filter(({ name }) => name === "lamp");
+  const parts = meshes.filter((mesh) => !lamps.includes(mesh));
+  const lines = parts.map((mesh) =>
+    placed(/** @type {THREE.Mesh} */ (wireOf(mesh)).geometry, mesh),
+  );
+  const body = dress(
+    new THREE.Mesh(mergeGeometries(lines)), // its lines in it: scene/lines.js uses them as is
+    materials.solid.traffic,
+    materials.wire.traffic,
+  );
+  const lit = new THREE.Mesh(
+    mergeGeometries(lamps.map((lamp) => placed(lamp.geometry, lamp))),
+    materials.headlight,
+  );
+  lit.castShadow = false; // as the lamps (createTrafficModels); the body casts the car's
+  for (const mesh of [body, lit]) Object.assign(mesh, { visible: false }).userData.far = true;
+  return [body, lit];
+}
+
+/**
+ * Draws a car of the traffic as one mesh (far) or whole, on its rig: far away its parts are a few
+ * pixels each, yet as many draw calls as up close. A crash takes it whole (game/minigame.js).
+ *
+ * @param {THREE.Object3D} car createTrafficModels()
+ * @param {boolean} far
+ */
+export function drawFar(car, far) {
+  for (const child of car.children) child.visible = Boolean(child.userData.far) === far;
 }
 
 /**

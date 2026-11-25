@@ -297,6 +297,21 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   };
 
   /**
+   * The Bolones in a crash (game/crash.js).
+   *
+   * @param {THREE.Vector3} velocity over the road
+   * @returns {import("./crash.js").Car}
+   */
+  const bolones = (velocity) => ({
+    object: car.wreck,
+    box: car.box,
+    mass: CAR.mass,
+    velocity,
+    color: colorOf(materials.wire.bolones),
+    label: TEXT.bolones,
+  });
+
+  /**
    * The Bolones ran into a car: they and the rest of the traffic go over to the physics
    * (game/crash.js), each with its speed over the road.
    *
@@ -350,15 +365,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     crash = createCrash(
       scene,
       [
-        {
-          object: car.wreck,
-          box: car.box,
-          mass: CAR.mass,
-          // where it went (its nose turns less)
-          velocity: new THREE.Vector3(car.sideways, 0, -road),
-          color: colorOf(materials.wire.bolones),
-          label: TEXT.bolones,
-        },
+        bolones(new THREE.Vector3(car.sideways, 0, -road)), // where it went (its nose turns less)
         asCar(obstacle),
         ...traffic()
           .filter((other) => other !== obstacle)
@@ -416,21 +423,25 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
 
     /**
      * Plays a crash once, unseen, while the game loads: the first one in play would stall on
-     * code running for the first time (the physics, the dents, their lines) and on the shaders
-     * of what a crash brings (the shards, the lamps out) and of the traffic fading in (its
-     * see-through copies, scene/fade.js), drawn once with them in the scene.
+     * code running for the first time (the physics, the dents and their lines, the Bolones' as the
+     * traffic's, the parts torn off) and on the shaders of what a crash brings (the shards, the
+     * lamps out) and of the traffic fading in (its see-through copies, scene/fade.js), drawn once
+     * with them in the scene.
      *
      * @param {() => void} render the whole scene, behind the loader (core/renderer.js warmUp)
      */
     warmUp(render) {
-      // one runs into the back of the other, standing
-      const cars = models.slice(0, 2).map((model, i) => {
+      // as the first crash in play: the Bolones run into by the traffic, one behind another, fast
+      // enough to tear parts off (the Bolones' model a shape of its own for the code), then put
+      // back as it stood
+      const cars = models.map((model, i) => {
         const other = model.clone();
-        other.position.set(0, TRAFFIC.y, -14 * i);
+        other.position.set(0, TRAFFIC.y, -12 * (i + 1));
         scene.add(other);
-        return { ...asCar(other), velocity: new THREE.Vector3(0, 0, 30 * i) };
+        return { ...asCar(other), velocity: new THREE.Vector3(0, 0, 40) };
       });
-      const warm = createCrash(scene, cars);
+      const [at, turn] = [car.wreck.position.clone(), car.wreck.quaternion.clone()];
+      const warm = createCrash(scene, [bolones(new THREE.Vector3()), ...cars]);
       for (let t = 0; t < 0.8; t += 1 / 60) warm.update(1 / 60);
       // the traffic coming, fading in: the longest interval spawns a car too lately to be whole
       oncoming.spawning = true;
@@ -438,6 +449,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       render();
       warm.dispose();
       for (const { object } of cars) scene.remove(object);
+      car.wreck.position.copy(at);
+      car.wreck.quaternion.copy(turn);
       reset();
     },
 

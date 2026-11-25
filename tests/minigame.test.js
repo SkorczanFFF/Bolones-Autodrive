@@ -94,20 +94,30 @@ describe("warm-up", () => {
   it("draws a crash and the traffic fading in once, then leaves nothing behind", () => {
     const scene = new THREE.Scene();
     const materials = testMaterials();
+    const bolones = testCar(0, 0, [3, 2.6, 7.8], CAR.mass, 0);
+    scene.add(bolones.object);
+    const body = /** @type {THREE.Mesh} */ (bolones.object.children[0]);
+    const [geometry, at] = [body.geometry, bolones.object.position.clone()];
+    const car = { wreck: bolones.object, box: bolones.box };
     const minigame = createMinigame(
-      /** @type {any} */ ({ scene, car: {}, materials, palms: [], rocks: [] }),
+      /** @type {any} */ ({ scene, car, materials, palms: [], rocks: [] }),
     );
     const fill = materials.solid.traffic;
     /** @type {THREE.Material[]} */
     const drawn = [];
-    minigame.warmUp(() =>
+    let dented = false;
+    minigame.warmUp(() => {
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh) drawn.push(object.material);
-      }),
-    );
+      });
+      dented = body.geometry !== geometry; // the Bolones' dents run once too
+    });
+    expect(dented).toBe(true);
     // a fading car's fill is a see-through copy (scene/fade.js): a shader of its own
     expect(drawn.some((m) => m !== fill && m.transparent && m.type === fill.type)).toBe(true);
-    expect(scene.children).toEqual([]);
+    expect(scene.children).toEqual([bolones.object]); // the Bolones, hit: whole where it stood
+    expect(body.geometry).toBe(geometry);
+    expect(bolones.object.position).toEqual(at);
   });
 });
 

@@ -107,6 +107,9 @@ lets you recolor and tweak everything.
 - A crash leaves less garbage for the browser to clear up, a pause each time (about 40 % less in a
   pile-up): a car's anti-roll bars turn it in one go (they pushed it four times a step, each push
   two vectors made and freed), and the loops over every point of a car keep no throwaway arrays.
+- The first crash after loading is as smooth as the next ones: the crash test behind the loading
+  screen has the Bolones run into by the traffic, hard enough to tear parts off, so every part of
+  a crash has run once before the game starts.
 
 ### Fixed
 

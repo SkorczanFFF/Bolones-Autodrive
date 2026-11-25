@@ -115,6 +115,8 @@ lets you recolor and tweak everything.
   wide, only leans. The tyres' grip tips a car as it does at the road (the physics put it at the
   height of the car's weight, so nothing ever leant), and the anti-roll bars work through the
   springs: they no longer hold a car up once a wheel is off the road.
+- A part torn off in a crash comes off bent: a bumper as far as the crush had bent it when it
+  went, a wheel buckled, wobbling as it rolls away.
 
 ### Removed
 

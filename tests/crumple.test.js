@@ -247,13 +247,24 @@ describe("crumple", () => {
         }
         return most;
       };
-      const bent = back((x) => Math.abs(x) < 0.2) - back((x) => Math.abs(x) > 0.9);
-      return { torn: dent.torn.some((tear) => tear.node === node), bent };
+      const middle = back((x) => Math.abs(x) < 0.2);
+      const bent = middle - back((x) => Math.abs(x) > 0.9);
+      const by = dent.torn.find((tear) => tear.node === node)?.by.z ?? 0;
+      return { torn: by > 0, bent, middle, by };
     };
     const crushed = bumper(0.3);
     expect(crushed.torn).toBe(false);
     expect(crushed.bent).toBeGreaterThan(0.1); // its middle pushed back, its ends less: bent
-    expect(bumper(0.9)).toEqual({ torn: true, bent: 0 }); // torn off whole, as it was
+    const off = bumper(0.9);
+    expect(off.torn).toBe(true);
+    expect(off.bent).toBeGreaterThan(0.1); // it comes off bent
+    // as far as the crush had come when it went (half its size, MINIGAME.crash.parts), no further
+    expect(off.middle).toBeGreaterThan(0.4);
+    expect(off.middle).toBeLessThan(0.6);
+    // the crash pushes it the rest of the way: its front ends on the plane (buckled a little
+    // deeper), not in the car
+    expect(off.middle + off.by).toBeGreaterThan(0.85);
+    expect(off.middle + off.by).toBeLessThan(1.05);
   });
 
   it("pushes a side in without folding it up", () => {

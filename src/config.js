@@ -576,7 +576,8 @@ export const MINIGAME = {
     /** A wheel or a bumper comes off a car crushed past it by `tear` of its size (the farthest of
      * its points from its middle; a wheel pushed up its spring, past how far that goes), flung on
      * along the hit at `fling` of the closing speed (and up half as fast), on its own (`mass` kg,
-     * rubbing the road with `friction`), a wheel rolling on. */
+     * rubbing the road with `friction`), a bumper bent as far as it was when it went, a wheel
+     * rolling on, buckled (scene/crumple.js, game/crash.js). */
     parts: {
       fling: 0.2,
       friction: 0.7,

@@ -86,6 +86,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     cameraLag,
     debris: spray,
     car: build,
+    dents: sheet,
     parts,
     scrape,
     restitution,
@@ -366,6 +367,12 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       const axle = new THREE.Vector3(1, 0, 0).applyQuaternion(turn);
       const rolling = UP.clone().cross(velocity).divideScalar(radius);
       desc.setAngvel(axle.multiplyScalar(axle.dot(rolling)));
+      // buckled, leaning in its spin as far as it leant when it went (MINIGAME.crash.dents
+      // camber): rolling, it wobbles
+      const [{ spin }] = wheelsOf(node);
+      const leant = spin.rotation.y;
+      spin.rotation.y = (random() < 0.5 ? -1 : 1) * sheet.camber * parts.wheel.tear;
+      undo.push(() => (spin.rotation.y = leant));
     }
     const body = world.createRigidBody(desc);
     const shape =

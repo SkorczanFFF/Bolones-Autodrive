@@ -5,6 +5,7 @@ import { mulberry32 } from "../src/core/noise.js";
 import { createCrash as create, ready, roofOf } from "../src/game/crash.js";
 import { meeting, penetration } from "../src/game/crash/boxes.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
+import { wheelsOf } from "../src/scene/rig.js";
 import { testCar as car, testMaterials } from "./helpers.js";
 
 /**
@@ -251,6 +252,10 @@ describe("crash", () => {
     expect(crash.tally.parts).toBeGreaterThanOrEqual(torn.length);
     const [wheel] = torn;
     expect(wheel.position.distanceTo(other.object.position)).toBeGreaterThan(3); // away
+    const [{ spin }] = wheelsOf(wheel);
+    const { camber } = MINIGAME.crash.dents;
+    const buckled = camber * MINIGAME.crash.parts.wheel.tear; // as far as it leant when it went
+    expect(Math.abs(spin.rotation.y)).toBeCloseTo(buckled, 9);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(other.object.quaternion);
     expect(THREE.MathUtils.radToDeg(up.angleTo(new THREE.Vector3(0, 1, 0)))).toBeGreaterThan(4);
     // it rolls to a stop, buckled
@@ -260,6 +265,7 @@ describe("crash", () => {
     expect(wheel.position.distanceTo(at)).toBeLessThan(0.05);
     crash.dispose();
     expect(wheels.every(({ parent }) => parent === other.object)).toBe(true); // back on
+    expect(spin.rotation.y).toBe(0); // straight again
   });
 
   it("hands the Bolones to the player: ↑ drives it on, ← turns it left, let go it stops", () => {

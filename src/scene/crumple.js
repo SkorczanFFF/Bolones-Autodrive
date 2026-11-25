@@ -33,9 +33,9 @@ const UP = new THREE.Vector3(0, 1, 0);
  * `userData.part` "wheel") are rigid, not crushed: pushed back as far as the crush reaches them,
  * they turn and lean (pushed up their springs, a car on its side hit underneath, they ride up
  * into their arches first, as far as their springs go). A wheel or a bumper (a node with
- * `userData.part`) crushed past by more than it takes (MINIGAME.crash.parts) is torn off: left
- * as it is, for the crash to take away from where the crush pushes it (`by`, not into the other
- * car).
+ * `userData.part`) crushed past by more than it takes (MINIGAME.crash.parts) is torn off, for
+ * the crash to take away from where the crush pushes it (`by`, not into the other car): a wheel
+ * as it is, a bumper bent as far as the crush had bent it when it went.
  *
  * The dents go on as the crash does (scene/dents.js); a car hit again (a pile-up) is crushed as
  * it will be after the earlier dents, and they keep going.
@@ -109,8 +109,13 @@ export function crumple(root, hit) {
 
   // past the fold and the kink, behind the crush, the car stays as it is
   const untouched = plane + Math.max(band, length);
-  /** Moves a point of the body (world) where the crash takes it. @param {THREE.Vector3} v */
-  const bend = (v) => {
+  /**
+   * Moves a point of the body (world) where the crash takes it.
+   *
+   * @param {THREE.Vector3} v
+   * @param {number} [limit] crushed no further than this (a part torn off, as it was when it went)
+   */
+  const bend = (v, limit = plane) => {
     const measured = measure(v);
     const { depth: at, across } = measured;
     if (at >= untouched) return;
@@ -118,8 +123,8 @@ export function crumple(root, hit) {
     const height = (v.y - low) / (high - low || 1);
     let crushed = at;
     const reached = reachedAt(measured);
-    if (at < plane && reached) {
-      const back = (plane - at) * reached;
+    if (at < limit && reached) {
+      const back = (limit - at) * reached;
       const buckle = noise(v, 1);
       const lift = noise(v, 2);
       v.addScaledVector(into, back * (1 + 0.2 * buckle));
@@ -168,6 +173,8 @@ export function crumple(root, hit) {
   }
   /** @type {{ node: THREE.Object3D, by: THREE.Vector3 }[]} */
   const torn = [];
+  /** How far the crush had come when a part tore off (it bends that far, no further). */
+  const tore = new Map();
   // how much of a push is up the car's springs (its up), which a wheel rides up as far as its
   // radius goes (game/crash/vehicle.js), only the rest bending it or tearing it off
   const sprung = Math.abs(into.dot(UP.clone().transformDirection(root.matrixWorld)));
@@ -178,7 +185,12 @@ export function crumple(root, hit) {
     const part = node.userData.part;
     const bent = part === "wheel" ? push - Math.min(push * sprung, node.userData.radius) : push;
     if (part && bent > MINIGAME.crash.parts[part].tear * piece.size) {
-      torn.push({ node, by: into.clone().multiplyScalar(push) });
+      const tear = MINIGAME.crash.parts[part].tear * piece.size;
+      // a bumper bent as far as the crush had come when it went (`tore`), the rest of the way
+      // pushed whole: not into the car behind the crush plane
+      const by = part === "wheel" ? push : Math.max(0, push - tear);
+      torn.push({ node, by: into.clone().multiplyScalar(by) });
+      tore.set(node, piece.front + tear);
       continue;
     }
     if (part !== "wheel") continue;
@@ -224,10 +236,8 @@ export function crumple(root, hit) {
   const nodeOf = new Map(entries.map(({ mesh, node }) => [mesh, node]));
   const meshes = dent(entries, ({ mesh }, v) => {
     const node = nodeOf.get(mesh);
-    // a bumper bends along
-    if (!node || !(node.userData.part === "wheel" || torn.some((tear) => tear.node === node))) {
-      bend(v);
-    }
+    if (node?.userData.part === "wheel") return; // rigid: moved whole, or torn off as it is
+    bend(v, tore.get(node)); // a bumper bends along
   });
   const nodes = moveNodes(moved);
   return {

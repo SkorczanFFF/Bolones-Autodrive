@@ -398,10 +398,11 @@ export function createCrushes(world, met) {
         const { back } = crush;
         if (closing < 0 && force * -closing * STEP > back) force = back / (-closing * STEP);
         crush.back = Math.max(0, back + force * closing * STEP);
-        if (crush.free === undefined) {
-          // fully crushed: fronts (or a front and a rear) are caught in each other, the wreck
-          // turns as one for a while; sides swiped, a front in a side, a palm, a touch: they
-          // slide on
+        if (crush.free === undefined && closing <= 0) {
+          // fully crushed (they no longer close: not a box turned a hair, overlapping a hair less
+          // deep while they still do): fronts (or a front and a rear) are caught in each other,
+          // the wreck turns as one for a while; sides swiped, a front in a side, a palm, a touch:
+          // they slide on
           const caught =
             !crush.nudge &&
             !isPost(b) &&

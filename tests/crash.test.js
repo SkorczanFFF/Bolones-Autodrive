@@ -491,6 +491,33 @@ describe("crash", () => {
     expect(parting / 27).toBeLessThan(0.5); // it flew off faster than it was hit, like a pinball
   });
 
+  it("crushes fronts met a little askew as deep as straight: caught only once they stop", () => {
+    /** How deep the first car's front dents in a head-on, the other car turned `degrees`. */
+    const dent = (/** @type {number} */ degrees) => {
+      const scene = new THREE.Scene();
+      const hitting = car(0, 0, BOLONES, CAR.mass, -45); // 25 m/s
+      const hit = car(0, -14, [3, 3.6, 7.5], 1400, 27); // a van, 15 m/s, coming
+      hit.object.rotation.y = THREE.MathUtils.degToRad(degrees);
+      scene.add(hitting.object, hit.object);
+      const crash = createCrash(scene, [hitting, hit]);
+      const shell = /** @type {THREE.Mesh} */ (hitting.object.children[0]);
+      const before = shell.geometry.getAttribute("position").clone();
+      for (let t = 0; t < 1; t += 1 / 60) crash.update(1 / 60);
+      const after = shell.geometry.getAttribute("position");
+      let most = 0;
+      for (let i = 0; i < before.count; i++) {
+        const moved = new THREE.Vector3().fromBufferAttribute(after, i);
+        most = Math.max(most, moved.distanceTo(new THREE.Vector3().fromBufferAttribute(before, i)));
+      }
+      return most;
+    };
+    const straight = dent(0);
+    expect(straight).toBeGreaterThan(0.5);
+    for (const degrees of [2, 5, 10]) {
+      expect(dent(degrees), `${degrees}°`).toBeGreaterThan(0.7 * straight); // not caught at once
+    }
+  });
+
   it("does not bounce a car off at a touch: it parts no faster than it came", () => {
     const scene = new THREE.Scene();
     const hit = car(0, 0, BOLONES, CAR.mass, 0);

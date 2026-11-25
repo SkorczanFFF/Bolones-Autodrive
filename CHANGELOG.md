@@ -133,6 +133,9 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A head-on crash a little askew (by a degree or two, most of them) crushes the fronts as deep as
+  a straight one again: the cars were caught in each other at once, as they met, the front hardly
+  dented and the crash stopping dead.
 - A car standing pressed sideways against another one no longer rocks on its springs for ever:
   its tyres tip it only as it slides sideways (from 1 m/s, in full from 3).
 - Crashes no longer bounce the cars off each other, or off a palm, like a pinball: a crush gives

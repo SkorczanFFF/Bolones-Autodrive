@@ -6,6 +6,7 @@ import { dent, dentable } from "../src/scene/dents.js";
 import { createTrafficModels, widestReach } from "../src/scene/traffic.js";
 import { TRAFFIC_MODELS } from "../src/scene/trafficModels.js";
 import { vanGeometry } from "../src/scene/van.js";
+import { solidMeshes } from "../src/scene/wire.js";
 import { testMaterials as materials } from "./helpers.js";
 
 /**
@@ -186,6 +187,13 @@ describe("traffic models", () => {
         expect(bounds.min.y).toBeCloseTo(0, 5);
         expect(bounds.getCenter(new THREE.Vector3()).distanceTo(wheel.position)).toBeLessThan(0.1);
       }
+    }
+  });
+
+  it("cast a shadow by the body only: its parts' fall in the body's", () => {
+    for (const model of models) {
+      const casting = solidMeshes(model).filter(({ castShadow }) => castShadow);
+      expect(casting).toEqual([model.children[0]]);
     }
   });
 

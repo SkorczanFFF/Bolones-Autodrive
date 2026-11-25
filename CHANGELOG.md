@@ -82,6 +82,10 @@ lets you recolor and tweak everything.
 - Crashes stutter less: a car crumples about a quarter faster, its dent no longer copies all of
   its points every frame, and a device too slow to keep up plays the crash in slower motion
   rather than in ever longer frames (at most 1/30 s of it a frame).
+- Only the cars cast shadows, and only their bodies (the wheels', bumpers' and lamps' fell in the
+  body's anyway): the palms' and rocks' were faint on the dark ground, and everything casting one
+  was drawn five times more a frame. After a crash a frame takes about half the draw calls.
+- The Bolones' fuel cap is an octagon, low-poly like the rest, and casts no shadow.
 
 ### Fixed
 

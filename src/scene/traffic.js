@@ -35,7 +35,7 @@ import {
 import { mountWheel } from "./rig.js";
 import { TRAFFIC_MODELS } from "./trafficModels.js";
 import { vanGeometry } from "./van.js";
-import { dress } from "./wire.js";
+import { dress, solidMeshes } from "./wire.js";
 
 /**
  * @typedef {import("./trafficModels.js").TrafficModel} TrafficModel
@@ -55,8 +55,11 @@ const ARCH_FOOT = 0.01;
 /** A curve's point closer than this to a station is left out: the loft samples it, metres. */
 const STATION_GAP = 0.04;
 const WHEEL_SEGMENTS = 12;
-/** Segments round a round hole in a rim: a few centimetres across, an octagon is round enough. */
-const HOLE_SEGMENTS = 8;
+/**
+ * Segments round something round a few centimetres across (a hole in a rim, the Bolones' fuel cap,
+ * scene/car.js): an octagon is round enough.
+ */
+export const HOLE_SEGMENTS = 8;
 /** How far a rim sits in its tyre, and a hubcap stands out of the rim, metres. */
 const [RIM_DEPTH, HUBCAP] = [0.04, 0.03];
 /** Bumper thickness, metres. */
@@ -120,7 +123,8 @@ export function createTrafficModels(materials) {
         ? vanGeometry(model)
         : { body: carGeometry(model), lamps: lampGeometries(model) };
     const scale = TRAFFIC.scale;
-    const car = new THREE.Group().add(new THREE.Mesh(body.scale(scale, scale, scale)));
+    const shell = new THREE.Mesh(body.scale(scale, scale, scale));
+    const car = new THREE.Group().add(shell);
     for (const { geometry, at, part } of looseParts(model)) {
       const mesh = new THREE.Mesh(geometry.scale(scale, scale, scale));
       at.multiplyScalar(scale);
@@ -141,11 +145,9 @@ export function createTrafficModels(materials) {
     }
     dress(car, materials.solid.traffic, materials.wire.traffic);
     for (const lamp of car.getObjectsByProperty("name", "lamp")) {
-      // lit, its outline waiting for a crash to put it out (game/minigame.js); flush on the body,
-      // its shadow falls in the body's: five sun shadow passes saved
+      // lit, its outline waiting for a crash to put it out (game/minigame.js)
       /** @type {THREE.Mesh} */ (lamp).material = materials.headlight;
       lamp.children[0].visible = false;
-      lamp.castShadow = false;
     }
 
     car.updateMatrixWorld(true);
@@ -161,6 +163,9 @@ export function createTrafficModels(materials) {
       car.add(dress(mirrors, materials.solid.traffic, materials.wire.traffic));
       car.updateMatrixWorld(true);
     }
+    // only the body casts a shadow: the wheels', bumpers', lamps' and mirrors' fall in the body's
+    // (five sun shadow passes each saved)
+    for (const mesh of solidMeshes(car)) mesh.castShadow = mesh === shell;
     const reach = new THREE.Box3().setFromObject(car);
     car.userData.reach = { min: reach.min.toArray(), max: reach.max.toArray() };
     car.userData.mass = model.mass;

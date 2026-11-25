@@ -616,7 +616,10 @@ export const MINIGAME = {
     },
     cameraLag: 0.06, // s: how slowly the camera's speed follows the car in view's, closing in
     follow: 0.25, // seconds: the orbit eases over to the car in view this slowly
-    slowMotion: { freeze: 0.1, scale: 0.2, recover: 1.5 }, // s frozen, time scale, s back to 1
+    /** `freeze` s frozen, then `scale` of the time, back to 1 over `recover` s; at most `frame` s
+     * of the crash a frame: a device too slow for it plays it slower still, rather than ever
+     * longer frames of ever more physics steps (game/crash/physics.js STEP). */
+    slowMotion: { freeze: 0.1, scale: 0.2, recover: 1.5, frame: 1 / 30 },
     shake: 0.45, // seconds of camera shake, fading out
     shakeAmount: 0.3, // largest camera offset at the first level, units
     lock: 2.5, // seconds before game over takes keys and clicks (and shows its score and buttons)

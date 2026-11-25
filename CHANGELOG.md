@@ -79,6 +79,9 @@ lets you recolor and tweak everything.
 - Smoother, above all after a crash and on phones: every line is drawn in one go, not twice over
   (its back faces, then its front ones, its material set up afresh each time). A desktop
   draws a frame in about a third of the time (after a crash in 5 ms instead of 14).
+- Crashes stutter less: a car crumples about a quarter faster, its dent no longer copies all of
+  its points every frame, and a device too slow to keep up plays the crash in slower motion
+  rather than in ever longer frames (at most 1/30 s of it a frame).
 
 ### Fixed
 

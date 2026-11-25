@@ -43,14 +43,16 @@ const tierOf = (score, mode) => Math.floor(score / MINIGAME.modes[mode].every);
 
 /**
  * Game time per real second after a crash: a moment frozen at the impact, then slow motion easing
- * back to full speed (MINIGAME.crash.slowMotion).
+ * back to full speed, slower on a frame too long to play in full (MINIGAME.crash.slowMotion).
  *
  * @param {number} time real seconds since the crash
+ * @param {number} dt real seconds of this frame
  */
-function slowMotion(time) {
-  const { freeze, scale, recover } = MINIGAME.crash.slowMotion;
+function slowMotion(time, dt) {
+  const { freeze, scale, recover, frame } = MINIGAME.crash.slowMotion;
   if (time < freeze) return 0;
-  return THREE.MathUtils.lerp(scale, 1, THREE.MathUtils.smootherstep(time - freeze, 0, recover));
+  const { lerp, smootherstep } = THREE.MathUtils;
+  return Math.min(lerp(scale, 1, smootherstep(time - freeze, 0, recover)), frame / dt);
 }
 
 /**
@@ -428,7 +430,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
           // the Bolones is still the player's, a little, until its engine stalls
           minigame.control(steerInput(), input.isHeld("faster"));
           hud.setDriveOn(minigame.engine > 0);
-          const scale = slowMotion(stateTime);
+          const scale = slowMotion(stateTime, dt);
           // the road under the camera, which rides along with the car in view
           world.speedMultiplier = minigame.wreck(dt * scale, wreckFocus) * scale;
           followWreck(dt);

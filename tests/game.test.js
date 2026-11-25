@@ -330,6 +330,10 @@ describe("crash", () => {
     expect(world.speedMultiplier).toBeCloseTo(state.wreckSpeed * scale, 2); // slow motion
     run(recover);
     expect(world.speedMultiplier).toBe(state.wreckSpeed); // the road under the camera, full speed
+    // a frame too long plays only `frame` of the crash: slower, not more physics steps a frame
+    const { frame } = MINIGAME.crash.slowMotion;
+    run(3 * frame, 3 * frame);
+    expect(world.speedMultiplier).toBeCloseTo(state.wreckSpeed / 3, 9);
     expect(calls.minigameReset).toBe(resets); // the wreck stays on the road
     expect(calls.menuShow).toBe(shows); // the scene GUI waits
   });

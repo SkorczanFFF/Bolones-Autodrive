@@ -49,7 +49,11 @@ export function dentable(root) {
     const full = shape(dents, true);
     const world = new Float32Array(full.length);
     for (let i = 0; i < full.length; i += 3) {
-      p.fromArray(full, i).applyMatrix4(mesh.matrixWorld).toArray(world, i);
+      p.fromArray(full, i).applyMatrix4(mesh.matrixWorld);
+      // not toArray(): three calls it with every kind of array, too slow for every point
+      world[i] = p.x;
+      world[i + 1] = p.y;
+      world[i + 2] = p.z;
     }
     return { mesh, dents, full, world };
   });
@@ -92,7 +96,7 @@ export function dent(meshes, move) {
     const geometry = dents.original.clone();
     geometry.deleteAttribute("wireEdge");
     const position = /** @type {THREE.BufferAttribute} */ (geometry.getAttribute("position"));
-    position.copyArray(shape(dents, true));
+    shape(dents, true, /** @type {Float32Array} */ (position.array));
     geometry.computeVertexNormals();
     evenNormals(geometry); // decals keep their even shading (scene/traffic.js)
     geometry.computeBoundingSphere();
@@ -176,9 +180,10 @@ const wireOf = (mesh) =>
  *
  * @param {Dents} dents
  * @param {boolean} [full]
+ * @param {Float32Array} [points] written into (a geometry's own, every frame of a dent)
  */
-function shape({ base, moves }, full = false) {
-  const points = Float32Array.from(base);
+function shape({ base, moves }, full = false, points = new Float32Array(base.length)) {
+  points.set(base);
   for (const { by, progress } of moves) {
     const share = full ? 1 : progress;
     if (share) for (let i = 0; i < points.length; i++) points[i] += by[i] * share;
@@ -194,6 +199,6 @@ function shape({ base, moves }, full = false) {
  */
 function show(mesh, dents) {
   const position = /** @type {THREE.BufferAttribute} */ (mesh.geometry.getAttribute("position"));
-  position.copyArray(shape(dents));
+  shape(dents, false, /** @type {Float32Array} */ (position.array));
   position.needsUpdate = true;
 }

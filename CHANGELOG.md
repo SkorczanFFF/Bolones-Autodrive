@@ -132,6 +132,13 @@ lets you recolor and tweak everything.
 
 - A car standing pressed sideways against another one no longer rocks on its springs for ever:
   its tyres tip it only as it slides sideways (from 1 m/s, in full from 3).
+- Crashes no longer bounce the cars off each other, or off a palm, like a pinball: a crush gives
+  back only what the crumple zones are meant to (a little slow, next to nothing fast), not more
+  because the last step of it went past them or a car turned about the hit; cars pushed in
+  past them are parted, slowly.
+- The dents follow where two cars overlap: a corner sliding on along the other car, or fronts
+  pushed in deeper (a car behind, fronts caught in each other), dent there too, so the cars do
+  not show through each other.
 - A wheel or a bumper torn off in a crash no longer sinks into the other car: it comes off where
   the crush leaves it (it was left where it had been, inside the other car's crushed front), and
   the other car hits it at once (before, it went through every car until clear of its own), so

@@ -55,7 +55,9 @@ export function createPosts(world, posts, onRoad) {
           stiffness: Infinity,
           color,
           struck({ into }, speed, time) {
-            if (!leans) return undefined;
+            // a touch (or the dents following where a car stays in it) does not sway it, each
+            // hit starting it over
+            if (!leans || speed / METRE < MINIGAME.crash.nudge) return undefined;
             const share = Math.min(1, speed / METRE / palm.full);
             const was = sways.get(object);
             sways.set(object, {

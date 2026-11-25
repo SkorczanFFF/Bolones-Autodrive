@@ -474,6 +474,39 @@ describe("crash", () => {
     expect(leanOf(small.object)).toBeLessThan(10); // back on its wheels (or a hub, one torn off)
   });
 
+  it("does not throw a car hit on its side off: a crush gives back what it may, no more", () => {
+    const scene = new THREE.Scene();
+    const hitting = car(0, 0, BOLONES, CAR.mass, -27); // 15 m/s
+    const hit = car(0, -14, POLAKITO, 580, 0);
+    hit.object.rotation.y = THREE.MathUtils.degToRad(70); // its side to it, at an angle
+    scene.add(hitting.object, hit.object);
+    const crash = createCrash(scene, [hitting, hit]);
+    const gap = () => hitting.object.position.z - hit.object.position.z;
+    let [last, parting] = [gap(), 0];
+    for (let t = 0; t < 2; t += 1 / 60) {
+      crash.update(1 / 60);
+      parting = Math.max(parting, (gap() - last) * 60);
+      last = gap();
+    }
+    expect(parting / 27).toBeLessThan(0.5); // it flew off faster than it was hit, like a pinball
+  });
+
+  it("does not bounce a car off at a touch: it parts no faster than it came", () => {
+    const scene = new THREE.Scene();
+    const hit = car(0, 0, BOLONES, CAR.mass, 0);
+    const touching = car(0, -(BOLONES[2] + POLAKITO[2]) / 2 - 0.3, POLAKITO, 580, 1.8); // 1 m/s
+    scene.add(hit.object, touching.object);
+    const crash = createCrash(scene, [hit, touching]);
+    const gap = () => hit.object.position.z - touching.object.position.z;
+    let [last, parting] = [gap(), 0];
+    for (let t = 0; t < 1; t += 1 / 240) {
+      crash.update(1 / 240);
+      parting = Math.max(parting, (gap() - last) * 240);
+      last = gap();
+    }
+    expect(parting).toBeLessThan(0.36 * 1.8); // e of 1 m/s (MINIGAME.crash.restitution)
+  });
+
   it("tips a car sliding sideways towards where it slides: a small one, fast, rolls over", () => {
     /**
      * A car sliding sideways (+x) on its own: the most it leans, which way, how it ends up.

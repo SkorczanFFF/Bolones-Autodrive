@@ -207,6 +207,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       body,
       half: [x, y, z],
       shift,
+      roof: (1 - build.box) * height,
       offset,
       vehicle,
       stiffness: stiffness * mass,

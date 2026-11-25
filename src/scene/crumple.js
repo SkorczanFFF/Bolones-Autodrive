@@ -11,6 +11,7 @@ import { partOf } from "./rig.js";
  * @property {number} plane how far along `into` from the point the crushed face ends up: about
  *   as deep as the car is crushed
  * @property {number} reach half the width crushed, round the point
+ * @property {number} tall half the height crushed, round the point (as high as the cars met)
  *
  * @typedef {import("./dents.js").Dent} Dent
  */
@@ -25,12 +26,15 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * Crushes a car where it was hit (MINIGAME.crash.dents): whatever is in front of the crush plane,
- * within `reach` of the point across, goes back onto the plane (the whole height), running out
- * beyond it, buckled a little deeper here and there, so two crushed fronts meet on one plane
- * without passing into each other. Behind it the sheet metal bends. The wheels (a node with
+ * within `reach` of the point across and `tall` of it up and down (as high as the cars met: a
+ * small car dents the top of a tall one less), goes back onto the plane, running out beyond,
+ * buckled a little deeper here and there, so two crushed fronts meet on one plane without
+ * passing into each other. Behind it the sheet metal bends. The wheels (a node with
  * `userData.part` "wheel") are rigid, not crushed: pushed back as far as the crush reaches them,
- * they turn and lean. A wheel or a bumper (a node with `userData.part`) crushed past by more
- * than it takes (MINIGAME.crash.parts) is torn off: left as it is, for the crash to take away.
+ * they turn and lean (pushed up their springs, a car on its side hit underneath, they ride up
+ * into their arches first, as far as their springs go). A wheel or a bumper (a node with
+ * `userData.part`) crushed past by more than it takes (MINIGAME.crash.parts) is torn off: left
+ * as it is, for the crash to take away.
  *
  * The dents go on as the crash does (scene/dents.js); a car hit again (a pile-up) is crushed as
  * it will be after the earlier dents, and they keep going.
@@ -105,12 +109,13 @@ export function crumple(root, hit) {
   const untouched = plane + Math.max(band, length);
   /** Moves a point of the body (world) where the crash takes it. @param {THREE.Vector3} v */
   const bend = (v) => {
-    const { depth: at, across } = measure(v);
+    const measured = measure(v);
+    const { depth: at, across } = measured;
     if (at >= untouched) return;
     const lateral = lateralOf(v) - middle;
     const height = (v.y - low) / (high - low || 1);
     let crushed = at;
-    const reached = reachedAt(across);
+    const reached = reachedAt(measured);
     if (at < plane && reached) {
       const back = (plane - at) * reached;
       const buckle = noise(v, 1);
@@ -161,17 +166,21 @@ export function crumple(root, hit) {
   }
   /** @type {THREE.Object3D[]} */
   const torn = [];
+  // how much of a push is up the car's springs (its up), which a wheel rides up as far as its
+  // radius goes (game/crash/vehicle.js), only the rest bending it or tearing it off
+  const sprung = Math.abs(into.dot(UP.clone().transformDirection(root.matrixWorld)));
   for (const [node, piece] of pieces) {
     const { centre } = piece;
-    const push = Math.max(0, plane - piece.front) * reachedAt(measure(centre).across);
+    const push = Math.max(0, plane - piece.front) * reachedAt(measure(centre));
     /** @type {"wheel" | "bumper" | undefined} */
     const part = node.userData.part;
-    if (part && push > MINIGAME.crash.parts[part].tear * piece.size) {
+    const bent = part === "wheel" ? push - Math.min(push * sprung, node.userData.radius) : push;
+    if (part && bent > MINIGAME.crash.parts[part].tear * piece.size) {
       torn.push(node);
       continue;
     }
     if (part !== "wheel") continue;
-    const turn = Math.min(1, push / (piece.size || 1));
+    const turn = Math.min(1, bent / (piece.size || 1));
     // out of the car, across it (whichever way it was hit): the wheel leans about its length
     const out = widthwise
       .clone()
@@ -241,25 +250,28 @@ export function reaches(hit) {
   const measure = measurer(hit);
   const reachedAt = reachOf(hit);
   return (point) => {
-    const { depth, across } = measure(point);
-    return depth < hit.plane && reachedAt(across) > 0.25;
+    const measured = measure(point);
+    return measured.depth < hit.plane && reachedAt(measured) > 0.25;
   };
 }
 
 /**
- * How much of a hit's crush there is across from its point: all of it within its reach, running
- * out beyond, the deeper the wider (MINIGAME.crash.dents: fade, taper).
+ * How much of a hit's crush there is across from its point and up or down: all of it within its
+ * reach and its height, running out beyond, the deeper the wider (MINIGAME.crash.dents: fade,
+ * taper).
  *
  * @param {Hit} hit
  */
-function reachOf({ plane, reach }) {
+function reachOf({ plane, reach, tall }) {
   const fade = Math.max(sheet.fade, sheet.taper * Math.max(0, plane));
-  return (/** @type {number} */ across) =>
-    across <= reach ? 1 : Math.max(0, 1 - (across - reach) / fade) ** 2;
+  const share = (/** @type {number} */ off, /** @type {number} */ within) =>
+    off <= within ? 1 : Math.max(0, 1 - (off - within) / fade) ** 2;
+  return (/** @type {{ across: number, up: number }} */ { across, up }) =>
+    share(across, reach) * share(up, tall);
 }
 
 /**
- * How far a world point is in from where a car was hit, and how far across.
+ * How far a world point is in from where a car was hit, how far across and how far up or down.
  *
  * @param {Hit} hit
  */
@@ -268,8 +280,9 @@ function measurer({ point, into }) {
   return (/** @type {THREE.Vector3} */ p) => {
     offset.subVectors(p, point);
     const depth = offset.dot(into);
+    const up = Math.abs(offset.y);
     offset.addScaledVector(into, -depth).y = 0;
-    return { depth, across: offset.length() };
+    return { depth, across: offset.length(), up };
   };
 }
 

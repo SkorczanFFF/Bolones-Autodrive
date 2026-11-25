@@ -124,6 +124,11 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car on its side or its roof dents as it should: hit lightly on its roof, it gets a small
+  dent, not its roof cut flat (the crash met it only by its lower part, the roof stood out of
+  that and was pushed in whole); hit underneath, its wheels first ride up into their arches, so
+  a light bump no longer tears all four off. A dent also runs out above and below where the
+  cars met: a small car dents the top of a tall one less.
 - Fast head-on crashes (from about 170 km/h closing) no longer throw the lighter car aside: the
   crush went deeper than the fronts are wide, and the cars slid through each other and apart. Now
   they stay in each other.

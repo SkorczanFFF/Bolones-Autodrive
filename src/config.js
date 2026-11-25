@@ -574,9 +574,9 @@ export const MINIGAME = {
     scrape: 0.5, // friction of sheet metal: crushing cars, a car's body on the road
     nudge: 2, // m/s: cars closing slower only touch (no crumple zones, no dents, no debris)
     /** A wheel or a bumper comes off a car crushed past it by `tear` of its size (the farthest of
-     * its points from its middle), flung on along the hit at `fling` of the closing speed (and up
-     * half as fast), on its own (`mass` kg, rubbing the road with `friction`), a wheel rolling
-     * on. */
+     * its points from its middle; a wheel pushed up its spring, past how far that goes), flung on
+     * along the hit at `fling` of the closing speed (and up half as fast), on its own (`mass` kg,
+     * rubbing the road with `friction`), a wheel rolling on. */
     parts: {
       fling: 0.2,
       friction: 0.7,
@@ -587,9 +587,9 @@ export const MINIGAME = {
     /**
      * How the sheet metal gives (scene/crumple.js), in units and in shares of how deep a crush
      * went:
-     * - the crush runs out over `fade` beyond how wide it was hit, or `taper` times as far as it
-     *   went in (a deep dent pulls the panels round it in: a narrow front driven into a side
-     *   leaves a V, not a cut);
+     * - the crush runs out over `fade` beyond how wide and how high it was hit, or `taper` times
+     *   as far as it went in (a deep dent pulls the panels round it in: a narrow front driven into
+     *   a side leaves a V, not a cut);
      * - behind the crush of a front or a rear the bonnet (the boot lid) folds up into a ridge
      *   across `bend` times as deep, `tent` of that high in its middle, as wide as it was hit (the
      *   roof, the wings and the pillars hold), the sides below `bulge` out; hit off its middle,

@@ -12,17 +12,27 @@ import { ACROSS, AHEAD, UP, rotation, vector } from "./physics.js";
 const AXES = [ACROSS, UP, AHEAD];
 
 /**
- * A body's box in the world, turned as the body is, or as `turn` says.
+ * A body's box in the world, turned as the body is, or as `turn` says. A car's (the lower part of
+ * it, MINIGAME.crash.car.box) goes up to its roof as it rolls over, from 20° over to 60°: on its
+ * side it meets the others with its roof, not with the box inside it.
  *
- * @param {{ body: Body, half: number[], shift: THREE.Vector3 }} solid
+ * @param {{ body: Body, half: number[], shift: THREE.Vector3, roof?: number }} solid
  * @param {THREE.Quaternion} [turn]
+ * @param {boolean} [whole] up to its roof however it stands: all of the car
  * @returns {Box}
  */
-export function boxOf({ body, half, shift }, turn = rotation(body.rotation())) {
+export function boxOf({ body, half, shift, roof = 0 }, turn = rotation(body.rotation()), whole) {
+  const axes = AXES.map((axis) => axis.clone().applyQuaternion(turn));
+  const over = whole ? 1 : 1 - THREE.MathUtils.smoothstep(axes[1].y, 0.5, 0.94);
+  const grow = (roof * over) / 2; // its half
   return {
-    centre: shift.clone().applyQuaternion(turn).add(vector(body.translation())),
-    axes: AXES.map((axis) => axis.clone().applyQuaternion(turn)),
-    half,
+    centre: shift
+      .clone()
+      .addScaledVector(UP, grow)
+      .applyQuaternion(turn)
+      .add(vector(body.translation())),
+    axes,
+    half: grow ? [half[0], half[1] + grow, half[2]] : half,
   };
 }
 
@@ -79,22 +89,24 @@ export function middleOf(a, b, normal) {
   side.normalize();
   const third = new THREE.Vector3().crossVectors(side, normal);
   return [normal, side, third].reduce(
-    (point, axis) => point.addScaledVector(axis, middle(a, b, axis)),
+    (point, axis) => point.addScaledVector(axis, span(a, b, axis).middle),
     new THREE.Vector3(),
   );
 }
 
 /**
- * The middle of where two boxes overlap along a unit axis, as a distance along it.
+ * Where two boxes overlap along a unit axis: the middle and half the length of it, as distances
+ * along it.
  *
  * @param {Box} a
  * @param {Box} b
  * @param {THREE.Vector3} n
  */
-function middle(a, b, n) {
+export function span(a, b, n) {
   const [ca, cb] = [a.centre.dot(n), b.centre.dot(n)];
   const [ea, eb] = [extent(a, n), extent(b, n)];
-  return (Math.max(ca - ea, cb - eb) + Math.min(ca + ea, cb + eb)) / 2;
+  const [low, high] = [Math.max(ca - ea, cb - eb), Math.min(ca + ea, cb + eb)];
+  return { middle: (low + high) / 2, half: (high - low) / 2 };
 }
 
 /**

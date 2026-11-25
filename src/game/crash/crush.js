@@ -1,7 +1,17 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME } from "../../config.js";
-import { boxOf, endOn, extent, level, meeting, middleOf, overlap, penetration } from "./boxes.js";
+import {
+  boxOf,
+  endOn,
+  extent,
+  level,
+  meeting,
+  middleOf,
+  overlap,
+  penetration,
+  span,
+} from "./boxes.js";
 import {
   AHEAD,
   IDENTITY,
@@ -20,6 +30,7 @@ import {
  * @property {RAPIER.RigidBody} body
  * @property {number[]} half its box's half size
  * @property {THREE.Vector3} shift its box from the body's centre
+ * @property {number} [roof] how much higher its box goes rolled over: up to its roof (boxes.js)
  * @property {number} stiffness its crumple zone's spring rate, force per unit of crush; Infinity:
  *   a post, it does not give
  *
@@ -56,8 +67,9 @@ const reaches = new WeakMap();
 export const reachOf = (solid) => {
   let reach = reaches.get(solid);
   if (reach === undefined) {
-    const { half, shift } = solid;
-    reaches.set(solid, (reach = Math.hypot(half[0], half[1], half[2]) + shift.length()));
+    const { half, shift, roof = 0 } = solid; // rolled over, its box up to the roof at most
+    const up = half[1] + roof / 2;
+    reaches.set(solid, (reach = Math.hypot(half[0], up, half[2]) + shift.length() + roof / 2));
   }
   return reach;
 };
@@ -119,13 +131,18 @@ export function createCrushes(world, met) {
     const expected = Math.sqrt(depth ** 2 + (taken * mass * speed ** 2) / k);
     const at = middleOf(boxA, boxB, ahead);
     if (stretch) at.addScaledVector(across, stretch.middle - at.dot(across));
+    // as high as the cars overlap, all of them (up to their roofs, not their boxes): no part of
+    // either is left standing where the other one comes
+    const height = span(boxOf(a, undefined, true), boxOf(b, undefined, true), UP);
+    const point = at.clone().setY(height.middle);
     // each takes its share of the crush (the stiffer front gives less), from its face, half the
     // first overlap away from the middle
     const hits = [a, b].map((solid, i) => ({
-      point: at,
+      point,
       into: new THREE.Vector3(ahead.x, 0, ahead.z).multiplyScalar(i ? 1 : -1),
       plane: (expected * k) / solid.stiffness - depth / 2,
       reach,
+      tall: height.half,
     }));
     const energy = (0.5 * taken * mass * speed ** 2 * (1 - e ** 2)) / METRE ** 2;
     const show = met(a, b, { normal, hits, at, speed, energy });

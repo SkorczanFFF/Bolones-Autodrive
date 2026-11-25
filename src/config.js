@@ -155,7 +155,7 @@ export const GRID = {
 
 /**
  * Procedural mountains (scene/mountains.js): ridged noise on cells of the ground grid (every
- * other line), each cell split into two triangles along its more natural diagonal
+ * third line), each cell split into two triangles along its more natural diagonal
  * (scene/heightField.js). Across the road the ground stays flat up to `start` (palms and rocks
  * live there), the mountains rise over `ramp` and keep growing to the outer ridge. Along the
  * road they grow out of the ground as they come closer (`grow`), rising out of the horizon
@@ -168,17 +168,21 @@ export const MOUNTAINS = {
   get start() {
     return MOUNTAINS.minStart;
   },
-  /** Grid cell of the side band: two ground cells, so its lines meet every other grid line. */
+  /** Grid cell of the side band: three ground cells, so its lines meet every third grid line. */
   get cell() {
-    return 2 * WORLD.cellSize;
+    return 3 * WORLD.cellSize;
   },
   ramp: 48, // width over which they rise from the ground
-  outer: 320, // |x| of the outer ridge; the sky is behind it
+  /** |x| of the outer ridge; the sky is behind it. Whole side-band cells past `minStart`, and the
+   * horizon range (as wide, a cell more) whole cells of its own. */
+  outer: 328,
   height: 70, // highest peaks
   roughness: 0.5, // amplitude kept per noise octave: 0 = smooth shapes, 1 = all detail
   octaves: 4,
   scale: 90, // feature size: units per noise period
-  chunkRows: 16, // cells per side-band chunk along the road
+  /** Cells per side-band chunk along the road: few chunks (draw calls), the conveyor still ending
+   * before the city (environment/sideHills.js CONVEYOR_END). */
+  chunkRows: 24,
   /** Along the road, the side mountains rise from flat ground over `length` from `from`. */
   grow: { from: -0.6 * WORLD.length, length: 160 }, // from inside the horizon range
   /** Behind the car, they sink back into the ground over this before the conveyor ends. */

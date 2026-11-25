@@ -97,6 +97,9 @@ lets you recolor and tweak everything.
   preparing the Bolones, assembling the traffic and a crash test, each step on the screen before
   it runs, its bar going through all of it. It no longer types made-up messages, frozen while the
   game was being built.
+- The side mountains are a little coarser: their cells three ground cells wide (were two), their
+  lines on every third grid line, half the triangles, in 8 longer stretches instead of 16 (a
+  quarter fewer draw calls); their outer ridge a little further out (328 from 320).
 
 ### Fixed
 

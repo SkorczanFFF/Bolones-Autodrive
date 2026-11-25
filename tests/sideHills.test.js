@@ -20,6 +20,16 @@ const rightSide = (meshes) =>
   meshes.filter((mesh) => mesh.position.x > 0).sort((a, b) => a.position.z - b.position.z);
 
 /**
+ * A right-hand chunk in the middle of the conveyor: grown, not about to be recycled.
+ *
+ * @param {THREE.Mesh[]} meshes
+ */
+const middle = (meshes) => {
+  const chunks = rightSide(meshes);
+  return chunks[Math.floor(chunks.length / 2)];
+};
+
+/**
  * World-space heights of one row of a chunk (local z = 0: far edge, rows * cell: near edge).
  *
  * @param {THREE.Mesh} mesh
@@ -48,7 +58,7 @@ describe("side mountains", () => {
 
   it("roll towards the camera with the world speed", () => {
     const { hills } = setup();
-    const chunk = rightSide(hills.meshes)[3];
+    const chunk = middle(hills.meshes);
     const z = chunk.position.z;
     hills.update(0.5, 2);
     expect(chunk.position.z - z).toBeCloseTo(WORLD.speed * 2 * 0.5);
@@ -140,7 +150,7 @@ describe("side mountains", () => {
 
   it("regenerate with new settings", () => {
     const { hills, mountains } = setup();
-    const chunk = rightSide(hills.meshes)[5];
+    const chunk = middle(hills.meshes);
     const heights = rowHeights(chunk, 0);
     mountains.seed += 1;
     hills.regenerate();

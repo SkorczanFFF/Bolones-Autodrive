@@ -65,7 +65,7 @@ export const lineGeometry = memoByGeometry((geometry) => {
  * @param {{ hideDiagonals?: boolean }} [options]
  */
 export function writeWireEdges(geometry, { hideDiagonals = false } = {}) {
-  const position = geometry.getAttribute("position");
+  const position = /** @type {THREE.BufferAttribute} */ (geometry.getAttribute("position"));
   const existing = /** @type {THREE.BufferAttribute | undefined} */ (
     geometry.getAttribute("wireEdge")
   );
@@ -80,6 +80,21 @@ export function writeWireEdges(geometry, { hideDiagonals = false } = {}) {
 }
 
 /**
+ * Point `i` of a position attribute, read off its array: fromBufferAttribute() reads any kind of
+ * attribute, too slow for every point of a car dented (scene/dents.js). Positions here are plain
+ * arrays, three numbers a point.
+ *
+ * @param {THREE.Vector3} v
+ * @param {ArrayLike<number>} array
+ * @param {number} i
+ */
+const pointAt = (v, array, i) => v.set(array[3 * i], array[3 * i + 1], array[3 * i + 2]);
+
+/** A triangle's height over one of its edges: twice its area over the edge's length. */
+const heightOver = (/** @type {number} */ doubleArea, /** @type {number} */ edge) =>
+  edge > 0 ? doubleArea / edge : 0;
+
+/**
  * @typedef {object} EdgeOptions
  * @property {number | ArrayLike<number>} [hidden] edges not drawn, for every triangle or per
  *   triangle: bit k is the edge opposite vertex k
@@ -88,28 +103,28 @@ export function writeWireEdges(geometry, { hideDiagonals = false } = {}) {
  */
 
 /**
- * @param {THREE.BufferAttribute | THREE.InterleavedBufferAttribute} position
+ * @param {THREE.BufferAttribute} position
  * @param {EdgeOptions} options
  * @param {Float32Array} [target] reused when the topology did not change
  */
 function edgeDistances(position, { hidden = 0, sizes }, target) {
+  const points = position.array;
   const distances = target ?? new Float32Array(position.count * 4);
   distances.fill(0);
-  const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-  const cross = new THREE.Vector3();
+  const [a, b, c, side, cross] = Array.from({ length: 5 }, () => new THREE.Vector3());
 
   for (let i = 0, t = 0; i + 2 < position.count; i += 3, t++) {
-    a.fromBufferAttribute(position, i);
-    b.fromBufferAttribute(position, i + 1);
-    c.fromBufferAttribute(position, i + 2);
-    const doubleArea = cross.subVectors(b, a).cross(c.clone().sub(a)).length();
-    // height over the opposite edge = 2 * area / edge length
-    const height = (/** @type {number} */ edge) => (edge > 0 ? doubleArea / edge : 0);
-    const [ab, bc, ca] = [a.distanceTo(b), b.distanceTo(c), c.distanceTo(a)];
-    distances[i * 4] = height(bc);
-    distances[(i + 1) * 4 + 1] = height(ca);
-    distances[(i + 2) * 4 + 2] = height(ab);
-    const size = sizes ? sizes[t] : height(ab + bc + ca); // inradius: 2 * area / perimeter
+    pointAt(a, points, i);
+    pointAt(b, points, i + 1);
+    pointAt(c, points, i + 2);
+    const doubleArea = cross.subVectors(b, a).cross(side.subVectors(c, a)).length();
+    const ab = a.distanceTo(b);
+    const bc = b.distanceTo(c);
+    const ca = c.distanceTo(a);
+    distances[i * 4] = heightOver(doubleArea, bc);
+    distances[(i + 1) * 4 + 1] = heightOver(doubleArea, ca);
+    distances[(i + 2) * 4 + 2] = heightOver(doubleArea, ab);
+    const size = sizes ? sizes[t] : heightOver(doubleArea, ab + bc + ca); // the inradius
     const mask = typeof hidden === "number" ? hidden : hidden[t];
     for (let v = 0; v < 3; v++) {
       distances[(i + v) * 4 + 3] = size;
@@ -167,25 +182,25 @@ const planOf = memoByGeometry((geometry) => {
  * @param {LinePlan} plan
  */
 function measuredLines(geometry, { hidden, polygon, near: lines }) {
-  const position = geometry.getAttribute("position");
+  const position = /** @type {THREE.BufferAttribute} */ (geometry.getAttribute("position"));
   const count = position.count / 3;
   // line fading measures the whole polygon: 2 * area / perimeter, as the inradius of a triangle
   const area = new Float64Array(count);
   const perimeter = new Float64Array(count);
-  const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const points = position.array;
+  const [a, b, c, ab, ac] = Array.from({ length: 5 }, () => new THREE.Vector3());
   for (let t = 0; t < count; t++) {
-    a.fromBufferAttribute(position, 3 * t);
-    b.fromBufferAttribute(position, 3 * t + 1);
-    c.fromBufferAttribute(position, 3 * t + 2);
-    area[polygon[t]] += b.clone().sub(a).cross(c.clone().sub(a)).length() / 2;
-    [b.distanceTo(c), c.distanceTo(a), a.distanceTo(b)].forEach((edge, k) => {
-      if (!(hidden[t] & (1 << k))) perimeter[polygon[t]] += edge;
-    });
+    pointAt(a, points, 3 * t);
+    pointAt(b, points, 3 * t + 1);
+    pointAt(c, points, 3 * t + 2);
+    area[polygon[t]] += ab.subVectors(b, a).cross(ac.subVectors(c, a)).length() / 2;
+    // the edges drawn (bit k: the edge opposite vertex k hidden)
+    if (!(hidden[t] & 1)) perimeter[polygon[t]] += b.distanceTo(c);
+    if (!(hidden[t] & 2)) perimeter[polygon[t]] += c.distanceTo(a);
+    if (!(hidden[t] & 4)) perimeter[polygon[t]] += a.distanceTo(b);
   }
-  const sizes = Float32Array.from(
-    { length: count },
-    (_, t) => (2 * area[polygon[t]]) / perimeter[polygon[t]] || 0,
-  );
+  const sizes = new Float32Array(count);
+  for (let t = 0; t < count; t++) sizes[t] = (2 * area[polygon[t]]) / perimeter[polygon[t]] || 0;
 
   const result = new THREE.BufferGeometry();
   for (const [name, attribute] of Object.entries(geometry.attributes)) {
@@ -302,7 +317,7 @@ function nearPlan(position, hidden, polygon) {
  * the distance past where the outline turns. All linear in the triangle, so they interpolate
  * exactly. Spare slots, and lines on a triangle crushed flat or turned edge on, stay HIDDEN.
  *
- * @param {THREE.BufferAttribute | THREE.InterleavedBufferAttribute} position
+ * @param {THREE.BufferAttribute} position
  * @param {Int32Array} plan
  */
 function nearDistances(position, plan) {
@@ -310,6 +325,7 @@ function nearDistances(position, plan) {
   const near = new Float32Array(count * 9).fill(HIDDEN);
   const end = new Float32Array(count * 9);
   const far = new Float32Array(count * 9);
+  const array = position.array;
   const points = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   const [from, along, ahead, across, normal, offset, turn] = Array.from(
     { length: 7 },
@@ -317,16 +333,16 @@ function nearDistances(position, plan) {
   );
   for (let t = 0; t < count; t++) {
     if (plan[t * 9] < 0) continue;
-    points.forEach((p, v) => p.fromBufferAttribute(position, 3 * t + v));
+    for (let v = 0; v < 3; v++) pointAt(points[v], array, 3 * t + v);
     normal.subVectors(points[1], points[0]).cross(offset.subVectors(points[2], points[0]));
     if (normal.lengthSq() === 0) continue;
     normal.normalize();
     for (let j = 0; j < 3; j++) {
       const slot = (3 * t + j) * 3;
       if (plan[slot] < 0) break;
-      from.fromBufferAttribute(position, plan[slot]);
-      ahead.fromBufferAttribute(position, plan[slot + 1]);
-      turn.fromBufferAttribute(position, plan[slot + 2]).sub(ahead);
+      pointAt(from, array, plan[slot]);
+      pointAt(ahead, array, plan[slot + 1]);
+      pointAt(turn, array, plan[slot + 2]).sub(ahead);
       along.subVectors(ahead, from);
       ahead.copy(along).normalize();
       along.addScaledVector(normal, -along.dot(normal)); // in the triangle's plane
@@ -335,12 +351,12 @@ function nearDistances(position, plan) {
       along.divideScalar(span);
       const reach = span + turn.dot(ahead);
       across.crossVectors(normal, along);
-      points.forEach((p, v) => {
-        offset.subVectors(p, from);
+      for (let v = 0; v < 3; v++) {
+        offset.subVectors(points[v], from);
         near[(3 * t + v) * 3 + j] = offset.dot(across);
         end[(3 * t + v) * 3 + j] = -offset.dot(along);
         far[(3 * t + v) * 3 + j] = offset.dot(along) - reach;
-      });
+      }
     }
   }
   return { near, end, far };

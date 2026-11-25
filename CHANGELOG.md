@@ -100,6 +100,10 @@ lets you recolor and tweak everything.
 - The side mountains are a little coarser: their cells three ground cells wide (were two), their
   lines on every third grid line, half the triangles, in 8 longer stretches instead of 16 (a
   quarter fewer draw calls); their outer ridge a little further out (328 from 320).
+- Pile-ups stutter less: a crash dents one car a frame (the two of a hit, the many of a pile-up,
+  in turn), its lamps still going out at once, and denting a car takes about a quarter less time
+  (its lines and normals worked out straight from its points, its bounds from how far the dent
+  moves them).
 
 ### Fixed
 

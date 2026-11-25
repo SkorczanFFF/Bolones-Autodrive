@@ -65,7 +65,7 @@ export function crumple(root, hit) {
   const q = new THREE.Vector3();
   for (const { world } of entries) {
     for (let i = 0; i < world.length; i += 3) {
-      q.fromArray(world, i);
+      q.set(world[i], world[i + 1], world[i + 2]); // not fromArray(): scene/dents.js
       [low, high] = [Math.min(low, q.y), Math.max(high, q.y)];
       const lateral = lateralOf(q);
       [left, right] = [Math.min(left, lateral), Math.max(right, lateral)];
@@ -140,7 +140,7 @@ export function crumple(root, hit) {
       count: 0,
     };
     for (let i = 0; i < world.length; i += 3) {
-      piece.centre.add(q.fromArray(world, i));
+      piece.centre.add(q.set(world[i], world[i + 1], world[i + 2]));
       piece.front = Math.min(piece.front, measure(q).depth);
       piece.count++;
     }
@@ -151,7 +151,8 @@ export function crumple(root, hit) {
     const piece = node && pieces.get(node);
     if (!piece) continue;
     for (let i = 0; i < world.length; i += 3) {
-      piece.size = Math.max(piece.size, q.fromArray(world, i).distanceTo(piece.centre));
+      q.set(world[i], world[i + 1], world[i + 2]);
+      piece.size = Math.max(piece.size, q.distanceTo(piece.centre));
     }
   }
   /** @type {THREE.Object3D[]} */

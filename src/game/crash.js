@@ -50,7 +50,7 @@ export { ready } from "./crash/physics.js";
  * @typedef {import("./crash/crush.js").Solid & {
  *   color?: THREE.Color,
  *   struck: (hit: Hit, speed: number, time: number) => Dent | undefined,
- * }} Party a car or a palm in a crash: what it does to it
+ * }} Party a car or a palm in a crash: what it does to it (the hit on the road)
  */
 
 const SPARKS = new THREE.Color(PALETTE.headlight);
@@ -212,20 +212,40 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       stiffness: stiffness * mass,
       driver: createDriver(vehicle, swerves, random, joined ? time : undefined, car.driving),
       color: car.color,
-      /** @param {Hit} hit @param {number} speed */
+      /**
+       * Crumples the car where it was hit, in a frame of its own (crumpling): a crash dents two
+       * cars at once, a pile-up more, and each takes a while. Till then, it shows how far its
+       * crush has gone in as soon as it is there.
+       *
+       * @param {Hit} hit on the road
+       * @param {number} speed
+       * @returns {Dent}
+       */
       struck(hit, speed) {
-        // as they meet, not as last shown
-        put(car.object, offset, vector(body.translation()), rotation(body.rotation()));
-        car.onCrash?.(reaches(hit)); // before the dent moves the points
-        const dent = crumple(car.object, hit);
-        for (const { node, position, quaternion } of dent.moved) {
-          vehicle.skew(node, position, quaternion);
-        }
-        for (const node of dent.torn) {
-          if (tearing.some((tear) => tear.node === node)) continue; // torn in this frame already
-          tearing.push({ car: entry, node, into: hit.into, speed });
-        }
-        return dent;
+        const [at, turn] = [vector(body.translation()), rotation(body.rotation())]; // as they met
+        /** The hit in the scene, which rides along with the camera. */
+        const met = () => ({ ...hit, point: inScene(hit.point) });
+        put(car.object, offset, at, turn);
+        car.onCrash?.(reaches(met())); // its lamps go out at once, before the dent moves them
+        /** @type {ReturnType<typeof crumple> | undefined} */
+        let dent;
+        let progress = 0;
+        crumpling.push(() => {
+          put(car.object, offset, at, turn);
+          dent = crumple(car.object, met());
+          dent.set(progress);
+          for (const { node, position, quaternion } of dent.moved) {
+            vehicle.skew(node, position, quaternion);
+          }
+          for (const node of dent.torn) tearing.push({ car: entry, node, into: hit.into, speed });
+        });
+        return {
+          set(value) {
+            progress = value;
+            dent?.set(value);
+          },
+          undo: () => dent?.undo(),
+        };
       },
     };
     return entry;
@@ -238,6 +258,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    * @type {{ car: Body, node: THREE.Object3D, into: THREE.Vector3, speed: number }[]}
    */
   const tearing = [];
+  /** The cars hit, to crumple: one a frame (struck). @type {(() => void)[]} */
+  const crumpling = [];
   /**
    * The parts torn off: on their own, clear of the car they came off (then they hit it too) or not
    * yet.
@@ -421,7 +443,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const crushed = [];
     for (const [i, solid] of [a, b].entries()) {
       const hit = crash.hits[i];
-      const dent = solid.struck({ ...hit, point: inScene(hit.point) }, crash.speed, time);
+      const dent = solid.struck(hit, crash.speed, time);
       if (!dent) continue;
       undo.push(dent.undo);
       crushed.push({ set: dent.set, progress: 0, shown: 0 });
@@ -503,6 +525,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       bodies.forEach(({ driver }, i) => driver.see(lookAhead(looking[i], looking)));
       lag = Math.min(lag + dt, 30 * STEP); // further behind, the rest is dropped
       for (; lag >= STEP; lag -= STEP) step();
+      crumpling.shift()?.();
       camera += (-wrecks[which].body.linvel().z - camera) * settle(cameraLag, dt);
       travel += Math.max(0, camera) * dt;
 

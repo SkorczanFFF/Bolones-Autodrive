@@ -147,6 +147,19 @@ describe("crash", () => {
     expect(thrown.object.position.x).toBeLessThan(MOUNTAINS.start);
   });
 
+  it("crumples one car a frame: the two of a crash in turn", () => {
+    const { bolones, other, crash } = headOn();
+    const bodies = [bolones, other].map(
+      ({ object }) => /** @type {THREE.Mesh} */ (object.children[0]),
+    );
+    const originals = bodies.map(({ geometry }) => geometry);
+    const dented = () => bodies.map((mesh, i) => mesh.geometry !== originals[i]);
+    for (let frame = 0; frame < 120 && !dented().includes(true); frame++) crash.update(1 / 60);
+    expect(dented().filter(Boolean)).toHaveLength(1);
+    crash.update(1 / 60);
+    expect(dented()).toEqual([true, true]);
+  });
+
   it("puts out the lamps where the cars were hit, not the others", () => {
     const { bolones, other, crash } = headOn();
     run(crash, 0.2);

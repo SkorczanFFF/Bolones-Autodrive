@@ -50,6 +50,8 @@ lets you recolor and tweak everything.
   upright, it waits, asking to turn the phone; TAP TO START says so. Game over says to pinch, not
   scroll, to pull back, fits a phone held sideways (smaller, with room for the wreck), and every
   button on a touch screen is big enough for a finger.
+- `?stats` at the end of the app's address shows the developer stats (FPS, draw calls, triangles)
+  from the start: on a phone, which has no F10, compact, at the left edge clear of the thumbs.
 
 ### Changed
 

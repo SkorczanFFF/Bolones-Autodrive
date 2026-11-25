@@ -66,6 +66,8 @@ export function createDevStats(
     if (visible) renderCounters(); // FPS needs a full refresh period to be measured
   }
   input.onPress((action) => action === "stats" && toggle());
+  // ?stats in the address shows it from the start: a phone has no F10
+  if (new URLSearchParams(location.search).has("stats")) toggle();
 
   return {
     toggle,

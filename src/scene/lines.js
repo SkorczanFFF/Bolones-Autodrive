@@ -434,8 +434,17 @@ function injectLines(shader, uniforms, near) {
     );
 }
 
-/** Line overrides shared by both classes: see-through like GL lines, blended edges. */
-const LINE_PARAMETERS = { transparent: true, depthWrite: false, side: THREE.DoubleSide };
+/**
+ * Line overrides shared by both classes: see-through like GL lines, blended edges. One pass: three
+ * draws a transparent double-sided material twice (back faces, then front) and rebuilds it before
+ * each draw, for every mesh; lines of one colour blend alike in either order.
+ */
+const LINE_PARAMETERS = {
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  forceSinglePass: true,
+};
 
 /**
  * A material of `Base` drawing the triangle lines instead of its fill. `lineUniforms` (per

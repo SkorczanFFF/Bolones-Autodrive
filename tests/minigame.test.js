@@ -88,6 +88,29 @@ describe("crash", () => {
   });
 });
 
+describe("warm-up", () => {
+  beforeAll(() => ready);
+
+  it("draws a crash and the traffic fading in once, then leaves nothing behind", () => {
+    const scene = new THREE.Scene();
+    const materials = testMaterials();
+    const minigame = createMinigame(
+      /** @type {any} */ ({ scene, car: {}, materials, palms: [], rocks: [] }),
+    );
+    const fill = materials.solid.traffic;
+    /** @type {THREE.Material[]} */
+    const drawn = [];
+    minigame.warmUp(() =>
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh) drawn.push(object.material);
+      }),
+    );
+    // a fading car's fill is a see-through copy (scene/fade.js): a shader of its own
+    expect(drawn.some((m) => m !== fill && m.transparent && m.type === fill.type)).toBe(true);
+    expect(scene.children).toEqual([]);
+  });
+});
+
 describe("overtake", () => {
   beforeAll(() => ready);
 

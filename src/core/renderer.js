@@ -69,7 +69,23 @@ export function createView(container = document.body) {
     else renderer.render(scene, camera);
   }
 
-  return { renderer, scene, camera, controls, bloom, render };
+  /**
+   * Draws the whole scene once, in view or not, so every shader compiles now, behind the loader,
+   * not the first time the camera turns to it (the city behind the car).
+   */
+  function warmUp() {
+    /** @type {THREE.Object3D[]} */
+    const culled = [];
+    scene.traverse((object) => {
+      if (!object.frustumCulled) return;
+      object.frustumCulled = false;
+      culled.push(object);
+    });
+    render();
+    for (const object of culled) object.frustumCulled = true;
+  }
+
+  return { renderer, scene, camera, controls, bloom, render, warmUp };
 }
 
 /**

@@ -76,6 +76,9 @@ lets you recolor and tweak everything.
 - Tyres grip sideways as on dry asphalt (from 0.8 to 1 g): a car sliding sideways stops sooner.
 - The Bolones' rear lamps: the lower row is one long lamp, without the division the upper row
   keeps.
+- Smoother, above all after a crash and on phones: every line is drawn in one go, not twice over
+  (its back faces, then its front ones, its material set up afresh each time). A desktop
+  draws a frame in about a third of the time (after a crash in 5 ms instead of 14).
 
 ### Fixed
 
@@ -84,6 +87,8 @@ lets you recolor and tweak everything.
   they stay in each other.
 - Corners hit no longer spin the cars round like tops: a corner takes up only its share of the
   crash, by how wide the fronts overlap, and glances off.
+- The first look at the city behind the car (the camera turned round a wreck, or in the menu) and
+  the first countdown no longer stall: every shader compiles while the game loads.
 
 ## [2.5.0] – November 2026
 

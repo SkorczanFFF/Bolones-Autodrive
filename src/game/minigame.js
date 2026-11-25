@@ -412,9 +412,10 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     /**
      * Plays a crash once, unseen, while the game loads: the first one in play would stall on
      * code running for the first time (the physics, the dents, their lines) and on the shaders
-     * of what a crash brings (the shards, the lamps out), drawn once with the crash in view.
+     * of what a crash brings (the shards, the lamps out) and of the traffic fading in (its
+     * see-through copies, scene/fade.js), drawn once with them in the scene.
      *
-     * @param {() => void} render the scene, behind the loader
+     * @param {() => void} render the whole scene, behind the loader (core/renderer.js warmUp)
      */
     warmUp(render) {
       // one runs into the back of the other, standing
@@ -426,9 +427,13 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       });
       const warm = createCrash(scene, cars);
       for (let t = 0; t < 0.8; t += 1 / 60) warm.update(1 / 60);
+      // the traffic coming, fading in: the longest interval spawns a car too lately to be whole
+      oncoming.spawning = true;
+      oncoming.update(maxInterval, 1);
       render();
       warm.dispose();
       for (const { object } of cars) scene.remove(object);
+      reset();
     },
 
     /** How much power the Bolones' engine has left after the crash, in the player's hands. */

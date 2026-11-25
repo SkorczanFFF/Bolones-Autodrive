@@ -124,6 +124,10 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A wheel or a bumper torn off in a crash no longer sinks into the other car: it comes off where
+  the crush leaves it (it was left where it had been, inside the other car's crushed front), and
+  the other car hits it at once (before, it went through every car until clear of its own), so
+  it is thrown out of the crash.
 - A car on its side or its roof dents as it should: hit lightly on its roof, it gets a small
   dent, not its roof cut flat (the crash met it only by its lower part, the roof stood out of
   that and was pushed in whole); hit underneath, its wheels first ride up into their arches, so

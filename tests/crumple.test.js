@@ -194,12 +194,15 @@ describe("crumple", () => {
       const before = points()[0];
       const dent = crumple(root, { ...hit, plane, reach: 1 });
       dent.set(1);
-      return { torn: dent.torn.includes(mount), moved: points()[0].z - before.z };
+      const torn = dent.torn.find(({ node }) => node === mount);
+      return { torn: Boolean(torn), moved: points()[0].z - before.z, by: torn?.by.z ?? 0 };
     };
     const pushed = tear(0.35); // 0.15 past its front: pushed back
     expect(pushed.torn).toBe(false);
     expect(pushed.moved).toBeGreaterThan(0.1);
-    expect(tear(0.8)).toEqual({ torn: true, moved: 0 }); // 0.6 past it
+    const off = tear(0.8); // 0.6 past it
+    expect(off).toMatchObject({ torn: true, moved: 0 });
+    expect(off.by).toBeCloseTo(0.6, 6); // the crash takes it from the plane, not from the other car
   });
 
   it("lets a wheel pushed up its spring ride into its arch before it bends or comes off", () => {
@@ -213,7 +216,10 @@ describe("crumple", () => {
       const under = { point: new THREE.Vector3(front, y, z), into: new THREE.Vector3(1, 0, 0) };
       const dent = crumple(root, { ...under, plane: past, reach: 1, tall: 1 });
       dent.set(1);
-      return { torn: dent.torn.includes(mount), moved: points()[0].x - before[0].x };
+      return {
+        torn: dent.torn.some(({ node }) => node === mount),
+        moved: points()[0].x - before[0].x,
+      };
     };
     const pushed = crush(0.6); // as far past it as tears it off a front (above)
     expect(pushed.torn).toBe(false);
@@ -242,7 +248,7 @@ describe("crumple", () => {
         return most;
       };
       const bent = back((x) => Math.abs(x) < 0.2) - back((x) => Math.abs(x) > 0.9);
-      return { torn: dent.torn.includes(node), bent };
+      return { torn: dent.torn.some((tear) => tear.node === node), bent };
     };
     const crushed = bumper(0.3);
     expect(crushed.torn).toBe(false);

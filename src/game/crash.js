@@ -10,6 +10,7 @@ import { boxOf, endOn, overlap } from "./crash/boxes.js";
 import { createCrushes, reachOf } from "./crash/crush.js";
 import { createDriver, hardest, lookAhead, stopping } from "./crash/drivers.js";
 import {
+  ACROSS,
   CARS,
   GRAVITY,
   IDENTITY,
@@ -238,7 +239,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
           for (const { node, position, quaternion } of dent.moved) {
             vehicle.skew(node, position, quaternion);
           }
-          for (const node of dent.torn) tearing.push({ car: entry, node, into: hit.into, speed });
+          for (const tear of dent.torn)
+            tearing.push({ ...tear, car: entry, into: hit.into, speed });
         });
         return {
           set(value) {
@@ -256,16 +258,16 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   /**
    * Parts torn off in a frame's physics steps, taken away after them.
    *
-   * @type {{ car: Body, node: THREE.Object3D, into: THREE.Vector3, speed: number }[]}
+   * @type {{ car: Body, node: THREE.Object3D, by: THREE.Vector3, into: THREE.Vector3, speed: number }[]}
    */
   const tearing = [];
   /** The cars hit, to crumple: one a frame (struck). @type {(() => void)[]} */
   const crumpling = [];
   /**
-   * The parts torn off: on their own, clear of the car they came off (then they hit it too) or not
-   * yet.
+   * The parts torn off: on their own, meeting every car but the one they came off till clear of it
+   * (`apart`).
    *
-   * @type {{ node: THREE.Object3D, body: RAPIER.RigidBody, collider: RAPIER.Collider, from: Body, clear: boolean, half: number[], shift: THREE.Vector3, offset: THREE.Matrix4, size: THREE.Vector3 }[]}
+   * @type {{ node: THREE.Object3D, body: RAPIER.RigidBody, collider: RAPIER.Collider, from: Body, apart?: RAPIER.ImpulseJoint, half: number[], shift: THREE.Vector3, offset: THREE.Matrix4, size: THREE.Vector3 }[]}
    */
   const loose = [];
   /** @type {Body[]} the cars that crashed or touched, in the order they did: the Bolones first */
@@ -333,7 +335,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    *
    * @param {(typeof tearing)[number]} tear
    */
-  function tearOff({ car, node, into, speed }) {
+  function tearOff({ car, node, by, into, speed }) {
     /** @type {"wheel" | "bumper"} */
     const part = node.userData.part;
     // its middle and its size, in its own frame
@@ -347,7 +349,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const [at, turn, size] = [new THREE.Vector3(), new THREE.Quaternion(), new THREE.Vector3()];
     node.matrixWorld.decompose(at, turn, size);
     const middle = bounds.getCenter(new THREE.Vector3());
-    const centre = onRoad(middle.clone().applyMatrix4(node.matrixWorld));
+    const centre = onRoad(middle.clone().applyMatrix4(node.matrixWorld).add(by)); // the crush's
     const [x, y, z] = bounds.getSize(new THREE.Vector3()).multiply(size).toArray();
     const radius = Math.max(y, z) / 2;
     const fling = parts.fling * speed;
@@ -376,9 +378,19 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
         .setFriction(parts.friction)
         .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max)
         .setRestitution(restitution.contact)
-        .setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS)),
+        .setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS | CARS)),
       body,
     );
+    // it meets every car at once (not to fly through the other one in the crash) but the one it
+    // came off, till clear of it (loosen): a joint holding nothing, only keeping their contacts off
+    const none = /** @type {RAPIER.JointAxesMask} */ (0);
+    const apart = world.createImpulseJoint(
+      RAPIER.JointData.generic(ORIGIN, ORIGIN, ACROSS, none),
+      body,
+      car.body,
+      true,
+    );
+    apart.setContactsEnabled(false);
 
     const { parent } = node;
     const [from, facing, scaled] = [
@@ -400,7 +412,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       body,
       collider,
       from: car,
-      clear: false,
+      apart,
       half,
       shift: new THREE.Vector3(),
       offset,
@@ -421,9 +433,9 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   function loosen() {
     for (const piece of loose) {
       const { body, collider } = piece;
-      if (!piece.clear && !overlap(boxOf(piece), boxOf(piece.from))) {
-        piece.clear = true;
-        collider.setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS | CARS));
+      if (piece.apart && !overlap(boxOf(piece), boxOf(piece.from))) {
+        world.removeImpulseJoint(piece.apart, true);
+        delete piece.apart;
       }
       let rolling = false;
       world.contactPair(collider, road, (manifold) => {

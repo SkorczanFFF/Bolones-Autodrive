@@ -346,17 +346,15 @@ export const SCENE = {
 };
 
 /**
- * Line overlay on models. "triangles": every triangle edge, as in v1; the dense lines also hide
- * small model flaws. "edges": ink-like outlines, only creases sharper than `edgeAngle`
- * (coloring-book look) — clean, but it exposes the off-centre wheel rims of wheel.fbx, so it
- * waits for a model fix.
+ * Line overlay on models (scene/lines.js): every triangle edge, as in v1, or the modelled
+ * polygons' outlines (Layer.wirePolygons); the dense lines also hide small model flaws.
+ * edgeAngle: a turn this sharp or more is a corner of a polygon's outline (scene/polygons.js).
  * width: triangle lines in world units, so they thin out with distance, never below a pixel
  * (scene/lines.js). fade: lines of triangles whose inradius on screen is below `fade` render
  * pixels fade out (gone at a quarter of it), so dense meshes far away show their fill; 0 = off.
  * fade, min and glow are the defaults a layer can override (Layer.lineFade, lineMin, glow).
  */
 export const WIRE = {
-  mode: /** @type {"edges" | "triangles"} */ ("triangles"),
   edgeAngle: 20, // degrees
   width: 0.02,
   fade: 2,

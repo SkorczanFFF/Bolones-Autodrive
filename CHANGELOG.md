@@ -116,6 +116,12 @@ lets you recolor and tweak everything.
   height of the car's weight, so nothing ever leant), and the anti-roll bars work through the
   springs: they no longer hold a car up once a wheel is off the road.
 
+### Removed
+
+- The ink-outline look (`WIRE.mode = "edges"` in the config, never on): the lines along the
+  modelled polygons draw clean outlines already, and the palms, the rocks and the far traffic
+  could no longer be drawn that way.
+
 ### Fixed
 
 - Fast head-on crashes (from about 170 km/h closing) no longer throw the lighter car aside: the

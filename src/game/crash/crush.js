@@ -8,9 +8,9 @@ import {
   level,
   meeting,
   middleOf,
+  OVER,
   overlap,
   penetration,
-  span,
 } from "./boxes.js";
 import {
   AHEAD,
@@ -31,8 +31,14 @@ import {
  * @property {number[]} half its box's half size
  * @property {THREE.Vector3} shift its box from the body's centre
  * @property {number} [roof] how much higher its box goes rolled over: up to its roof (boxes.js)
+ * @property {Faces} [faces] how high its ends stand (a car's, game/crash.js facesOf)
  * @property {number} stiffness its crumple zone's spring rate, force per unit of crush; Infinity:
  *   a post, it does not give
+ *
+ * @typedef {object} Faces how high a car's ends stand, from the road: at depths `step` apart in
+ *   from its -z end and its +z end, the highest it comes that far in
+ * @property {[Float32Array, Float32Array]} ends
+ * @property {number} step
  *
  * @typedef {object} Meeting two solids crashing (closing faster than a nudge)
  * @property {THREE.Vector3} normal they met along, from the first to the second
@@ -60,6 +66,31 @@ const SLACK = 0.1; // units: how much deeper the old faces must overlap than the
 
 /** Whether a solid is a post (a palm's trunk, a rock): it does not give. @param {Solid} solid */
 const isPost = ({ stiffness }) => stiffness === Infinity;
+
+/**
+ * How high a solid meets another, in the world: on its wheels, an end with its face as far in as
+ * the crush goes (a car's bonnet, a van's flat front: crash.js facesOf); else all of it, up to its
+ * roof (a side, a car rolled over, a post).
+ *
+ * @param {Solid} solid
+ * @param {THREE.Vector3} towards level, unit: where the other one is
+ * @param {number} deep how far the crush goes in
+ */
+function meetsWith(solid, towards, deep) {
+  const whole = boxOf(solid, undefined, true);
+  const low = whole.centre.y - extent(whole, UP);
+  const high = whole.centre.y + extent(whole, UP);
+  const turn = rotation(solid.body.rotation());
+  const { faces } = solid;
+  if (!faces || UP.clone().applyQuaternion(turn).y < OVER[1] || !endOn(solid.body, towards)) {
+    return { low, high };
+  }
+  const end = faces.ends[AHEAD.clone().applyQuaternion(turn).dot(towards) > 0 ? 1 : 0];
+  const face = end[Math.min(end.length - 1, Math.floor(deep / faces.step))];
+  // as much of its height as it stands now (leaning a little, its box stands taller)
+  const height = 2 * solid.half[1] + (solid.roof ?? 0);
+  return { low, high: low + (high - low) * Math.min(1, face / height) };
+}
 
 /** @type {WeakMap<Solid, number>} a solid's box does not change: its reach, measured once */
 const reaches = new WeakMap();
@@ -131,19 +162,21 @@ export function createCrushes(world, met) {
     const expected = Math.sqrt(depth ** 2 + (taken * mass * speed ** 2) / k);
     const at = middleOf(boxA, boxB, ahead);
     if (stretch) at.addScaledVector(across, stretch.middle - at.dot(across));
-    // as high as the cars overlap, all of them (up to their roofs, not their boxes): no part of
-    // either is left standing where the other one comes
-    const height = span(boxOf(a, undefined, true), boxOf(b, undefined, true), UP);
-    const point = at.clone().setY(height.middle);
+    // each crushed as high as the other one meets it (as far in as the whole crush goes, that far
+    // its own uncrushed parts may reach): no part of either left standing where the other comes
+    const meets = [meetsWith(b, ahead.clone().negate(), expected), meetsWith(a, ahead, expected)];
     // each takes its share of the crush (the stiffer front gives less), from its face, half the
     // first overlap away from the middle
-    const hits = [a, b].map((solid, i) => ({
-      point,
-      into: new THREE.Vector3(ahead.x, 0, ahead.z).multiplyScalar(i ? 1 : -1),
-      plane: (expected * k) / solid.stiffness - depth / 2,
-      reach,
-      tall: height.half,
-    }));
+    const hits = [a, b].map((solid, i) => {
+      const { low, high } = meets[i];
+      return {
+        point: at.clone().setY((low + high) / 2),
+        into: new THREE.Vector3(ahead.x, 0, ahead.z).multiplyScalar(i ? 1 : -1),
+        plane: (expected * k) / solid.stiffness - depth / 2,
+        reach,
+        tall: Math.max(0, high - low) / 2,
+      };
+    });
     const energy = (0.5 * taken * mass * speed ** 2 * (1 - e ** 2)) / METRE ** 2;
     const show = met(a, b, { normal, hits, at, speed, energy });
     return {

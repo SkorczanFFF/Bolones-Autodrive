@@ -210,6 +210,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       half: [x, y, z],
       shift,
       roof: (1 - build.box) * height,
+      faces: facesOf(object, floor),
       offset,
       vehicle,
       stiffness: stiffness * mass,
@@ -668,6 +669,60 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
 const translation = (v) => new THREE.Matrix4().makeTranslation(v);
 /** @type {WeakMap<THREE.BufferGeometry, THREE.Box3>} by the model's body: clones share it */
 const roofs = new WeakMap();
+/** @type {WeakMap<THREE.BufferGeometry, import("./crash/crush.js").Faces>} by the model's body */
+const faces = new WeakMap();
+const FACE_STEP = 0.05 * METRE; // the depths a car's ends are measured at
+
+/**
+ * How high a car's ends stand (its length is its z), from the road: at each depth in from either
+ * end, the highest its body comes that far in, its bumpers too (not its wheels, nor its mirrors):
+ * the face a crush that deep meets another car with (a car's bonnet, low; a van's flat front, all
+ * of it). Measured once a model.
+ *
+ * @param {THREE.Object3D} object upright on the road, its world matrices up to date
+ * @param {number} floor the road, in its frame
+ * @returns {import("./crash/crush.js").Faces}
+ */
+export function facesOf(object, floor) {
+  const meshes = solidMeshes(object).filter(
+    (mesh) => partOf(mesh, object)?.userData.part !== "wheel" && mesh.name !== "mirrors",
+  );
+  const key = meshes[0]?.geometry;
+  const known = key && faces.get(key);
+  if (known) return known;
+  const toObject = object.matrixWorld.clone().invert();
+  /** @type {THREE.Vector3[]} */
+  const points = [];
+  for (const mesh of meshes) {
+    const matrix = toObject.clone().multiply(mesh.matrixWorld);
+    const position = mesh.geometry.getAttribute("position");
+    for (let i = 0; i < position.count; i++) {
+      points.push(new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix));
+    }
+  }
+  const [near, far] = [
+    Math.min(...points.map(({ z }) => z)),
+    Math.max(...points.map(({ z }) => z)),
+  ];
+  const count = Math.ceil((far - near) / 2 / FACE_STEP) + 1; // to its middle
+  const ends = /** @type {[Float32Array, Float32Array]} */ (
+    [0, 1].map(() => new Float32Array(count))
+  );
+  for (const { y, z } of points) {
+    for (const [end, depth] of /** @type {const} */ ([
+      [0, z - near],
+      [1, far - z],
+    ])) {
+      const k = Math.floor(depth / FACE_STEP);
+      if (k < count) ends[end][k] = Math.max(ends[end][k], y - floor);
+    }
+  }
+  // the highest that far in or less
+  for (const end of ends) for (let k = 1; k < count; k++) end[k] = Math.max(end[k], end[k - 1]);
+  const measured = { ends, step: FACE_STEP };
+  if (key) faces.set(key, measured);
+  return measured;
+}
 
 /**
  * A car's body above a height, in its own frame (not its wheels, its bumpers, nor its mirrors,

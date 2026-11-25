@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CAR, MINIGAME, MOUNTAINS, PALETTE, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
-import { createCrash as create, ready, roofOf } from "../src/game/crash.js";
+import { createCrash as create, facesOf, ready, roofOf } from "../src/game/crash.js";
 import { meeting, penetration } from "../src/game/crash/boxes.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
 import { wheelsOf } from "../src/scene/rig.js";
@@ -707,6 +707,26 @@ describe("where two cars meet", () => {
     const across = new THREE.Vector3(0, 0, 1);
     expect(met.half).toBeLessThan(0.75 * (penetration(corner, side, across) / 2));
     expect(met.half).toBeLessThan(2);
+  });
+});
+
+describe("a car's ends", () => {
+  it("stand as high as its model: a car's bonnet and boot low, a van's flat end all of it", () => {
+    for (const model of createTrafficModels(testMaterials())) {
+      const car = model.clone();
+      car.position.y = TRAFFIC.y;
+      car.updateMatrixWorld(true);
+      const { hitbox, label } = model.userData;
+      const height = hitbox.max[1] + TRAFFIC.y;
+      const { ends, step } = facesOf(car, -TRAFFIC.y);
+      const at = (/** @type {Float32Array} */ end, /** @type {number} */ metres) =>
+        end[Math.min(end.length - 1, Math.floor((metres * TRAFFIC.scale) / step))] / height;
+      const fronts = ends.map((end) => at(end, 0.2)); // 20 cm in
+      if (label === "Ramses") expect(Math.max(...fronts), label).toBeGreaterThan(0.9);
+      else expect(Math.max(...fronts), label).toBeLessThan(0.7);
+      for (const end of ends) expect(at(end, 2), label).toBeGreaterThan(0.9); // the roof, by then
+      expect(facesOf(model.clone(), -TRAFFIC.y), label).toBe(facesOf(car, -TRAFFIC.y)); // once
+    }
   });
 });
 

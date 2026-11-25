@@ -117,6 +117,10 @@ lets you recolor and tweak everything.
   springs: they no longer hold a car up once a wheel is off the road.
 - A part torn off in a crash comes off bent: a bumper as far as the crush had bent it when it
   went, a wheel buckled, wobbling as it rolls away.
+- A car hit by another one's front or rear dents only as high as that end comes, as far in as
+  the crush goes: a bonnet leaves a car's roof or a van's top above it as it was, a van's flat
+  front dents all it meets. How high each end stands is measured from the model, so a new car
+  needs nothing set.
 
 ### Removed
 

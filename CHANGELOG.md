@@ -130,6 +130,8 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car standing pressed sideways against another one no longer rocks on its springs for ever:
+  its tyres tip it only as it slides sideways (from 1 m/s, in full from 3).
 - A wheel or a bumper torn off in a crash no longer sinks into the other car: it comes off where
   the crush leaves it (it was left where it had been, inside the other car's crushed front), and
   the other car hits it at once (before, it went through every car until clear of its own), so

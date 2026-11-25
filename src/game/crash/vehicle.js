@@ -1,7 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME } from "../../config.js";
-import { GRAVITY, STEP, UP } from "./physics.js";
+import { ACROSS, GRAVITY, METRE, STEP, UP } from "./physics.js";
 
 /** A wheel's suspension and axle, in the car's frame (Rapier's ray-cast vehicle). */
 const [DOWN, AXLE] = [
@@ -87,7 +87,7 @@ export function createVehicle(world, body, rig, centre, groups) {
       .filter(([, , right]) => right.mount.position.x * left.mount.position.x < 0)
       .map(([, j]) => /** @type {const} */ ([i, j])),
   );
-  const { tip } = car;
+  const { tip, sliding: slides } = car;
   const { antiRoll } = car.springs;
   /** How far a wheel's spring is out (in full, a wheel off the road). @param {number} i */
   const length = (i) => controller.wheelSuspensionLength(i) ?? wheels[i].travel;
@@ -101,6 +101,7 @@ export function createVehicle(world, body, rig, centre, groups) {
     wheels[i].lost || !controller.wheelIsInContact(i) ? 0 : Math.max(0, wheels[i].rest - length(i));
   const turn = new THREE.Quaternion();
   const [rise, side, torque] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const [velocity, across] = [new THREE.Vector3(), new THREE.Vector3()];
 
   return {
     /**
@@ -222,8 +223,12 @@ export function createVehicle(world, body, rig, centre, groups) {
       controller.updateVehicle(STEP, undefined, groups);
       // a tyre's side force tips the car from the road, under the centre of mass: Rapier puts it
       // about level with the centre (a ray-cast vehicle's guard against rolling over), so `tip`
-      // of the turn it leaves out is added, all the wheels' in one
+      // of the turn it leaves out is added, all the wheels' in one, sliding sideways (`sliding`)
       body.rotation(turn);
+      body.linvel(velocity);
+      const sideways = Math.abs(velocity.dot(across.copy(ACROSS).applyQuaternion(turn))) / METRE;
+      const sliding = THREE.MathUtils.smoothstep(sideways, slides[0], slides[1]);
+      if (!sliding) return;
       rise.copy(UP).applyQuaternion(turn); // the car's up
       torque.set(0, 0, 0);
       wheels.forEach(({ point, radius, axle }, i) => {
@@ -237,7 +242,10 @@ export function createVehicle(world, body, rig, centre, groups) {
           .applyQuaternion(turn)
           .setY(0)
           .normalize();
-        torque.addScaledVector(side.crossVectors(rise, side), (below * tip * impulse) / STEP);
+        torque.addScaledVector(
+          side.crossVectors(rise, side),
+          (below * tip * sliding * impulse) / STEP,
+        );
       });
       body.addTorque(torque, false);
     },

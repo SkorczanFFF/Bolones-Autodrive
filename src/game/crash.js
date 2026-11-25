@@ -1,15 +1,17 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
+import { ConvexHull } from "three/addons/math/ConvexHull.js";
 import { MINIGAME, MOUNTAINS, PALETTE, SPEED } from "../config.js";
 import { settle } from "../core/tween.js";
 import { crumple, reaches } from "../scene/crumple.js";
 import { createDebris } from "../scene/debris.js";
 import { partOf, wheelsOf } from "../scene/rig.js";
 import { solidMeshes } from "../scene/wire.js";
-import { boxOf, endOn, overlap } from "./crash/boxes.js";
+import { OVER, boxOf, endOn, overlap } from "./crash/boxes.js";
 import { createCrushes, reachOf } from "./crash/crush.js";
 import { createDriver, hardest, lookAhead, stopping } from "./crash/drivers.js";
 import {
+  ACROSS,
   CARS,
   GRAVITY,
   IDENTITY,
@@ -20,6 +22,7 @@ import {
   ROAD,
   STEP,
   UP,
+  giving,
   groups,
   rotation,
   vector,
@@ -29,6 +32,11 @@ import { createPosts } from "./crash/posts.js";
 import { createVehicle } from "./crash/vehicle.js";
 
 export { ready } from "./crash/physics.js";
+
+const LANDINGS = 3; // a car's roof crushes coming down on the road this often at most
+const LANDED = 0.3; // seconds after one before it does again (it comes down once, not each step)
+const TOUCH = 0.02 * METRE; // units above the road a roof's corner comes down on it from
+const FAR = 1e5; // units along the road the ground goes either way
 
 /**
  * @typedef {object} Car a car in a crash, on its rig (scene/rig.js)
@@ -66,7 +74,8 @@ const LYING = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1)
  *   that do not give (crash/posts.js), every one by the road;
  * - every crash dents both cars (scene/crumple.js), puts their lamps out, breaks a wheel of a car
  *   hit on its side, pushes wheels askew and sheds shards and sparks (scene/debris.js) by the
- *   energy it took up; a palm hit leans and sways;
+ *   energy it took up; a palm hit leans and sways; a car rolled over coming down on its roof
+ *   crushes it where it lands, and lies on it crushed;
  * - a wheel or a bumper crushed past (MINIGAME.crash.parts) is torn off: it flies on by itself,
  *   rolls (a wheel) to a stop, bounces off the cars, the palms and the other parts; a car down a
  *   wheel sinks onto that corner's hub, dragging it.
@@ -85,31 +94,36 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     cameraLag,
     debris: spray,
     car: build,
+    dents: sheet,
     parts,
     scrape,
     restitution,
+    nudge,
   } = MINIGAME.crash;
   const world = new RAPIER.World({ x: 0, y: -GRAVITY, z: 0 });
   world.timestep = STEP;
   world.lengthUnit = METRE;
-  // the tyres grip by themselves (crash/vehicle.js): the road itself is smooth, the metal on it not
-  const road = world.createCollider(
-    new RAPIER.ColliderDesc(new RAPIER.HalfSpace(UP))
-      .setFriction(0)
-      .setRestitution(restitution.contact)
-      .setCollisionGroups(groups(ROAD, CARS | PARTS)),
-    world.createRigidBody(RAPIER.RigidBodyDesc.fixed()),
-  );
-  // the side hills (MOUNTAINS.start) stop what slides off the road: walls the hills rise behind
-  for (const side of [-1, 1]) {
+  /**
+   * The ground as a box (not a half-space: Rapier's lets a hull through, a roof, faces of more
+   * than four corners), its top or its side at a point, longer than any crash goes.
+   *
+   * @param {number} x half its width
+   * @param {number} y half its height
+   * @param {{ x: number, y: number, z: number }} middle
+   */
+  const ground = (x, y, middle) =>
     world.createCollider(
-      new RAPIER.ColliderDesc(new RAPIER.HalfSpace({ x: -side, y: 0, z: 0 }))
-        .setTranslation(side * MOUNTAINS.start, 0, 0)
+      RAPIER.ColliderDesc.cuboid(x, y, FAR)
+        .setTranslation(middle.x, middle.y, middle.z)
         .setFriction(0)
         .setRestitution(restitution.contact)
         .setCollisionGroups(groups(ROAD, CARS | PARTS)),
     );
-  }
+  // the tyres grip by themselves (crash/vehicle.js): the road itself is smooth, the metal on it not
+  const { start } = MOUNTAINS;
+  const road = ground(2 * start, start, { x: 0, y: -start, z: 0 });
+  // the side hills stop what slides off the road: walls the hills rise behind
+  for (const side of [-1, 1]) ground(start, 2 * start, { x: side * 2 * start, y: start, z: 0 });
   /**
    * A car's sheet metal (its body, its hubs): it scrapes the road.
    *
@@ -122,6 +136,17 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max)
       .setRestitution(restitution.contact)
       .setCollisionGroups(groups(CARS, ROAD | PARTS));
+  /**
+   * A car's roof, as the road and the parts meet it, on its body.
+   *
+   * @param {Hull} hull in the body's frame
+   * @param {RAPIER.RigidBody} body
+   */
+  const roofCollider = ({ corners, faces }, body) => {
+    const points = new Float32Array(corners.flatMap(({ x, y, z }) => [x, y, z]));
+    const desc = RAPIER.ColliderDesc.convexMesh(points, new Uint32Array(faces));
+    return world.createCollider(metal(/** @type {RAPIER.ColliderDesc} */ (desc)), body);
+  };
 
   const debris = createDebris(GRAVITY);
   scene.add(debris.object);
@@ -188,17 +213,11 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const top = shift.y + y;
     const shape = RAPIER.ColliderDesc.cuboid(x, (top - bottom) / 2, z);
     world.createCollider(metal(shape).setTranslation(0, (top + bottom) / 2, 0), body);
-    // rolled over it lands on the rest of it, its roof: for the road and the parts only
-    const roof = roofOf(object, centre.y + top);
-    if (!roof.isEmpty()) {
-      const [middle, extent] = [
-        roof.getCenter(new THREE.Vector3()),
-        roof.getSize(new THREE.Vector3()),
-      ];
-      const { x: rx, y: ry, z: rz } = middle.sub(centre);
-      const cabin = RAPIER.ColliderDesc.cuboid(extent.x / 2, extent.y / 2, extent.z / 2);
-      world.createCollider(metal(cabin).setTranslation(rx, ry, rz), body);
-    }
+    // rolled over it lands on the rest of it, its roof: for the road and the parts only, crushed
+    // where it lands (`land`); its corners in the body's frame
+    const above = roofOf(object, centre.y + top);
+    const shell = { ...above, corners: above.corners.map((corner) => corner.clone().sub(centre)) };
+    const cabin = shell.faces.length ? roofCollider(shell, body) : undefined;
     body.recomputeMassPropertiesFromColliders(); // so the crush and the springs weigh it at once
     const vehicle = createVehicle(world, body, rig, centre, groups(CARS, ROAD));
     const offset = translation(centre.clone().negate());
@@ -207,6 +226,12 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       body,
       half: [x, y, z],
       shift,
+      roof: (1 - build.box) * height,
+      faces: facesOf(object, floor),
+      cabin,
+      shell,
+      landings: 0,
+      landed: -Infinity,
       offset,
       vehicle,
       stiffness: stiffness * mass,
@@ -237,7 +262,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
           for (const { node, position, quaternion } of dent.moved) {
             vehicle.skew(node, position, quaternion);
           }
-          for (const node of dent.torn) tearing.push({ car: entry, node, into: hit.into, speed });
+          for (const tear of dent.torn)
+            tearing.push({ ...tear, car: entry, into: hit.into, speed });
         });
         return {
           set(value) {
@@ -255,16 +281,16 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   /**
    * Parts torn off in a frame's physics steps, taken away after them.
    *
-   * @type {{ car: Body, node: THREE.Object3D, into: THREE.Vector3, speed: number }[]}
+   * @type {{ car: Body, node: THREE.Object3D, by: THREE.Vector3, into: THREE.Vector3, speed: number }[]}
    */
   const tearing = [];
   /** The cars hit, to crumple: one a frame (struck). @type {(() => void)[]} */
   const crumpling = [];
   /**
-   * The parts torn off: on their own, clear of the car they came off (then they hit it too) or not
-   * yet.
+   * The parts torn off: on their own, meeting every car but the one they came off till clear of it
+   * (`apart`).
    *
-   * @type {{ node: THREE.Object3D, body: RAPIER.RigidBody, collider: RAPIER.Collider, from: Body, clear: boolean, half: number[], shift: THREE.Vector3, offset: THREE.Matrix4, size: THREE.Vector3 }[]}
+   * @type {{ node: THREE.Object3D, body: RAPIER.RigidBody, collider: RAPIER.Collider, from: Body, apart?: RAPIER.ImpulseJoint, half: number[], shift: THREE.Vector3, offset: THREE.Matrix4, size: THREE.Vector3 }[]}
    */
   const loose = [];
   /** @type {Body[]} the cars that crashed or touched, in the order they did: the Bolones first */
@@ -332,7 +358,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    *
    * @param {(typeof tearing)[number]} tear
    */
-  function tearOff({ car, node, into, speed }) {
+  function tearOff({ car, node, by, into, speed }) {
     /** @type {"wheel" | "bumper"} */
     const part = node.userData.part;
     // its middle and its size, in its own frame
@@ -346,7 +372,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const [at, turn, size] = [new THREE.Vector3(), new THREE.Quaternion(), new THREE.Vector3()];
     node.matrixWorld.decompose(at, turn, size);
     const middle = bounds.getCenter(new THREE.Vector3());
-    const centre = onRoad(middle.clone().applyMatrix4(node.matrixWorld));
+    const centre = onRoad(middle.clone().applyMatrix4(node.matrixWorld).add(by)); // the crush's
     const [x, y, z] = bounds.getSize(new THREE.Vector3()).multiply(size).toArray();
     const radius = Math.max(y, z) / 2;
     const fling = parts.fling * speed;
@@ -363,6 +389,12 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       const axle = new THREE.Vector3(1, 0, 0).applyQuaternion(turn);
       const rolling = UP.clone().cross(velocity).divideScalar(radius);
       desc.setAngvel(axle.multiplyScalar(axle.dot(rolling)));
+      // buckled, leaning in its spin as far as it leant when it went (MINIGAME.crash.dents
+      // camber): rolling, it wobbles
+      const [{ spin }] = wheelsOf(node);
+      const leant = spin.rotation.y;
+      spin.rotation.y = (random() < 0.5 ? -1 : 1) * sheet.camber * parts.wheel.tear;
+      undo.push(() => (spin.rotation.y = leant));
     }
     const body = world.createRigidBody(desc);
     const shape =
@@ -375,9 +407,19 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
         .setFriction(parts.friction)
         .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Max)
         .setRestitution(restitution.contact)
-        .setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS)),
+        .setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS | CARS)),
       body,
     );
+    // it meets every car at once (not to fly through the other one in the crash) but the one it
+    // came off, till clear of it (loosen): a joint holding nothing, only keeping their contacts off
+    const none = /** @type {RAPIER.JointAxesMask} */ (0);
+    const apart = world.createImpulseJoint(
+      RAPIER.JointData.generic(ORIGIN, ORIGIN, ACROSS, none),
+      body,
+      car.body,
+      true,
+    );
+    apart.setContactsEnabled(false);
 
     const { parent } = node;
     const [from, facing, scaled] = [
@@ -399,7 +441,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       body,
       collider,
       from: car,
-      clear: false,
+      apart,
       half,
       shift: new THREE.Vector3(),
       offset,
@@ -414,15 +456,67 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   }
 
   /**
+   * A car rolled over coming down on its roof (or its side) faster than a nudge, before a step:
+   * the roof crushes where it lands, as a front does on a wall (MINIGAME.crash.stiffness), as
+   * deep as the speed it comes down at there takes. It comes down on an edge first: that crushes,
+   * the rest less or not at all, so not flat. Then the car lies on it crushed: the roof's corners
+   * are cut off where the crush ends.
+   *
+   * @param {Body} entry
+   */
+  function land(entry) {
+    const { body, cabin } = entry;
+    const { corners } = entry.shell;
+    if (!cabin || entry.landings >= LANDINGS || time < entry.landed + LANDED) return;
+    const [at, turn] = [vector(body.translation()), rotation(body.rotation())];
+    if (UP.clone().applyQuaternion(turn).y > OVER[0]) return; // on its wheels, its roof up
+    let fall = nudge * METRE;
+    let point;
+    for (const corner of corners) {
+      const p = corner.clone().applyQuaternion(turn).add(at);
+      const down = -velocityAt(body, p).y;
+      if (down > fall && p.y < down * STEP + TOUCH) [fall, point] = [down, p]; // there this step
+    }
+    if (!point) return;
+    entry.landings++;
+    entry.landed = time;
+    const deep = fall * Math.sqrt(1 / giving(body, point, UP) / entry.stiffness);
+    // the road is under all of it: how deep alone says what crushes
+    const dent = entry.struck(
+      { point, into: UP.clone(), plane: deep, reach: Infinity, tall: Infinity },
+      fall,
+    );
+    undo.push(dent.undo);
+    dents.push({ set: dent.set, progress: 1, shown: 0 });
+    // the corners beyond where the crush ends cut off there (its plane: up, in the body's frame)
+    const back = turn.invert();
+    const up = UP.clone().applyQuaternion(back);
+    const plane = point.clone().sub(at).applyQuaternion(back).dot(up) + deep;
+    const over = corners.map((corner) => corner.dot(up) - plane); // < 0: crushed
+    const left = corners.filter((_, i) => over[i] >= 0);
+    corners.forEach((corner, i) => {
+      if (over[i] >= 0) return;
+      corners.forEach((other, j) => {
+        if (over[j] > 0) left.push(corner.clone().lerp(other, over[i] / (over[i] - over[j])));
+      });
+    });
+    const shell = hullOf(left);
+    if (!shell.faces.length) return;
+    world.removeCollider(cabin, false);
+    entry.cabin = roofCollider(shell, body);
+    entry.shell = shell;
+  }
+
+  /**
    * The parts torn off, after a step: rolling on the road they slow down (MINIGAME.crash.parts
    * roll); clear of the car they came off, they hit it too.
    */
   function loosen() {
     for (const piece of loose) {
       const { body, collider } = piece;
-      if (!piece.clear && !overlap(boxOf(piece), boxOf(piece.from))) {
-        piece.clear = true;
-        collider.setCollisionGroups(groups(PARTS, ROAD | POSTS | PARTS | CARS));
+      if (piece.apart && !overlap(boxOf(piece), boxOf(piece.from))) {
+        world.removeImpulseJoint(piece.apart, true);
+        delete piece.apart;
       }
       let rolling = false;
       world.contactPair(collider, road, (manifold) => {
@@ -494,6 +588,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       driver.drive(time);
       vehicle.update();
     }
+    for (const entry of bodies) land(entry);
     // where each is (just remembered): most pairs are too far apart to touch, not worth their
     // boxes, nor are two at rest
     const at = (/** @type {number} */ i) =>
@@ -646,12 +741,98 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
 
 /** @param {THREE.Vector3} v */
 const translation = (v) => new THREE.Matrix4().makeTranslation(v);
-/** @type {WeakMap<THREE.BufferGeometry, THREE.Box3>} by the model's body: clones share it */
+/** @type {WeakMap<THREE.BufferGeometry, Hull>} by the model's body: clones share it */
 const roofs = new WeakMap();
+/** @type {WeakMap<THREE.BufferGeometry, import("./crash/crush.js").Faces>} by the model's body */
+const faces = new WeakMap();
+const FACE_STEP = 0.05 * METRE; // the depths a car's ends are measured at
+
+/**
+ * How high a car's ends stand (its length is its z), from the road: at each depth in from either
+ * end, the highest its body comes that far in, its bumpers too (not its wheels, nor its mirrors):
+ * the face a crush that deep meets another car with (a car's bonnet, low; a van's flat front, all
+ * of it). Measured once a model.
+ *
+ * @param {THREE.Object3D} object upright on the road, its world matrices up to date
+ * @param {number} floor the road, in its frame
+ * @returns {import("./crash/crush.js").Faces}
+ */
+export function facesOf(object, floor) {
+  const meshes = solidMeshes(object).filter(
+    (mesh) => partOf(mesh, object)?.userData.part !== "wheel" && mesh.name !== "mirrors",
+  );
+  const key = meshes[0]?.geometry;
+  const known = key && faces.get(key);
+  if (known) return known;
+  const toObject = object.matrixWorld.clone().invert();
+  /** @type {THREE.Vector3[]} */
+  const points = [];
+  for (const mesh of meshes) {
+    const matrix = toObject.clone().multiply(mesh.matrixWorld);
+    const position = mesh.geometry.getAttribute("position");
+    for (let i = 0; i < position.count; i++) {
+      points.push(new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix));
+    }
+  }
+  const [near, far] = [
+    Math.min(...points.map(({ z }) => z)),
+    Math.max(...points.map(({ z }) => z)),
+  ];
+  const count = Math.ceil((far - near) / 2 / FACE_STEP) + 1; // to its middle
+  const ends = /** @type {[Float32Array, Float32Array]} */ (
+    [0, 1].map(() => new Float32Array(count))
+  );
+  for (const { y, z } of points) {
+    for (const [end, depth] of /** @type {const} */ ([
+      [0, z - near],
+      [1, far - z],
+    ])) {
+      const k = Math.floor(depth / FACE_STEP);
+      if (k < count) ends[end][k] = Math.max(ends[end][k], y - floor);
+    }
+  }
+  // the highest that far in or less
+  for (const end of ends) for (let k = 1; k < count; k++) end[k] = Math.max(end[k], end[k - 1]);
+  const measured = { ends, step: FACE_STEP };
+  if (key) faces.set(key, measured);
+  return measured;
+}
+
+/**
+ * @typedef {object} Hull a convex hull
+ * @property {THREE.Vector3[]} corners
+ * @property {number[]} faces its triangles, three corners each (by their index), turned outwards
+ */
+
+/**
+ * The convex hull round points (three's: Rapier's own keeps every point, and with many in a plane,
+ * a crush's cut, falls through the road).
+ *
+ * @param {THREE.Vector3[]} points
+ * @returns {Hull} none (no faces) for fewer than four
+ */
+function hullOf(points) {
+  /** @type {Hull} */
+  const hull = { corners: [], faces: [] };
+  if (points.length < 4) return hull;
+  const index = new Map();
+  for (const { edge } of new ConvexHull().setFromPoints(points).faces) {
+    const loop = [];
+    let side = edge;
+    do {
+      const { point } = side.head();
+      if (!index.has(point)) index.set(point, hull.corners.push(point) - 1);
+      loop.push(index.get(point));
+    } while ((side = side.next) !== edge);
+    for (let i = 1; i + 1 < loop.length; i++) hull.faces.push(loop[0], loop[i], loop[i + 1]);
+  }
+  return hull;
+}
 
 /**
  * A car's body above a height, in its own frame (not its wheels, its bumpers, nor its mirrors,
- * which fold or come off): what it lands on rolled over, above the box it meets other cars with.
+ * which fold or come off): what it lands on rolled over, above the box it meets other cars with,
+ * as its hull (its shape, a roof's rounded edges and all: not a box round it).
  *
  * @param {THREE.Object3D} object upright on the road, its world matrices up to date
  * @param {number} from
@@ -663,16 +844,17 @@ export function roofOf(object, from) {
   const key = meshes[0]?.geometry;
   let roof = key && roofs.get(key);
   if (roof) return roof;
-  roof = new THREE.Box3();
   const toObject = object.matrixWorld.clone().invert();
-  const p = new THREE.Vector3();
+  const points = [];
   for (const mesh of meshes) {
     const matrix = toObject.clone().multiply(mesh.matrixWorld);
     const position = mesh.geometry.getAttribute("position");
     for (let i = 0; i < position.count; i++) {
-      if (p.fromBufferAttribute(position, i).applyMatrix4(matrix).y > from) roof.expandByPoint(p);
+      const p = new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix);
+      if (p.y > from) points.push(p, p.clone().setY(from)); // down to the box (a flat roof too)
     }
   }
+  roof = hullOf(points);
   if (key) roofs.set(key, roof);
   return roof;
 }

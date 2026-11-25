@@ -551,18 +551,21 @@ export const MINIGAME = {
     player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
     keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
-     * height up: cars are heavy low down, a hit pushes them more than it tips them. Its tyres'
-     * side grip tips it as if it held `tip` of the way down from the centre of mass to the road
-     * (1: as there, everything sliding sideways rolls over; 0: Rapier's, nothing does): a small
-     * car or the van sliding sideways fast rolls over, the Bolones, low and wide, leans. It rides
-     * springs bouncing `bounce` times a second, damped `damping` of critical, an anti-roll bar
-     * across each axle `antiRoll` times as stiff as a wheel's spring (through the springs: it
-     * moves weight from one wheel onto the other, no more than that one carries); down a wheel,
-     * that corner sinks onto the hub (`hub` of the wheel's radius). */
+     * height up: cars are heavy low down, a hit pushes them more than it tips them. Its tyres' side
+     * grip tips it as if it held `tip` of the way down from the centre of mass to the road (1: as
+     * there, everything sliding sideways rolls over; 0: Rapier's, nothing does): a small car or the
+     * van sliding sideways fast rolls over, the Bolones, low and wide, leans. It does from
+     * `sliding` m/s sideways, in full from the second (standing pressed sideways, the grip and the
+     * roll on the springs would feed each other, rocking it). It rides springs bouncing `bounce`
+     * times a second, damped `damping` of critical, an anti-roll bar across each axle `antiRoll`
+     * times as stiff as a wheel's spring (through the springs: it moves weight from one wheel onto
+     * the other, no more than that one carries); down a wheel, that corner sinks onto the hub
+     * (`hub` of the wheel's radius). */
     car: {
       box: 0.7,
       com: 0.4,
       tip: 0.75,
+      sliding: [1, 3],
       springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 },
       hub: 0.4,
     },
@@ -574,9 +577,10 @@ export const MINIGAME = {
     scrape: 0.5, // friction of sheet metal: crushing cars, a car's body on the road
     nudge: 2, // m/s: cars closing slower only touch (no crumple zones, no dents, no debris)
     /** A wheel or a bumper comes off a car crushed past it by `tear` of its size (the farthest of
-     * its points from its middle), flung on along the hit at `fling` of the closing speed (and up
-     * half as fast), on its own (`mass` kg, rubbing the road with `friction`), a wheel rolling
-     * on. */
+     * its points from its middle; a wheel pushed up its spring, past how far that goes), flung on
+     * along the hit at `fling` of the closing speed (and up half as fast), on its own (`mass` kg,
+     * rubbing the road with `friction`), a bumper bent as far as it was when it went, a wheel
+     * rolling on, buckled (scene/crumple.js, game/crash.js). */
     parts: {
       fling: 0.2,
       friction: 0.7,
@@ -587,9 +591,9 @@ export const MINIGAME = {
     /**
      * How the sheet metal gives (scene/crumple.js), in units and in shares of how deep a crush
      * went:
-     * - the crush runs out over `fade` beyond how wide it was hit, or `taper` times as far as it
-     *   went in (a deep dent pulls the panels round it in: a narrow front driven into a side
-     *   leaves a V, not a cut);
+     * - the crush runs out over `fade` beyond how wide and how high it was hit, or `taper` times
+     *   as far as it went in (a deep dent pulls the panels round it in: a narrow front driven into
+     *   a side leaves a V, not a cut);
      * - behind the crush of a front or a rear the bonnet (the boot lid) folds up into a ridge
      *   across `bend` times as deep, `tent` of that high in its middle, as wide as it was hit (the
      *   roof, the wings and the pillars hold), the sides below `bulge` out; hit off its middle,

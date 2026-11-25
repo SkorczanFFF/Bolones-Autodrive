@@ -16,12 +16,14 @@ function car() {
 const meshOf = (root) => /** @type {THREE.Mesh} */ (root.children[0]);
 
 describe("crumple", () => {
-  // hit in the middle of the front, crushed 0.4 back, 0.3 either side (running out over 0.6)
+  // hit in the middle of the front, crushed 0.4 back, 0.3 either side (running out over 0.6), as
+  // high as the car is
   const hit = {
     point: new THREE.Vector3(0, 0, -2),
     into: new THREE.Vector3(0, 0, 1),
     plane: 0.4,
     reach: 0.3,
+    tall: 0.5,
   };
   const plane = hit.point.z + hit.plane;
 
@@ -192,12 +194,37 @@ describe("crumple", () => {
       const before = points()[0];
       const dent = crumple(root, { ...hit, plane, reach: 1 });
       dent.set(1);
-      return { torn: dent.torn.includes(mount), moved: points()[0].z - before.z };
+      const torn = dent.torn.find(({ node }) => node === mount);
+      return { torn: Boolean(torn), moved: points()[0].z - before.z, by: torn?.by.z ?? 0 };
     };
     const pushed = tear(0.35); // 0.15 past its front: pushed back
     expect(pushed.torn).toBe(false);
     expect(pushed.moved).toBeGreaterThan(0.1);
-    expect(tear(0.8)).toEqual({ torn: true, moved: 0 }); // 0.6 past it
+    const off = tear(0.8); // 0.6 past it
+    expect(off).toMatchObject({ torn: true, moved: 0 });
+    expect(off.by).toBeCloseTo(0.6, 6); // the crash takes it from the plane, not from the other car
+  });
+
+  it("lets a wheel pushed up its spring ride into its arch before it bends or comes off", () => {
+    // the wheel under the car, the car on its side (its underside to -x), hit underneath
+    const crush = (/** @type {number} */ past) => {
+      const { root, mount, points } = wheeled(new THREE.Vector3(0.9, -0.5, -1.4));
+      root.rotation.z = -Math.PI / 2;
+      const before = points();
+      const front = Math.min(...before.map(({ x }) => x));
+      const { y, z } = mount.getWorldPosition(new THREE.Vector3());
+      const under = { point: new THREE.Vector3(front, y, z), into: new THREE.Vector3(1, 0, 0) };
+      const dent = crumple(root, { ...under, plane: past, reach: 1, tall: 1 });
+      dent.set(1);
+      return {
+        torn: dent.torn.some(({ node }) => node === mount),
+        moved: points()[0].x - before[0].x,
+      };
+    };
+    const pushed = crush(0.6); // as far past it as tears it off a front (above)
+    expect(pushed.torn).toBe(false);
+    expect(pushed.moved).toBeGreaterThan(0.4); // up into its arch
+    expect(crush(1.2).torn).toBe(true); // far past its spring
   });
 
   it("tears a bumper off a front crushed well past it; crushed less, it bends", () => {
@@ -220,13 +247,24 @@ describe("crumple", () => {
         }
         return most;
       };
-      const bent = back((x) => Math.abs(x) < 0.2) - back((x) => Math.abs(x) > 0.9);
-      return { torn: dent.torn.includes(node), bent };
+      const middle = back((x) => Math.abs(x) < 0.2);
+      const bent = middle - back((x) => Math.abs(x) > 0.9);
+      const by = dent.torn.find((tear) => tear.node === node)?.by.z ?? 0;
+      return { torn: by > 0, bent, middle, by };
     };
     const crushed = bumper(0.3);
     expect(crushed.torn).toBe(false);
     expect(crushed.bent).toBeGreaterThan(0.1); // its middle pushed back, its ends less: bent
-    expect(bumper(0.9)).toEqual({ torn: true, bent: 0 }); // torn off whole, as it was
+    const off = bumper(0.9);
+    expect(off.torn).toBe(true);
+    expect(off.bent).toBeGreaterThan(0.1); // it comes off bent
+    // as far as the crush had come when it went (half its size, MINIGAME.crash.parts), no further
+    expect(off.middle).toBeGreaterThan(0.4);
+    expect(off.middle).toBeLessThan(0.6);
+    // the crash pushes it the rest of the way: its front ends on the plane (buckled a little
+    // deeper), not in the car
+    expect(off.middle + off.by).toBeGreaterThan(0.85);
+    expect(off.middle + off.by).toBeLessThan(1.05);
   });
 
   it("pushes a side in without folding it up", () => {
@@ -238,6 +276,7 @@ describe("crumple", () => {
       into: new THREE.Vector3(1, 0, 0),
       plane: 0.3,
       reach: 0.5,
+      tall: 0.5,
     };
     crumple(root, side).set(1);
     const after = meshOf(root).geometry.getAttribute("position");

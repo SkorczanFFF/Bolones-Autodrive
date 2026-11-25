@@ -52,6 +52,9 @@ lets you recolor and tweak everything.
   button on a touch screen is big enough for a finger.
 - `?stats` at the end of the app's address shows the developer stats (FPS, draw calls, triangles)
   from the start: on a phone, which has no F10, compact, at the left edge clear of the thumbs.
+- A car rolled over crushes its roof where it comes down on it, as deep as it comes down fast:
+  on the edge it lands on first, the rest less or not at all, so a roof does not come out flat.
+  It then lies on its roof as crushed, its roof shaped as the model's is (a box round it before).
 
 ### Changed
 
@@ -115,6 +118,12 @@ lets you recolor and tweak everything.
   wide, only leans. The tyres' grip tips a car as it does at the road (the physics put it at the
   height of the car's weight, so nothing ever leant), and the anti-roll bars work through the
   springs: they no longer hold a car up once a wheel is off the road.
+- A part torn off in a crash comes off bent: a bumper as far as the crush had bent it when it
+  went, a wheel buckled, wobbling as it rolls away.
+- A car hit by another one's front or rear dents only as high as that end comes, as far in as
+  the crush goes: a bonnet leaves a car's roof or a van's top above it as it was, a van's flat
+  front dents all it meets. How high each end stands is measured from the model, so a new car
+  needs nothing set.
 
 ### Removed
 
@@ -124,6 +133,24 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car standing pressed sideways against another one no longer rocks on its springs for ever:
+  its tyres tip it only as it slides sideways (from 1 m/s, in full from 3).
+- Crashes no longer bounce the cars off each other, or off a palm, like a pinball: a crush gives
+  back only what the crumple zones are meant to (a little slow, next to nothing fast), not more
+  because the last step of it went past them or a car turned about the hit; cars pushed in
+  past them are parted, slowly.
+- The dents follow where two cars overlap: a corner sliding on along the other car, or fronts
+  pushed in deeper (a car behind, fronts caught in each other), dent there too, so the cars do
+  not show through each other.
+- A wheel or a bumper torn off in a crash no longer sinks into the other car: it comes off where
+  the crush leaves it (it was left where it had been, inside the other car's crushed front), and
+  the other car hits it at once (before, it went through every car until clear of its own), so
+  it is thrown out of the crash.
+- A car on its side or its roof dents as it should: hit lightly on its roof, it gets a small
+  dent, not its roof cut flat (the crash met it only by its lower part, the roof stood out of
+  that and was pushed in whole); hit underneath, its wheels first ride up into their arches, so
+  a light bump no longer tears all four off. A dent also runs out above and below where the
+  cars met: a small car dents the top of a tall one less.
 - Fast head-on crashes (from about 170 km/h closing) no longer throw the lighter car aside: the
   crush went deeper than the fronts are wide, and the cars slid through each other and apart. Now
   they stay in each other.

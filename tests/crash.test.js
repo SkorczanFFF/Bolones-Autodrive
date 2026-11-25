@@ -2,9 +2,10 @@ import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CAR, MINIGAME, MOUNTAINS, PALETTE, TRAFFIC } from "../src/config.js";
 import { mulberry32 } from "../src/core/noise.js";
-import { createCrash as create, ready, roofOf } from "../src/game/crash.js";
+import { createCrash as create, facesOf, ready, roofOf } from "../src/game/crash.js";
 import { meeting, penetration } from "../src/game/crash/boxes.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
+import { wheelsOf } from "../src/scene/rig.js";
 import { testCar as car, testMaterials } from "./helpers.js";
 
 /**
@@ -251,6 +252,10 @@ describe("crash", () => {
     expect(crash.tally.parts).toBeGreaterThanOrEqual(torn.length);
     const [wheel] = torn;
     expect(wheel.position.distanceTo(other.object.position)).toBeGreaterThan(3); // away
+    const [{ spin }] = wheelsOf(wheel);
+    const { camber } = MINIGAME.crash.dents;
+    const buckled = camber * MINIGAME.crash.parts.wheel.tear; // as far as it leant when it went
+    expect(Math.abs(spin.rotation.y)).toBeCloseTo(buckled, 9);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(other.object.quaternion);
     expect(THREE.MathUtils.radToDeg(up.angleTo(new THREE.Vector3(0, 1, 0)))).toBeGreaterThan(4);
     // it rolls to a stop, buckled
@@ -260,6 +265,7 @@ describe("crash", () => {
     expect(wheel.position.distanceTo(at)).toBeLessThan(0.05);
     crash.dispose();
     expect(wheels.every(({ parent }) => parent === other.object)).toBe(true); // back on
+    expect(spin.rotation.y).toBe(0); // straight again
   });
 
   it("hands the Bolones to the player: ↑ drives it on, ← turns it left, let go it stops", () => {
@@ -466,6 +472,39 @@ describe("crash", () => {
     expect(small.object.position.z).toBeGreaterThan(2); // pushed away
     expect(roll).toBeLessThan(30); // its tyres trip it, its springs lean it: not over
     expect(leanOf(small.object)).toBeLessThan(10); // back on its wheels (or a hub, one torn off)
+  });
+
+  it("does not throw a car hit on its side off: a crush gives back what it may, no more", () => {
+    const scene = new THREE.Scene();
+    const hitting = car(0, 0, BOLONES, CAR.mass, -27); // 15 m/s
+    const hit = car(0, -14, POLAKITO, 580, 0);
+    hit.object.rotation.y = THREE.MathUtils.degToRad(70); // its side to it, at an angle
+    scene.add(hitting.object, hit.object);
+    const crash = createCrash(scene, [hitting, hit]);
+    const gap = () => hitting.object.position.z - hit.object.position.z;
+    let [last, parting] = [gap(), 0];
+    for (let t = 0; t < 2; t += 1 / 60) {
+      crash.update(1 / 60);
+      parting = Math.max(parting, (gap() - last) * 60);
+      last = gap();
+    }
+    expect(parting / 27).toBeLessThan(0.5); // it flew off faster than it was hit, like a pinball
+  });
+
+  it("does not bounce a car off at a touch: it parts no faster than it came", () => {
+    const scene = new THREE.Scene();
+    const hit = car(0, 0, BOLONES, CAR.mass, 0);
+    const touching = car(0, -(BOLONES[2] + POLAKITO[2]) / 2 - 0.3, POLAKITO, 580, 1.8); // 1 m/s
+    scene.add(hit.object, touching.object);
+    const crash = createCrash(scene, [hit, touching]);
+    const gap = () => hit.object.position.z - touching.object.position.z;
+    let [last, parting] = [gap(), 0];
+    for (let t = 0; t < 1; t += 1 / 240) {
+      crash.update(1 / 240);
+      parting = Math.max(parting, (gap() - last) * 240);
+      last = gap();
+    }
+    expect(parting).toBeLessThan(0.36 * 1.8); // e of 1 m/s (MINIGAME.crash.restitution)
   });
 
   it("tips a car sliding sideways towards where it slides: a small one, fast, rolls over", () => {
@@ -704,21 +743,66 @@ describe("where two cars meet", () => {
   });
 });
 
+describe("a car's ends", () => {
+  it("stand as high as its model: a car's bonnet and boot low, a van's flat end all of it", () => {
+    for (const model of createTrafficModels(testMaterials())) {
+      const car = model.clone();
+      car.position.y = TRAFFIC.y;
+      car.updateMatrixWorld(true);
+      const { hitbox, label } = model.userData;
+      const height = hitbox.max[1] + TRAFFIC.y;
+      const { ends, step } = facesOf(car, -TRAFFIC.y);
+      const at = (/** @type {Float32Array} */ end, /** @type {number} */ metres) =>
+        end[Math.min(end.length - 1, Math.floor((metres * TRAFFIC.scale) / step))] / height;
+      const fronts = ends.map((end) => at(end, 0.2)); // 20 cm in
+      if (label === "Ramses") expect(Math.max(...fronts), label).toBeGreaterThan(0.9);
+      else expect(Math.max(...fronts), label).toBeLessThan(0.7);
+      for (const end of ends) expect(at(end, 2), label).toBeGreaterThan(0.9); // the roof, by then
+      expect(facesOf(model.clone(), -TRAFFIC.y), label).toBe(facesOf(car, -TRAFFIC.y)); // once
+    }
+  });
+});
+
 describe("a car rolled over", () => {
-  it("lands on its roof: the body above its box, up to the top, not its mirrors", () => {
+  it("crushes its roof where it comes down on it, and lies on it as crushed", () => {
+    const scene = new THREE.Scene();
+    const sliding = car(0, 0, POLAKITO, 580, 0);
+    sliding.velocity.set(36, 0, 0); // 20 m/s sideways: it rolls over (above)
+    const far = car(0, -400, BOLONES, CAR.mass, 0);
+    scene.add(sliding.object, far.object);
+    const crash = createCrash(scene, [sliding, far]);
+    const shell = /** @type {THREE.Mesh} */ (sliding.object.children[0]);
+    const before = shell.geometry.getAttribute("position").clone();
+    for (let t = 0; t < 4; t += 1 / 60) crash.update(1 / 60);
+    expect(leanOf(sliding.object)).toBeGreaterThan(135); // on its roof
+    const after = shell.geometry.getAttribute("position");
+    let dent = 0;
+    for (let i = 0; i < before.count; i++) {
+      if (before.getY(i) < POLAKITO[1] - 0.1) continue; // the roof
+      const moved = new THREE.Vector3().fromBufferAttribute(after, i);
+      dent = Math.max(dent, moved.distanceTo(new THREE.Vector3().fromBufferAttribute(before, i)));
+    }
+    expect(dent).toBeGreaterThan(0.05);
+    expect(dent).toBeLessThan(0.5); // dented, not flattened
+    sliding.object.updateWorldMatrix(true, true);
+    const lowest = new THREE.Box3().setFromObject(shell, true).min.y;
+    expect(Math.abs(lowest)).toBeLessThan(0.05); // on the road: not in it, not above it
+  });
+
+  it("lands on its roof: the body above its box, from it up to the top, not its mirrors", () => {
     const models = createTrafficModels(testMaterials());
     for (const model of models) {
       model.updateMatrixWorld(true);
       const { hitbox } = model.userData;
       const from = hitbox.min[1] + 0.7 * (hitbox.max[1] - hitbox.min[1]);
-      const roof = roofOf(model, from);
+      const hull = roofOf(model, from);
+      const roof = new THREE.Box3().setFromPoints(hull.corners);
       const label = model.userData.label;
       expect(roof.max.y, label).toBeCloseTo(hitbox.max[1], 5);
-      expect(roof.min.y, label).toBeGreaterThan(from);
-      expect(roof.min.y, label).toBeLessThan(from + 0.1 * (hitbox.max[1] - hitbox.min[1]));
+      expect(roof.min.y, label).toBeCloseTo(from, 5); // down to the box: it has a floor
       // as wide as the body there at most: not out to the mirrors
       expect(roof.max.x, label).toBeLessThanOrEqual(hitbox.max[0] + 1e-6);
-      expect(roofOf(model.clone(), from), label).toBe(roof); // once per model
+      expect(roofOf(model.clone(), from), label).toBe(hull); // once per model
     }
   });
 });

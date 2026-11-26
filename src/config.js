@@ -563,7 +563,9 @@ export const MINIGAME = {
      * bouncing `bounce` times a second, damped `damping` of critical, an anti-roll bar across
      * each axle `antiRoll` times as stiff as a wheel's spring (through the springs: it moves
      * weight from one wheel onto the other, no more than that one carries); down a wheel, that
-     * corner sinks onto the hub (`hub` of the wheel's radius). */
+     * corner sinks onto the hub (`hub` of the wheel's radius). A wheel with nothing under it is
+     * shown hanging out of its arch `droop` of its radius at most (its spring lets it out
+     * further, to find the road). */
     car: {
       box: 0.7,
       com: 0.4,
@@ -571,6 +573,7 @@ export const MINIGAME = {
       moving: [1, 3],
       springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 },
       hub: 0.4,
+      droop: 0.3,
     },
     stiffness: 700, // N/m per kg of car: a front crushes about 0.5 m into a wall at 56 km/h
     /** Coefficient of restitution falling off with the closing speed (m/s), as in crash tests:

@@ -262,6 +262,21 @@ describe("crash", () => {
       }
     }
   });
+  it("shows a wheel with nothing under it hanging a little out of its arch, no further", () => {
+    const scene = new THREE.Scene();
+    const thrown = car(0, 0, POLAKITO, 580, 0);
+    thrown.velocity.set(0, 14, 0); // up off the road
+    const far = car(0, -400, BOLONES, CAR.mass, 0); // a crash takes two: this one stays out of it
+    scene.add(thrown.object, far.object);
+    const crash = createCrash(scene, [thrown, far]);
+    run(crash, 0.4); // in the air
+    const { droop } = MINIGAME.crash.car;
+    for (const { steer, radius } of wheelsOf(thrown.object)) {
+      expect(steer.position.y).toBeLessThan(-0.5 * droop * radius); // let out
+      expect(steer.position.y).toBeGreaterThan(-1.1 * droop * radius); // a little only
+    }
+  });
+
   it("tears a front wheel off in a hard crash: it rolls away to a stop, the car sits down on that corner", () => {
     const scene = new THREE.Scene();
     const bolones = car(0, 0, BOLONES, 1160, -14.4 * 1.75);
@@ -889,36 +904,51 @@ describe("the Bolones in the player's hands", () => {
     return new FanFBXLoader().parse(buffer, "");
   };
 
-  it("rolls over in a full turn held fast, ↑ held or not; slower, low and wide, it only leans", () => {
-    /**
-     * The Bolones as the game builds it, going `kmh` when the crash ends, steered as `steer` says
-     * a few seconds: how far it leant at most, and in the end.
-     *
-     * @param {number} kmh
-     * @param {boolean} gas
-     * @param {(t: number) => number} steer -1 (left) to 1 (right), at game seconds since the crash
-     */
-    const drive = (kmh, gas, steer) => {
-      const scene = new THREE.Scene();
-      const models = { bolones: load("bolones"), wheel: load("wheel") };
-      const bolones = createCar({ scene, models, materials: testMaterials() });
-      bolones.group.updateMatrixWorld(true);
-      const parked = car(30, -300, POLAKITO, 580, 0); // far off, never met
-      scene.add(parked.object);
-      const velocity = new THREE.Vector3(0, 0, -(kmh / 3.6) * TRAFFIC.scale);
-      const { wreck: object, box } = bolones;
-      const crash = createCrash(scene, [
-        { ...parked, object, box, mass: CAR.mass, velocity },
-        parked,
-      ]);
-      let most = 0;
-      for (let t = 0; t < 6; t += 1 / 60) {
-        crash.control(steer(t), gas);
-        crash.update(1 / 60);
-        most = Math.max(most, leanOf(object));
+  /**
+   * The Bolones as the game builds it, going `kmh` when the crash ends, steered as `steer` says
+   * for `seconds`: how far it leant at most and in the end, and how far its middle rose at most
+   * lying on its side, over the lowest it had come in the half second before.
+   *
+   * @param {number} kmh
+   * @param {boolean} gas
+   * @param {(t: number) => number} steer -1 (left) to 1 (right), at game seconds since the crash
+   */
+  const drive = (kmh, gas, steer, seconds = 6) => {
+    const scene = new THREE.Scene();
+    const models = { bolones: load("bolones"), wheel: load("wheel") };
+    const bolones = createCar({ scene, models, materials: testMaterials() });
+    bolones.group.updateMatrixWorld(true);
+    const parked = car(30, -300, POLAKITO, 580, 0); // far off, never met
+    scene.add(parked.object);
+    const velocity = new THREE.Vector3(0, 0, -(kmh / 3.6) * TRAFFIC.scale);
+    const { wreck: object, box } = bolones;
+    const crash = createCrash(scene, [
+      { ...parked, object, box, mass: CAR.mass, velocity },
+      parked,
+    ]);
+    const [middle, side] = [
+      new THREE.Vector3(),
+      (/** @type {number} */ lean) => lean > 70 && lean < 110,
+    ];
+    /** @type {{ lean: number, y: number }[]} */
+    const trail = [];
+    let [most, rise] = [0, 0];
+    for (let t = 0; t < seconds; t += 1 / 60) {
+      crash.control(steer(t), gas);
+      crash.update(1 / 60);
+      const lean = leanOf(object);
+      const { y } = crash.centre(middle, 0);
+      const lying = trail.slice(-30).filter((p) => side(p.lean));
+      if (side(lean) && lying.length >= 20) {
+        rise = Math.max(rise, y - Math.min(...lying.map((p) => p.y)));
       }
-      return { most, end: leanOf(object) };
-    };
+      trail.push({ lean, y });
+      most = Math.max(most, lean);
+    }
+    return { most, end: leanOf(object), rise };
+  };
+
+  it("rolls over in a full turn held fast, ↑ held or not; slower, low and wide, it only leans", () => {
     const left = () => -1;
     expect(drive(100, false, left).most).toBeGreaterThan(90); // over its side, onto its roof or on
     const slow = drive(45, true, left);
@@ -928,5 +958,11 @@ describe("the Bolones in the player's hands", () => {
     const flick = drive(90, false, (t) => (t < 0.5 ? -1 : t < 1 ? 1 : 0));
     expect(flick.most).toBeGreaterThan(15);
     expect(flick.end).toBeLessThan(5);
+  });
+
+  it("slides on its side, rolled over, never thrown up off the road", () => {
+    // full left at 80 km/h a second or so: over onto its side, sliding on
+    const { rise } = drive(80, false, (t) => (t < 1.2 ? -1 : 0), 8);
+    expect(rise).toBeLessThan(0.5); // units its middle rises while it lies on its side
   });
 });

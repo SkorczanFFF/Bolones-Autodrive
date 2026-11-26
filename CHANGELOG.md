@@ -145,6 +145,11 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car rolled over, sliding on its side or its roof, is no longer thrown up off the road now and
+  then, by as much as two metres: the physics took it for 20 cm into the road, a box far too long
+  for its contacts to be exact.
+- A wheel with nothing under it (a car in the air, on its side or its roof) hangs a few
+  centimetres out of its arch: it hung out by most of its height, as if falling off.
 - A car leaning or rolled over is dented where it really meets the other car: seen from above the
   crash took it by its width and length alone, as if it stood upright, so where they met came out
   up to a metre off, beside the cars, or was not found at all and the dent went as wide as they

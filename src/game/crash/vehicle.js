@@ -70,6 +70,7 @@ export function createVehicle(world, body, rig, centre, groups) {
       ...wheel,
       load,
       travel,
+      above,
       point,
       axle,
       rest,
@@ -265,13 +266,20 @@ export function createVehicle(world, body, rig, centre, groups) {
       body.addTorque(torque, false);
     },
 
-    /** The rig's wheels where the vehicle's are: rolled, steered, up or down on their springs. */
+    /**
+     * The rig's wheels where the vehicle's are: rolled, steered, up or down on their springs; let
+     * out past where it stands (nothing, or next to nothing, under it), a wheel hangs out of its
+     * arch a little only, `droop` of its radius at most (MINIGAME.crash.car): its spring lets it
+     * out a whole sag further, to find the road, which looks dropped off.
+     */
     show() {
-      wheels.forEach(({ spin, steer, travel, lost, from }, i) => {
+      wheels.forEach(({ spin, steer, travel, above, radius, lost, from }, i) => {
         if (lost) return;
         spin.rotation.x = from.spin + (controller.wheelRotation(i) ?? 0);
         steer.rotation.y = controller.wheelSteering(i) ?? 0;
-        steer.position.y = travel - (controller.wheelSuspensionLength(i) ?? travel);
+        const up = travel - length(i) + above; // past standing
+        const most = car.droop * radius;
+        steer.position.y = (up >= 0 ? up : -most * (1 - Math.exp(up / most))) - above;
       });
     },
 

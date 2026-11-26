@@ -37,7 +37,12 @@ export { ready } from "./crash/physics.js";
 const LANDINGS = 3; // a car's roof crushes coming down on the road this often at most
 const LANDED = 0.3; // seconds after one before it does again (it comes down once, not each step)
 const TOUCH = 0.02 * METRE; // units above the road a roof's corner comes down on it from
-const FAR = 1e5; // units along the road the ground goes either way
+/**
+ * Units along the road the ground goes either way: further than a crash goes (its cars stop within
+ * some 1500), no further: Rapier's contacts with a box are only as exact as the box is small, and
+ * one far longer takes a car lying on the road for 20 cm in it, throwing it up.
+ */
+const FAR = 2000;
 
 /**
  * @typedef {object} Car a car in a crash, on its rig (scene/rig.js)

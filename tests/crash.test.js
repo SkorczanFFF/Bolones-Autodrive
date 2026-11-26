@@ -1,9 +1,13 @@
+// @ts-expect-error no @types/node in this browser project; the tests run in node
+import fs from "node:fs";
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CAR, MINIGAME, MOUNTAINS, PALETTE, TRAFFIC } from "../src/config.js";
+import { ASSETS, CAR, MINIGAME, MOUNTAINS, PALETTE, TRAFFIC } from "../src/config.js";
+import { FanFBXLoader } from "../src/core/fbx.js";
 import { mulberry32 } from "../src/core/noise.js";
 import { createCrash as create, facesOf, ready, roofOf } from "../src/game/crash.js";
 import { meeting, penetration } from "../src/game/crash/boxes.js";
+import { createCar } from "../src/scene/car.js";
 import { createTrafficModels } from "../src/scene/traffic.js";
 import { wheelsOf } from "../src/scene/rig.js";
 import { testCar as car, testMaterials } from "./helpers.js";
@@ -874,5 +878,55 @@ describe("a car rolled over", () => {
       expect(roof.max.x, label).toBeLessThanOrEqual(hitbox.max[0] + 1e-6);
       expect(roofOf(model.clone(), from), label).toBe(hull); // once per model
     }
+  });
+});
+
+describe("the Bolones in the player's hands", () => {
+  /** A model as the game loads it. @param {keyof typeof ASSETS.models} name */
+  const load = (name) => {
+    const file = fs.readFileSync(`public/${ASSETS.models[name]}`);
+    const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+    return new FanFBXLoader().parse(buffer, "");
+  };
+
+  it("rolls over in a full turn held fast, ↑ held or not; slower, low and wide, it only leans", () => {
+    /**
+     * The Bolones as the game builds it, going `kmh` when the crash ends, steered as `steer` says
+     * a few seconds: how far it leant at most, and in the end.
+     *
+     * @param {number} kmh
+     * @param {boolean} gas
+     * @param {(t: number) => number} steer -1 (left) to 1 (right), at game seconds since the crash
+     */
+    const drive = (kmh, gas, steer) => {
+      const scene = new THREE.Scene();
+      const models = { bolones: load("bolones"), wheel: load("wheel") };
+      const bolones = createCar({ scene, models, materials: testMaterials() });
+      bolones.group.updateMatrixWorld(true);
+      const parked = car(30, -300, POLAKITO, 580, 0); // far off, never met
+      scene.add(parked.object);
+      const velocity = new THREE.Vector3(0, 0, -(kmh / 3.6) * TRAFFIC.scale);
+      const { wreck: object, box } = bolones;
+      const crash = createCrash(scene, [
+        { ...parked, object, box, mass: CAR.mass, velocity },
+        parked,
+      ]);
+      let most = 0;
+      for (let t = 0; t < 6; t += 1 / 60) {
+        crash.control(steer(t), gas);
+        crash.update(1 / 60);
+        most = Math.max(most, leanOf(object));
+      }
+      return { most, end: leanOf(object) };
+    };
+    const left = () => -1;
+    expect(drive(100, false, left).most).toBeGreaterThan(90); // over its side, onto its roof or on
+    const slow = drive(45, true, left);
+    expect(slow.most).toBeLessThan(10); // low and wide, it only leans
+    expect(slow.end).toBeLessThan(5);
+    // fast, left, right, let go: it leans hard one way and the other, and back on its wheels
+    const flick = drive(90, false, (t) => (t < 0.5 ? -1 : t < 1 ? 1 : 0));
+    expect(flick.most).toBeGreaterThan(15);
+    expect(flick.end).toBeLessThan(5);
   });
 });

@@ -123,8 +123,13 @@ lets you recolor and tweak everything.
 - A car sliding sideways leans over onto the wheels it slides towards and can roll over: the
   Polakito and the Kredens from about 36 km/h sideways, the Ramses sooner; the Bolones, low and
   wide, only leans. The tyres' grip tips a car as it does at the road (the physics put it at the
-  height of the car's weight, so nothing ever leant), and the anti-roll bars work through the
-  springs: they no longer hold a car up once a wheel is off the road.
+  height of the car's weight, so nothing ever leant), turning as well as sliding, and the
+  anti-roll bars work through the springs: they no longer hold a car up once a wheel is off the
+  road.
+- The Bolones, the player's after a crash, rolls over in a full turn held at speed: from about
+  80 km/h in a second or so, ↑ held or not (turned fast, its tyres tip it as if they gripped
+  lower than they do). At 60 km/h it leans hard, a quick turn left and right at 90 swings it from
+  side to side; slower, it only leans, as low and wide as ever.
 - A part torn off in a crash comes off bent: a bumper as far as the crush had bent it when it
   went, a wheel buckled, wobbling as it rolls away.
 - A car hit by another one's front or rear dents only as high as that end comes, as far in as
@@ -158,7 +163,7 @@ lets you recolor and tweak everything.
   a straight one again: the cars were caught in each other at once, as they met, the front hardly
   dented and the crash stopping dead.
 - A car standing pressed sideways against another one no longer rocks on its springs for ever:
-  its tyres tip it only as it slides sideways (from 1 m/s, in full from 3).
+  its tyres tip it only as it goes (from 1 m/s, in full from 3).
 - Crashes no longer bounce the cars off each other, or off a palm, like a pinball: a crush gives
   back only what the crumple zones are meant to (a little slow, next to nothing fast), not more
   because the last step of it went past them or a car turned about the hit; cars pushed in

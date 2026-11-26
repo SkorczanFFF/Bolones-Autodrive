@@ -86,7 +86,7 @@ export function stopping(seen, hard = hardest()) {
  * @param {Driving} [driving] how they react and brake, if not as MINIGAME.crash
  */
 export function createDriver(vehicle, swerves, random, joined, driving) {
-  const { friction, reaction, drivers, player } = MINIGAME.crash;
+  const { friction, reaction, drivers, player, car } = MINIGAME.crash;
   const { randomIn } = createRandom(random);
   const reactAt =
     joined === undefined ? randomIn(driving?.reaction ?? reaction) : joined + (driving?.seen ?? 0);
@@ -132,13 +132,19 @@ export function createDriver(vehicle, swerves, random, joined, driving) {
     },
 
     /**
-     * The player at the wheel, from now on.
+     * The player at the wheel, from now on: turning it fast, they tip it over sooner (player.tip).
      *
      * @param {number} steer -1 (left) to 1 (right)
      * @param {boolean} gas
      */
     take(steer, gas) {
       hands = { steer, gas };
+      const fast = THREE.MathUtils.smoothstep(
+        Math.abs(vehicle.speed) / METRE,
+        player.fast[0],
+        player.fast[1],
+      );
+      vehicle.tip = steer ? THREE.MathUtils.lerp(car.tip, player.tip, fast) : car.tip;
     },
 
     /**

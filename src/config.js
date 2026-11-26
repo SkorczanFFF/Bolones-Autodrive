@@ -548,25 +548,27 @@ export const MINIGAME = {
     /** After a crash, in every minigame, the Bolones stays the player's, a little: ← → turn its
      * front wheels up to `steer` degrees (all the way in `turn` seconds), ↑ drives it on at `gas`
      * m/s² up to `top` m/s until its engine stalls `stall` s after the crash; let go, it brakes
-     * gently. */
-    player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6 },
+     * gently. Turned fast, its tyres tip it more than a car's (car.tip), as if they held `tip` of
+     * the way down from `fast` m/s on, from car.tip at the first: a full turn held at 80 km/h and
+     * more rolls it over in a second or so, ↑ held or not; slower, it only leans, low and wide. */
+    player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6, tip: 1, fast: [11, 22] },
     keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
      * height up: cars are heavy low down, a hit pushes them more than it tips them. Its tyres' side
      * grip tips it as if it held `tip` of the way down from the centre of mass to the road (1: as
      * there, everything sliding sideways rolls over; 0: Rapier's, nothing does): a small car or the
-     * van sliding sideways fast rolls over, the Bolones, low and wide, leans. It does from
-     * `sliding` m/s sideways, in full from the second (standing pressed sideways, the grip and the
-     * roll on the springs would feed each other, rocking it). It rides springs bouncing `bounce`
-     * times a second, damped `damping` of critical, an anti-roll bar across each axle `antiRoll`
-     * times as stiff as a wheel's spring (through the springs: it moves weight from one wheel onto
-     * the other, no more than that one carries); down a wheel, that corner sinks onto the hub
-     * (`hub` of the wheel's radius). */
+     * van sliding sideways fast rolls over, the Bolones, low and wide, leans. It does going
+     * `moving` m/s, turning or sliding, in full from the second (standing pressed sideways, the
+     * grip and the roll on the springs would feed each other, rocking it). It rides springs
+     * bouncing `bounce` times a second, damped `damping` of critical, an anti-roll bar across
+     * each axle `antiRoll` times as stiff as a wheel's spring (through the springs: it moves
+     * weight from one wheel onto the other, no more than that one carries); down a wheel, that
+     * corner sinks onto the hub (`hub` of the wheel's radius). */
     car: {
       box: 0.7,
       com: 0.4,
       tip: 0.75,
-      sliding: [1, 3],
+      moving: [1, 3],
       springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 },
       hub: 0.4,
     },

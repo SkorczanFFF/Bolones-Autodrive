@@ -1,7 +1,7 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME } from "../../config.js";
-import { ACROSS, GRAVITY, METRE, STEP, UP } from "./physics.js";
+import { GRAVITY, METRE, STEP, UP } from "./physics.js";
 
 /** A wheel's suspension and axle, in the car's frame (Rapier's ray-cast vehicle). */
 const [DOWN, AXLE] = [
@@ -13,9 +13,9 @@ const [DOWN, AXLE] = [
  * A car on its wheels (Rapier's ray-cast vehicle): each wheel a spring holding its share of the
  * car's weight (the nearer the centre of mass, the more), so the car stands where it stood, and a
  * tyre gripping the road (MINIGAME.crash.friction.side), braking and steering, its grip tipping
- * the car from down there (MINIGAME.crash.car.tip: sliding sideways it can roll over); an
- * anti-roll bar across each axle (MINIGAME.crash.car.springs). The rig's wheels follow: they
- * roll, steer and ride their springs.
+ * the car from down there (MINIGAME.crash.car.tip: turning hard or sliding sideways it can roll
+ * over); an anti-roll bar across each axle (MINIGAME.crash.car.springs). The rig's wheels follow:
+ * they roll, steer and ride their springs.
  *
  * @param {RAPIER.World} world
  * @param {RAPIER.RigidBody} body its middle at the centre of mass, turned as the car is
@@ -87,7 +87,8 @@ export function createVehicle(world, body, rig, centre, groups) {
       .filter(([, , right]) => right.mount.position.x * left.mount.position.x < 0)
       .map(([, j]) => /** @type {const} */ ([i, j])),
   );
-  const { tip, sliding: slides } = car;
+  const { moving } = car;
+  let tip = car.tip;
   const { antiRoll } = car.springs;
   /** How far a wheel's spring is out (in full, a wheel off the road). @param {number} i */
   const length = (i) => controller.wheelSuspensionLength(i) ?? wheels[i].travel;
@@ -101,9 +102,19 @@ export function createVehicle(world, body, rig, centre, groups) {
     wheels[i].lost || !controller.wheelIsInContact(i) ? 0 : Math.max(0, wheels[i].rest - length(i));
   const turn = new THREE.Quaternion();
   const [rise, side, torque] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-  const [velocity, across] = [new THREE.Vector3(), new THREE.Vector3()];
+  const velocity = new THREE.Vector3();
 
   return {
+    /**
+     * How far down from its centre of mass its tyres' side grip tips it, of the way to the road
+     * (MINIGAME.crash.car.tip; the player's turning it fast, more: MINIGAME.crash.player.tip).
+     *
+     * @param {number} share
+     */
+    set tip(share) {
+      tip = share;
+    },
+
     /**
      * Brakes, every wheel by its share of the car's weight.
      *
@@ -223,12 +234,16 @@ export function createVehicle(world, body, rig, centre, groups) {
       controller.updateVehicle(STEP, undefined, groups);
       // a tyre's side force tips the car from the road, under the centre of mass: Rapier puts it
       // about level with the centre (a ray-cast vehicle's guard against rolling over), so `tip`
-      // of the turn it leaves out is added, all the wheels' in one, sliding sideways (`sliding`)
+      // of the turn it leaves out is added, all the wheels' in one, the car going (`moving`):
+      // turning or sliding sideways, not standing pressed sideways
       body.rotation(turn);
       body.linvel(velocity);
-      const sideways = Math.abs(velocity.dot(across.copy(ACROSS).applyQuaternion(turn))) / METRE;
-      const sliding = THREE.MathUtils.smoothstep(sideways, slides[0], slides[1]);
-      if (!sliding) return;
+      const going = THREE.MathUtils.smoothstep(
+        Math.hypot(velocity.x, velocity.z) / METRE,
+        moving[0],
+        moving[1],
+      );
+      if (!going) return;
       rise.copy(UP).applyQuaternion(turn); // the car's up
       torque.set(0, 0, 0);
       wheels.forEach(({ point, radius, axle }, i) => {
@@ -244,7 +259,7 @@ export function createVehicle(world, body, rig, centre, groups) {
           .normalize();
         torque.addScaledVector(
           side.crossVectors(rise, side),
-          (below * tip * sliding * impulse) / STEP,
+          (below * tip * going * impulse) / STEP,
         );
       });
       body.addTorque(torque, false);

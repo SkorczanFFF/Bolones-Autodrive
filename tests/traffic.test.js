@@ -24,6 +24,16 @@ const at = (curve, x) => {
   return ay + ((by - ay) * (x - ax)) / (bx - ax);
 };
 
+/**
+ * A car's mirrors (nodes with `userData.part` "mirror"), its right one (-x) first.
+ *
+ * @param {THREE.Object3D} car
+ */
+const mirrorsOf = (car) =>
+  car.children
+    .filter(({ userData }) => userData.part === "mirror")
+    .sort((a, b) => a.position.x - b.position.x);
+
 describe("prism", () => {
   /** A box, with a 10° bend in its top (no crease) and a corner (a crease). */
   const profile = /** @type {Point[]} */ ([
@@ -217,12 +227,18 @@ describe("traffic models", () => {
     expect(low - top).toBeLessThan(0.04);
   });
 
-  it("give each car its mirrors: out of its hitbox (the physics' box), within its reach", () => {
+  it("give each car its mirrors, a node each to come off: out of its hitbox (the physics' box), within its reach", () => {
     models.forEach((model, i) => {
       const label = configs[i].label;
-      const mirrors = model.getObjectByName("mirrors");
-      expect(mirrors, label).toBeDefined();
-      const bounds = new THREE.Box3().setFromObject(/** @type {THREE.Object3D} */ (mirrors));
+      const mirrors = mirrorsOf(model);
+      const sides = configs[i].mirrors?.sides ?? [];
+      expect(mirrors.length, label).toBe(sides.length);
+      const each = mirrors.map((mirror) => new THREE.Box3().setFromObject(mirror));
+      // on its side, the right one first (mirrorsOf)
+      [...sides].sort().forEach((side, k) => {
+        expect(side > 0 ? each[k].min.x : -each[k].max.x, label).toBeGreaterThan(0);
+      });
+      const bounds = each.reduce((all, box) => all.union(box), new THREE.Box3());
       const { hitbox, reach } = model.userData;
       expect(bounds.max.x, label).toBeGreaterThan(hitbox.max[0]); // the driver's side, out
       expect(bounds.min.y, label).toBeGreaterThan(0.5 * TRAFFIC.scale); // up by the windows
@@ -238,8 +254,10 @@ describe("traffic models", () => {
   it("keeps lanes clear of the widest car, mirrors and all", () => {
     const widest = widestReach(models);
     for (const model of models) {
-      const mirrors = /** @type {THREE.Object3D} */ (model.getObjectByName("mirrors"));
-      const { min, max } = new THREE.Box3().setFromObject(mirrors);
+      const { min, max } = mirrorsOf(model).reduce(
+        (bounds, mirror) => bounds.expandByObject(mirror),
+        new THREE.Box3(),
+      );
       expect(widest).toBeGreaterThanOrEqual(Math.max(-min.x, max.x) - 1e-6);
       expect(widest).toBeGreaterThanOrEqual(model.userData.hitbox.max[0]);
     }
@@ -289,7 +307,8 @@ describe("traffic models", () => {
     /** @type {THREE.Object3D[]} */
     const wires = [];
     clone.traverse((o) => o.userData.isWire && !o.parent?.userData.far && wires.push(o));
-    expect(wires.filter(({ visible }) => visible)).toHaveLength(1 + 6 + 1); // body, wheels, bumpers, mirrors
+    const mirrors = configs[0].mirrors?.sides.length ?? 0;
+    expect(wires.filter(({ visible }) => visible)).toHaveLength(1 + 6 + mirrors); // body, wheels, bumpers, mirrors
   });
 
   it("stand in far away as one mesh of their parts where they are, the lamps another", () => {

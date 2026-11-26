@@ -43,6 +43,7 @@ import { dress, solidMeshes, wireOf } from "./wire.js";
  * @typedef {import("./trafficModels.js").Bumper} Bumper
  * @typedef {import("./trafficModels.js").Decal} Decal
  * @typedef {import("./trafficModels.js").Mark} Mark
+ * @typedef {import("./trafficModels.js").Mirror} Mirror
  * @typedef {import("./polygons.js").Point} Point
  * @typedef {import("./polygons.js").Part} Part
  */
@@ -109,10 +110,9 @@ export function widestReach(models) {
  *
  * The local hitbox (the bounds of the body, its wheels and bumpers: the crash's box for the
  * physics) is in `userData.hitbox` as { min, max } arrays: clone() copies userData through JSON,
- * which would turn a Box3 into a plain object. The mirrors (a mesh "mirrors", both sides')
- * stand out of it: `userData.reach`, the same with them, is what the Bolones must not touch
- * (game/minigame.js); in a crash they are dented with the body. The car's mass is in
- * `userData.mass`.
+ * which would turn a Box3 into a plain object. The mirrors (a node each, `userData.part`
+ * "mirror", which a crash tears off) stand out of it: `userData.reach`, the same with them, is
+ * what the Bolones must not touch (game/minigame.js). The car's mass is in `userData.mass`.
  *
  * @param {import("./materials.js").Materials} materials
  * @returns {THREE.Group[]}
@@ -126,18 +126,26 @@ export function createTrafficModels(materials) {
     const scale = TRAFFIC.scale;
     const shell = new THREE.Mesh(body.scale(scale, scale, scale));
     const car = new THREE.Group().add(shell);
-    for (const { geometry, at, part } of looseParts(model)) {
-      const mesh = new THREE.Mesh(geometry.scale(scale, scale, scale));
-      at.multiplyScalar(scale);
-      if (part === "wheel") {
-        const front = at.z > 0; // the front faces +z
-        car.add(mountWheel(mesh, at, model.wheel.radius * scale, front));
+    /**
+     * A bumper or a mirror, a node of its own: it bends with the body, or comes off.
+     *
+     * @param {Loose} loose
+     */
+    const apart = ({ geometry, at, part }) => {
+      const node = new THREE.Group().add(new THREE.Mesh(geometry.scale(scale, scale, scale)));
+      node.position.copy(at).multiplyScalar(scale);
+      node.userData.part = part;
+      return node;
+    };
+    for (const loose of looseParts(model)) {
+      if (loose.part !== "wheel") {
+        car.add(apart(loose));
         continue;
       }
-      const bumper = new THREE.Group().add(mesh); // it bends with the body, or comes off
-      bumper.position.copy(at);
-      bumper.userData.part = part;
-      car.add(bumper);
+      const at = loose.at.multiplyScalar(scale);
+      const front = at.z > 0; // the front faces +z
+      const mesh = new THREE.Mesh(loose.geometry.scale(scale, scale, scale));
+      car.add(mountWheel(mesh, at, model.wheel.radius * scale, front));
     }
     for (const lamp of lamps) {
       const mesh = new THREE.Mesh(lamp.scale(TRAFFIC.scale, TRAFFIC.scale, TRAFFIC.scale));
@@ -156,14 +164,12 @@ export function createTrafficModels(materials) {
     car.userData.hitbox = { min: min.toArray(), max: max.toArray() };
     // after the hitbox: the mirrors stand out of it (a box as wide would make the physics' box
     // wider and, one mirror only, shift its middle), within the reach
-    if (model.mirrors) {
-      const mirrors = new THREE.Mesh(
-        mirrorGeometry(model.mirrors, model).scale(scale, scale, scale),
-      );
-      mirrors.name = "mirrors";
-      car.add(dress(mirrors, materials.solid.traffic, materials.wire.traffic));
-      car.updateMatrixWorld(true);
+    const { mirrors } = model;
+    for (const parts of mirrors ? mirrors.sides.map((side) => mirrorParts(mirrors, side)) : []) {
+      const mirror = apart(loose(parts, "mirror", model));
+      car.add(dress(mirror, materials.solid.traffic, materials.wire.traffic));
     }
+    car.updateMatrixWorld(true);
     // only the body casts a shadow: the wheels', bumpers', lamps' and mirrors' fall in the body's
     // (five sun shadow passes each saved)
     for (const mesh of solidMeshes(car)) mesh.castShadow = mesh === shell;
@@ -221,11 +227,27 @@ export function drawFar(car, far) {
 }
 
 /**
- * @typedef {object} Loose a wheel or a bumper of a car: a node of its own
+ * @typedef {object} Loose a wheel, a bumper or a mirror of a car: a node of its own
  * @property {THREE.BufferGeometry} geometry round its middle
  * @property {THREE.Vector3} at its middle in the car, metres
- * @property {"wheel" | "bumper"} part
+ * @property {"wheel" | "bumper" | "mirror"} part
  */
+
+/**
+ * A part round its middle, in metres, and where that is.
+ *
+ * @param {Part[]} of
+ * @param {Loose["part"]} part
+ * @param {{ length: number }} model
+ * @returns {Loose}
+ */
+function loose(of, part, model) {
+  const geometry = centred(withPolygons(of), model);
+  geometry.computeBoundingBox();
+  const at = /** @type {THREE.Box3} */ (geometry.boundingBox).getCenter(new THREE.Vector3());
+  geometry.translate(-at.x, -at.y, -at.z);
+  return { geometry, at, part };
+}
 
 /**
  * A car's bumpers and wheels, each round its middle, in metres (the car's origin on the ground in
@@ -236,20 +258,16 @@ export function drawFar(car, far) {
  */
 function looseParts(model) {
   const { wheel } = model;
-  /** A part round its middle, and where that is. @param {Part[]} of @param {Loose["part"]} part */
-  const loose = (of, part) => {
-    const geometry = centred(withPolygons(of), model);
-    geometry.computeBoundingBox();
-    const at = /** @type {THREE.Box3} */ (geometry.boundingBox).getCenter(new THREE.Vector3());
-    geometry.translate(-at.x, -at.y, -at.z);
-    return { geometry, at, part };
-  };
   return [
-    loose([bumper(model.bumpers.front, model.length, -1)], "bumper"),
-    loose([bumper(model.bumpers.rear, 0, 1)], "bumper"),
+    loose([bumper(model.bumpers.front, model.length, -1)], "bumper", model),
+    loose([bumper(model.bumpers.rear, 0, 1)], "bumper", model),
     ...wheel.axles.flatMap((axle, i) =>
       [-1, 1].map((side) =>
-        loose(wheelParts(wheel, [(side * wheel.track[i]) / 2, wheel.radius, axle], side), "wheel"),
+        loose(
+          wheelParts(wheel, [(side * wheel.track[i]) / 2, wheel.radius, axle], side),
+          "wheel",
+          model,
+        ),
       ),
     ),
   ];
@@ -1089,63 +1107,60 @@ function cabinParts({ cabin, windows }, halfWidth, deckCrown) {
 }
 
 /**
- * Outside mirrors (Mirror, scene/trafficModels.js), both sides' in one geometry, with
- * `userData.polygons`: on each side a head (an outline with its corners cut, drawn across and
- * deep along the car), its glass outlined on its back (looking back: -z, the car's front is +z),
- * and the arms from the body, boxes.
+ * An outside mirror (Mirror, scene/trafficModels.js) on one side of the car: a head (an outline
+ * with its corners cut, drawn across and deep along the car), its glass outlined on its back
+ * (looking back: -z, the car's front is +z), and the arms from the body, boxes.
  *
- * @param {import("./trafficModels.js").Mirror} mirror
- * @param {{ length: number }} model
+ * @param {Mirror} mirror
+ * @param {number} side 1 the car's left, -1 its right
  */
-function mirrorGeometry({ sides, head, depth, corners, centre, arms, arm }, model) {
+function mirrorParts({ head, depth, corners, centre, arms, arm }, side) {
   const [x, y, w] = centre;
   const [across, up] = head;
   /** @type {Part[]} */
   const parts = [];
-  for (const side of sides) {
-    // the head: its outline across and up, drawn along the car (prism: x across -> z)
-    const outline = rounded(
-      [
-        [side * w - across / 2, y - up / 2],
-        [side * w + across / 2, y - up / 2],
-        [side * w + across / 2, y + up / 2],
-        [side * w - across / 2, y + up / 2],
-      ],
-      corners,
-      1,
+  // the head: its outline across and up, drawn along the car (prism: x across -> z)
+  const outline = rounded(
+    [
+      [side * w - across / 2, y - up / 2],
+      [side * w + across / 2, y - up / 2],
+      [side * w + across / 2, y + up / 2],
+      [side * w - across / 2, y + up / 2],
+    ],
+    corners,
+    1,
+  );
+  const shell = prism(outline, () => depth / 2);
+  // (±depth / 2, up, across) -> (across, up, x ∓ depth / 2)
+  shell.geometry.rotateY(Math.PI / 2).translate(0, 0, x);
+  parts.push(shell);
+  // the glass, looking back
+  const inset = Math.min(across, up) * 0.15;
+  const glass = rounded(
+    [
+      [side * w - across / 2 + inset, y - up / 2 + inset],
+      [side * w + across / 2 - inset, y - up / 2 + inset],
+      [side * w + across / 2 - inset, y + up / 2 - inset],
+      [side * w - across / 2 + inset, y + up / 2 - inset],
+    ],
+    corners / 2,
+    1,
+  );
+  const back = x - depth / 2 - OFFSET;
+  parts.push(face(glass, ([u, v]) => new THREE.Vector3(u, v, back), new THREE.Vector3(0, 0, -1)));
+  for (const [from, to] of arms) {
+    const [a, b] = [from, to].map(([px, py, pw]) => new THREE.Vector3(side * pw, py, px));
+    const rod = new THREE.BoxGeometry(arm, arm, a.distanceTo(b));
+    rod.applyQuaternion(
+      new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, 1),
+        b.clone().sub(a).normalize(),
+      ),
     );
-    const shell = prism(outline, () => depth / 2);
-    // (±depth / 2, up, across) -> (across, up, x ∓ depth / 2)
-    shell.geometry.rotateY(Math.PI / 2).translate(0, 0, x);
-    parts.push(shell);
-    // the glass, looking back
-    const inset = Math.min(across, up) * 0.15;
-    const glass = rounded(
-      [
-        [side * w - across / 2 + inset, y - up / 2 + inset],
-        [side * w + across / 2 - inset, y - up / 2 + inset],
-        [side * w + across / 2 - inset, y + up / 2 - inset],
-        [side * w - across / 2 + inset, y + up / 2 - inset],
-      ],
-      corners / 2,
-      1,
-    );
-    const back = x - depth / 2 - OFFSET;
-    parts.push(face(glass, ([u, v]) => new THREE.Vector3(u, v, back), new THREE.Vector3(0, 0, -1)));
-    for (const [from, to] of arms) {
-      const [a, b] = [from, to].map(([px, py, pw]) => new THREE.Vector3(side * pw, py, px));
-      const rod = new THREE.BoxGeometry(arm, arm, a.distanceTo(b));
-      rod.applyQuaternion(
-        new THREE.Quaternion().setFromUnitVectors(
-          new THREE.Vector3(0, 0, 1),
-          b.clone().sub(a).normalize(),
-        ),
-      );
-      rod.translate(...a.add(b).multiplyScalar(0.5).toArray());
-      parts.push(byFaces(rod));
-    }
+    rod.translate(...a.add(b).multiplyScalar(0.5).toArray());
+    parts.push(byFaces(rod));
   }
-  return centred(withPolygons(parts), model);
+  return parts;
 }
 
 /**

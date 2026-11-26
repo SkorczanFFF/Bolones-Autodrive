@@ -78,7 +78,7 @@
  *   glass outlined at its back, on arms from the body. Points are [along, up, across] on the
  *   car's left (+x, the driver's side), mirrored to the right for a side of -1. They stand out of
  *   the car's hitbox (the physics' box), within its reach (what the Bolones must not touch);
- *   in a crash they are dented with the body
+ *   a crash tears them off
  * @property {number[]} sides 1 the car's left, -1 its right
  * @property {Point} head its size: across, up
  * @property {number} depth how deep the head is, along the car

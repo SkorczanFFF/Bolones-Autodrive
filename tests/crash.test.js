@@ -947,7 +947,7 @@ describe("the Bolones in the player's hands", () => {
   /**
    * The Bolones as the game builds it, going `kmh` when the crash ends, steered as `steer` says
    * for `seconds`: how far it leant at most and in the end, and how far its middle rose at most
-   * lying on its side, over the lowest it had come in the half second before.
+   * lying on its side, over the lowest it had come in the half second before; and the car.
    *
    * @param {number} kmh
    * @param {boolean} gas
@@ -985,7 +985,7 @@ describe("the Bolones in the player's hands", () => {
       trail.push({ lean, y });
       most = Math.max(most, lean);
     }
-    return { most, end: leanOf(object), rise };
+    return { most, end: leanOf(object), rise, object };
   };
 
   it("rolls over in a full turn held fast, ↑ held or not; slower, low and wide, it only leans", () => {
@@ -998,6 +998,17 @@ describe("the Bolones in the player's hands", () => {
     const flick = drive(90, false, (t) => (t < 0.5 ? -1 : t < 1 ? 1 : 0));
     expect(flick.most).toBeGreaterThan(15);
     expect(flick.end).toBeLessThan(5);
+  });
+
+  it("lies over on its side leaning onto its roof, on its body: the mirror it went over on comes off", () => {
+    // full left at 80 km/h a second or so: over onto its side
+    const { end, object } = drive(80, false, (t) => (t < 1.2 ? -1 : 0), 8);
+    expect(end).toBeGreaterThan(95); // past its side, onto its roof
+    expect(end).toBeLessThan(135);
+    /** @type {THREE.Object3D[]} */
+    const mirrors = [];
+    object.traverse((node) => node.userData.part === "mirror" && mirrors.push(node));
+    expect(mirrors.length).toBeLessThan(2); // torn off where it touched the road
   });
 
   it("slides on its side, rolled over, never thrown up off the road", () => {

@@ -554,18 +554,19 @@ export const MINIGAME = {
     player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6, tip: 1, fast: [11, 22] },
     keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
-     * height up: cars are heavy low down, a hit pushes them more than it tips them. Its tyres' side
-     * grip tips it as if it held `tip` of the way down from the centre of mass to the road (1: as
-     * there, everything sliding sideways rolls over; 0: Rapier's, nothing does): a small car or the
-     * van sliding sideways fast rolls over, the Bolones, low and wide, leans. It does going
+     * height up: cars are heavy low down, a hit pushes them more than it tips them. On the road its
+     * sides come in from its centre of mass to its roof: on its side it leans onto it. Its tyres'
+     * side grip tips it as if it held `tip` of the way down from the centre of mass to the road (1:
+     * as there, everything sliding sideways rolls over; 0: Rapier's, nothing does): a small car or
+     * the van sliding sideways fast rolls over, the Bolones, low and wide, leans. It does going
      * `moving` m/s, turning or sliding, in full from the second (standing pressed sideways, the
      * grip and the roll on the springs would feed each other, rocking it). It rides springs
-     * bouncing `bounce` times a second, damped `damping` of critical, an anti-roll bar across
-     * each axle `antiRoll` times as stiff as a wheel's spring (through the springs: it moves
-     * weight from one wheel onto the other, no more than that one carries); down a wheel, that
-     * corner sinks onto the hub (`hub` of the wheel's radius). A wheel with nothing under it is
-     * shown hanging out of its arch `droop` of its radius at most (its spring lets it out
-     * further, to find the road). */
+     * bouncing `bounce` times a second, damped `damping` of critical, an anti-roll bar across each
+     * axle `antiRoll` times as stiff as a wheel's spring (through the springs: it moves weight from
+     * one wheel onto the other, no more than that one carries); down a wheel, that corner sinks
+     * onto the hub (`hub` of the wheel's radius). A wheel with nothing under it is shown hanging
+     * out of its arch `droop` of its radius at most (its spring lets it out further, to find the
+     * road). */
     car: {
       box: 0.7,
       com: 0.4,
@@ -582,17 +583,19 @@ export const MINIGAME = {
     restitution: { atRest: 0.4, falloff: 10, contact: 0.2 },
     scrape: 0.5, // friction of sheet metal: crushing cars, a car's body on the road
     nudge: 2, // m/s: cars closing slower only touch (no crumple zones, no dents, no debris)
-    /** A wheel or a bumper comes off a car crushed past it by `tear` of its size (the farthest of
-     * its points from its middle; a wheel pushed up its spring, past how far that goes), flung on
-     * along the hit at `fling` of the closing speed (and up half as fast), on its own (`mass` kg,
-     * rubbing the road with `friction`), a bumper bent as far as it was when it went, a wheel
-     * rolling on, buckled (scene/crumple.js, game/crash.js). */
+    /** A wheel, a bumper or a mirror comes off a car crushed past it by `tear` of its size (the
+     * farthest of its points from its middle; a wheel pushed up its spring, past how far that
+     * goes), flung on along the hit at `fling` of the closing speed (and up half as fast), on its
+     * own (`mass` kg, rubbing the road with `friction`), bent as far as it was when it went, a
+     * wheel rolling on, buckled (scene/crumple.js, game/crash.js); a mirror too as soon as it
+     * touches the road, the car going over onto its side. */
     parts: {
       fling: 0.2,
       friction: 0.7,
       roll: 0.3, // rolling resistance of a wheel come off, buckled: it rolls a while and stops
       wheel: { tear: 0.6, mass: 15 },
       bumper: { tear: 0.5, mass: 10 },
+      mirror: { tear: 0.2, mass: 1 },
     },
     /**
      * How the sheet metal gives (scene/crumple.js), in units and in shares of how deep a crush

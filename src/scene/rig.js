@@ -4,9 +4,9 @@ import * as THREE from "three";
  * A vehicle's rig, the same for every car (scene/car.js, scene/traffic.js): each wheel hangs on a
  * mount (`userData.part` "wheel", `userData.radius`, `userData.steers` for the front ones, at the
  * middle of the wheel, its axle along x), which a crash moves whole or tears off; in it a steer
- * node turns about y, in that a spin node rolls about x. Bumpers are nodes of their own
- * (`userData.part` "bumper"), each headlamp a mesh named "lamp". The rig lives in the scene graph
- * and its userData, so clones keep it.
+ * node turns about y, in that a spin node rolls about x. Bumpers and mirrors are nodes of their
+ * own (`userData.part` "bumper", "mirror"), each headlamp a mesh named "lamp". The rig lives in
+ * the scene graph and its userData, so clones keep it.
  *
  * @typedef {{ mount: THREE.Object3D, steer: THREE.Object3D, spin: THREE.Object3D, radius: number }} Wheel
  */
@@ -29,8 +29,8 @@ export function mountWheel(wheel, at, radius, steers) {
 }
 
 /**
- * The wheel or bumper a node is part of (the node with `userData.part` above it, under the car's
- * root), or null: the body.
+ * The wheel, bumper or mirror a node is part of (the node with `userData.part` above it, under
+ * the car's root), or null: the body.
  *
  * @param {THREE.Object3D} node
  * @param {THREE.Object3D} root

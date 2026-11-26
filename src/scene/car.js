@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { CAR, SPEED, WORLD } from "../config.js";
+import { unionFind } from "../core/fbx.js";
 import { easeInOutCubic, settle } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
-import { mountWheel, wheelsOf } from "./rig.js";
+import { mountWheel, partOf, wheelsOf } from "./rig.js";
 import { withPolygons } from "./polygons.js";
 import { HOLE_SEGMENTS } from "./traffic.js";
 import { dress, solidMeshes } from "./wire.js";
@@ -49,12 +50,105 @@ function addFuelCap(car, body, solid, wire) {
 }
 
 /**
+ * Takes a body modelled as one mesh apart into it and its outside mirrors, a node each
+ * (`userData.part` "mirror", scene/rig.js) that a crash tears off: the islands of its triangles
+ * (joined at their corners) that stand out of the rest of it across the car.
+ *
+ * @param {THREE.Object3D} model the body, x across
+ */
+function mirrorsApart(model) {
+  model.updateWorldMatrix(true, true);
+  const toModel = model.matrixWorld.clone().invert();
+  for (const mesh of solidMeshes(model)) {
+    const { geometry, parent } = mesh;
+    if (geometry.index) continue; // a model's are FBXLoader's: not indexed
+    const position = geometry.getAttribute("position");
+    const count = position.count / 3; // triangles
+    const islands = unionFind(count);
+    /** @type {Map<string, number>} a triangle at each corner */
+    const at = new Map();
+    for (let i = 0; i < position.count; i++) {
+      const key = `${position.getX(i)},${position.getY(i)},${position.getZ(i)}`;
+      const other = at.get(key);
+      if (other === undefined) at.set(key, Math.floor(i / 3));
+      else islands.union(Math.floor(i / 3), other);
+    }
+    // each island's triangles, and how far across it reaches
+    const matrix = toModel.clone().multiply(mesh.matrixWorld);
+    const p = new THREE.Vector3();
+    /** @type {Map<number, { triangles: number[], low: number, high: number }>} */
+    const of = new Map();
+    for (let t = 0; t < count; t++) {
+      const root = islands.find(t);
+      let island = of.get(root);
+      if (!island) of.set(root, (island = { triangles: [], low: Infinity, high: -Infinity }));
+      island.triangles.push(t);
+      for (let k = 0; k < 3; k++) {
+        const { x } = p.fromBufferAttribute(position, 3 * t + k).applyMatrix4(matrix);
+        island.low = Math.min(island.low, x);
+        island.high = Math.max(island.high, x);
+      }
+    }
+    const [body, ...rest] = [...of.values()].sort(
+      (a, b) => b.triangles.length - a.triangles.length,
+    );
+    const mirrors = rest.filter(({ low, high }) => low < body.low || high > body.high);
+    if (!parent || !mirrors.length) continue;
+    for (const side of [-1, 1]) {
+      const triangles = mirrors
+        .filter(({ low, high }) => (low + high) * side > 0)
+        .flatMap((mirror) => mirror.triangles);
+      if (!triangles.length) continue; // a mirror on one side only
+      const mirror = new THREE.Mesh(trianglesOf(geometry, triangles), mesh.material);
+      mirror.position.copy(mesh.position);
+      mirror.quaternion.copy(mesh.quaternion);
+      mirror.scale.copy(mesh.scale);
+      const node = new THREE.Group().add(mirror);
+      node.userData.part = "mirror";
+      parent.add(node);
+    }
+    const off = new Set(mirrors.flatMap((mirror) => mirror.triangles));
+    mesh.geometry = trianglesOf(
+      geometry,
+      Array.from({ length: count }, (_, t) => t).filter((t) => !off.has(t)),
+    );
+  }
+  return model;
+}
+
+/**
+ * Some of the triangles of a geometry not indexed (FBXLoader's), its polygons with them.
+ *
+ * @param {THREE.BufferGeometry} geometry
+ * @param {number[]} triangles
+ */
+function trianglesOf(geometry, triangles) {
+  const part = new THREE.BufferGeometry();
+  for (const [name, attribute] of Object.entries(geometry.attributes)) {
+    const { array, itemSize } = /** @type {THREE.BufferAttribute} */ (attribute);
+    const size = 3 * itemSize; // a triangle's
+    const values = new Float32Array(triangles.length * size);
+    triangles.forEach((t, i) => values.set(array.subarray(t * size, (t + 1) * size), i * size));
+    part.setAttribute(name, new THREE.BufferAttribute(values, itemSize));
+  }
+  /** @type {import("../core/fbx.js").Polygons | undefined} */
+  const polygons = geometry.userData.polygons;
+  if (polygons) {
+    part.userData.polygons = {
+      inner: Uint8Array.from(triangles, (t) => polygons.inner[t]),
+      polygon: Uint32Array.from(triangles, (t) => polygons.polygon[t]),
+    };
+  }
+  return part;
+}
+
+/**
  * The Bolones. Each part of the motion lives on its own node, so nothing has to be synced:
  *
  *   group          lateral position (x) + yaw: the nose turns towards the lane change; CAR.lift (y)
  *   └ wreck        where a crash threw the car (game/crash.js), at rest otherwise
  *     ├ chassis    body roll around the axle line (CAR.rollCenterY)
- *     │ └ body     with the fuel cap on its mesh
+ *     │ └ body     with the fuel cap on its mesh, its mirrors nodes of their own (they come off)
  *     └ 4× wheel   on its rig (scene/rig.js): the mount on the axle, mid-width; front ones steer
  *       └ … spin → mirror → wheel model, offset so its axle and mid-width sit on the mount
  *
@@ -67,7 +161,9 @@ export function createCar({ scene, models, materials }) {
   const solid = materials.solid.bolones;
   const wire = materials.wire.bolones;
 
-  const body = dress(models.bolones, solid, wire);
+  const body = dress(mirrorsApart(models.bolones), solid, wire);
+  // only the body casts a shadow (see the wheels): its mirrors' fall in it
+  for (const mesh of solidMeshes(body)) if (partOf(mesh, body)) mesh.castShadow = false;
   body.position.set(CAR.bodyX, -CAR.rollCenterY, 0);
 
   const chassis = new THREE.Group();
@@ -112,7 +208,10 @@ export function createCar({ scene, models, materials }) {
   scene.add(group);
   group.updateMatrixWorld(true);
   addFuelCap(group, body, solid, wire);
-  const box = new THREE.Box3().setFromObject(body).translate(group.position.clone().negate());
+  // the crash's box: the body's, not its mirrors' (they come off)
+  const box = new THREE.Box3();
+  for (const mesh of solidMeshes(body)) if (!partOf(mesh, body)) box.expandByObject(mesh);
+  box.translate(group.position.clone().negate());
 
   const s = CAR.steer;
   const { roll, yaw, wheelSteer } = CAR.handling;
@@ -207,7 +306,7 @@ export function createCar({ scene, models, materials }) {
   return {
     group,
     wreck,
-    /** The body (wheels excluded) in the wreck node's frame. */
+    /** The body (wheels and mirrors excluded) in the wreck node's frame. */
     box,
     chassis,
     frontWheels,

@@ -34,10 +34,10 @@ const UP = new THREE.Vector3(0, 1, 0);
  * comes out smooth. Behind it the sheet metal bends. The wheels (a node with `userData.part`
  * "wheel") are rigid, not crushed: pushed back as far as the crush reaches them, they turn and
  * lean (pushed up their springs, a car on its side hit underneath, they ride up into their arches
- * first, as far as their springs go). A wheel or a bumper (a node with `userData.part`) crushed
- * past by more than it takes (MINIGAME.crash.parts) is torn off, for the crash to take away from
- * where the crush pushes it (`by`, not into the other car): a wheel as it is, a bumper bent as far
- * as the crush had bent it when it went.
+ * first, as far as their springs go). A wheel, a bumper or a mirror (a node with `userData.part`)
+ * crushed past by more than it takes (MINIGAME.crash.parts) is torn off, for the crash to take
+ * away from where the crush pushes it (`by`, not into the other car): a wheel as it is, the others
+ * bent as far as the crush had bent them when they went.
  *
  * The dents go on as the crash does (scene/dents.js); a car hit again (a pile-up) is crushed as it
  * is shown, the earlier dents as far as they have gone, and they keep going.
@@ -150,7 +150,7 @@ export function crumple(root, hit) {
     v.addScaledVector(side, sheet.bulge * folded * below * (lateral / halfWidth) + kink(crushed));
   };
 
-  // the wheels and the bumpers: torn off, or a wheel moved whole
+  // the parts: torn off, or a wheel moved whole
   /** @type {Map<THREE.Object3D, { centre: THREE.Vector3, size: number, front: number, count: number, turn?: THREE.Quaternion, shift?: THREE.Vector3 }>} */
   const pieces = new Map();
   for (const { world, node } of entries) {
@@ -187,13 +187,13 @@ export function crumple(root, hit) {
   for (const [node, piece] of pieces) {
     const { centre } = piece;
     const push = Math.max(0, plane - piece.front) * reachedAt(measure(centre));
-    /** @type {"wheel" | "bumper" | undefined} */
+    /** @type {"wheel" | "bumper" | "mirror" | undefined} */
     const part = node.userData.part;
     const bent = part === "wheel" ? push - Math.min(push * sprung, node.userData.radius) : push;
     if (part && bent > MINIGAME.crash.parts[part].tear * piece.size) {
       const tear = MINIGAME.crash.parts[part].tear * piece.size;
-      // a bumper bent as far as the crush had come when it went (`tore`), the rest of the way
-      // pushed whole: not into the car behind the crush plane
+      // a bumper or a mirror bent as far as the crush had come when it went (`tore`), the rest of
+      // the way pushed whole: not into the car behind the crush plane
       const by = part === "wheel" ? push : Math.max(0, push - tear);
       torn.push({ node, by: into.clone().multiplyScalar(by) });
       tore.set(node, piece.front + tear);
@@ -243,7 +243,7 @@ export function crumple(root, hit) {
   const meshes = dent(entries, ({ mesh }, v) => {
     const node = nodeOf.get(mesh);
     if (node?.userData.part === "wheel") return; // rigid: moved whole, or torn off as it is
-    bend(v, tore.get(node)); // a bumper bends along
+    bend(v, tore.get(node)); // a bumper or a mirror bends along
   });
   const nodes = moveNodes(moved);
   return {

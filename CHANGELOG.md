@@ -55,6 +55,9 @@ lets you recolor and tweak everything.
 - A car rolled over crushes its roof where it comes down on it, as deep as it comes down fast:
   on the edge it lands on first, the rest less or not at all, so a roof does not come out flat.
   It then lies on its roof as crushed, its roof shaped as the model's is (a box round it before).
+- Mirrors come off: crushed in a crash, or as soon as they touch the road, a car going over onto
+  its side. Every car's, the Bolones' too (modelled with its body, they are taken off it as it
+  loads).
 
 ### Changed
 
@@ -150,6 +153,9 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car over on its side lies on its body, leaning onto its roof as its sides come in to it: it
+  stood upright on its side on a box as wide as its doors up to its windows, the Bolones on its
+  mirror, its body 6 cm off the road (a traffic car's mirror went into the road).
 - A crash meets a rock where the rock is, a long one at its flank and at its ends: as far as its
   outline reaches the way a car meets it. It met every rock as a round post as wide as the box
   round the rock turned, a car stopping up to a metre short of it (23 cm on average) or going up

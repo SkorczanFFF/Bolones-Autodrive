@@ -122,8 +122,12 @@ export function polygonsOf(polygonVertices, edges = [], visibility = []) {
   return { inner: Uint8Array.from(triangles.inner), polygon: Uint32Array.from(triangles.polygon) };
 }
 
-/** @param {number} size */
-function unionFind(size) {
+/**
+ * Sets joined into one another: find() gives the same for all of a set.
+ *
+ * @param {number} size
+ */
+export function unionFind(size) {
   const parent = Int32Array.from({ length: size }, (_, i) => i);
   /** @param {number} i */
   const find = (i) => {

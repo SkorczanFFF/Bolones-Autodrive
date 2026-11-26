@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { CAR, WORLD } from "../src/config.js";
 import { createCar } from "../src/scene/car.js";
 import { createTweens } from "../src/core/tween.js";
@@ -238,6 +239,27 @@ describe("car steering", () => {
   it("knows its body's box in the wreck node's frame", () => {
     const size = setup().box.getSize(new THREE.Vector3());
     expect([size.x, size.y, size.z]).toEqual([2, 1, 4].map((v) => expect.closeTo(v, 5)));
+  });
+
+  it("takes its mirrors off its body, a node each to come off: out of its box, not of its bounds", () => {
+    // a body modelled as one mesh (not indexed, as FBXLoader's), mirrors standing out of its sides
+    const mirror = (/** @type {number} */ side) =>
+      new THREE.BoxGeometry(0.3, 0.2, 0.2).translate(side * 1.1, 0.3, -0.5).toNonIndexed();
+    const body = new THREE.BoxGeometry(2, 1, 4).toNonIndexed();
+    const car = setup(
+      /** @type {THREE.BufferGeometry} */ (mergeGeometries([body, mirror(-1), mirror(1)])),
+    );
+    /** @type {THREE.Object3D[]} */
+    const mirrors = [];
+    car.wreck.traverse((node) => node.userData.part === "mirror" && mirrors.push(node));
+    expect(mirrors).toHaveLength(2);
+    const sides = mirrors.map(
+      (node) => new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3()).x,
+    );
+    expect(Math.sign(sides[0]) * Math.sign(sides[1])).toBe(-1); // one each side
+    const size = car.box.getSize(new THREE.Vector3());
+    expect(size.x).toBeCloseTo(2, 5); // the crash's box: the body's, they come off
+    expect(car.getBounds(new THREE.Box3()).getSize(new THREE.Vector3()).x).toBeCloseTo(2.5, 5);
   });
 });
 

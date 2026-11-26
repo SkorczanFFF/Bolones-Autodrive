@@ -58,6 +58,8 @@ lets you recolor and tweak everything.
 
 ### Changed
 
+- A palm hit in a crash is left leaning further, as far as 11° (it was 7°): one hit at 50 km/h,
+  some 7°, clearly knocked over a little among the others, swaying first.
 - The menu waits for a player as a 90s arcade machine does: a blinking PRESS ⏎ TO START (TAP TO
   START on touch screens) in place of the MINI GAME and FREE RIDE buttons and the steering hint.
   ENTER lists what to play, free ride the fourth card beside the three minigames (on a phone held

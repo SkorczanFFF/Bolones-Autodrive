@@ -634,7 +634,7 @@ export const MINIGAME = {
     /** A palm hit at `full` m/s or faster leans `lean` for good about the foot of its trunk
      * (bending over in `bend` seconds) and sways `swing` (radians) back and forth every
      * `period` seconds, dying down over `settle`; slower, as much less. */
-    palm: { lean: 0.12, bend: 0.1, swing: 0.2, full: 25, period: 0.9, settle: 0.8 },
+    palm: { lean: 0.2, bend: 0.1, swing: 0.2, full: 25, period: 0.9, settle: 0.8 },
     /** Shards of each car's lines (they stay where they land) and sparks (gone in `life` s) fly
      * off a crash: `count` per car (and as many sparks) per 10 kJ the crumple zones take up,
      * `size` units long, at up to `spread` of the closing speed. */

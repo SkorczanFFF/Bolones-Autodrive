@@ -148,6 +148,13 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A crash meets a rock where the rock is, a long one at its flank and at its ends: as far as its
+  outline reaches the way a car meets it. It met every rock as a round post as wide as the box
+  round the rock turned, a car stopping up to a metre short of it (23 cm on average) or going up
+  to 28 cm into it. The parts torn off bounce off its outline too.
+- A palm hit in a crash leans about the foot of its trunk, standing where it stood: it leaned about
+  the middle of its model, some 65 cm beside the trunk, its foot rising off the road or sinking
+  into it by up to 20 cm.
 - A car rolled over, sliding on its side or its roof, is no longer thrown up off the road now and
   then, by as much as two metres: the physics took it for 20 cm into the road, a box far too long
   for its contacts to be exact.

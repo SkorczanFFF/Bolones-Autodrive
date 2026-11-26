@@ -40,6 +40,39 @@ export function boxOf({ body, half, shift, roof = 0 }, turn = rotation(body.rota
 }
 
 /**
+ * Which way a body turned so heads on the road: its length seen from above, radians about the up.
+ *
+ * @param {THREE.Quaternion} turn
+ */
+export function headingOf(turn) {
+  const { x, z } = AHEAD.clone().applyQuaternion(turn);
+  return Math.atan2(x, z);
+}
+
+/**
+ * A post's box as a car meets it: turned as the car is about the upright, as far as the post
+ * reaches along each of the car's sides (a palm's trunk, round, as wide whichever way the car
+ * meets it; a rock as its outline reaches).
+ *
+ * @param {{ body: Body, half: number[], outline?: THREE.Vector2[] }} post
+ * @param {THREE.Quaternion} turn the car's
+ * @returns {Box}
+ */
+export function postBox({ body, half, outline }, turn) {
+  const yaw = new THREE.Quaternion().setFromAxisAngle(UP, headingOf(turn));
+  const axes = AXES.map((axis) => axis.clone().applyQuaternion(yaw));
+  const centre = vector(body.translation());
+  if (!outline) return { centre, axes, half };
+  const [across, ahead] = [axes[0], axes[2]].map((axis) => {
+    const along = outline.map((p) => p.x * axis.x + p.y * axis.z);
+    const [low, high] = [Math.min(...along), Math.max(...along)];
+    centre.addScaledVector(axis, (low + high) / 2);
+    return (high - low) / 2;
+  });
+  return { centre, axes, half: [across, half[1], ahead] };
+}
+
+/**
  * Half the extent of a box along a unit axis.
  *
  * @param {Box} box
@@ -132,7 +165,7 @@ export function meeting(a, b, normal, further) {
    * @param {number} shift
    */
   const footprint = (box, shift) =>
-    outline(
+    convexOutline(
       corners(box).map(({ x, z }) => new THREE.Vector2(x + normal.x * shift, z + normal.z * shift)),
     );
   // a's footprint clipped by each side of b's (Sutherland-Hodgman)
@@ -184,7 +217,7 @@ const corners = (box) =>
  *
  * @param {THREE.Vector2[]} points
  */
-function outline(points) {
+export function convexOutline(points) {
   const sorted = [...points].sort((p, q) => p.x - q.x || p.y - q.y);
   /** > 0: o, p, q turn left. @param {THREE.Vector2} o @param {THREE.Vector2} p @param {THREE.Vector2} q */
   const turn = (o, p, q) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);

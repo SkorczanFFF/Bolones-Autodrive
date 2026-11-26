@@ -675,8 +675,13 @@ describe("crash", () => {
     expect(lean).toBeGreaterThan(0.02);
     expect(new THREE.Vector3(0, 1, 0).applyQuaternion(palm.quaternion).x).toBeLessThan(0); // away
     expect(crash.tally.posts).toBe(1);
+    // about the foot of its trunk: that stays where it stands, on the road
+    const foot = new THREE.Vector3(-14, 0, 20); // in the palm's frame (it stands at the origin)
+    palm.updateMatrixWorld();
+    expect(palm.localToWorld(foot.clone()).distanceTo(post.at)).toBeLessThan(1e-6);
     crash.dispose();
     expect(palm.quaternion.angleTo(new THREE.Quaternion())).toBe(0);
+    expect(palm.position.length()).toBeLessThan(1e-6);
   });
 
   it("stops a car sliding off the road at a rock, low as it is: the rock stands, unbroken", () => {
@@ -712,6 +717,41 @@ describe("crash", () => {
       else expect(dimmed(red) || dimmed(spark)).toBe(true);
     }
     expect(shards).toBeGreaterThan(0);
+  });
+
+  it("runs a car sliding off the road into a long rock where the rock is, along its way or across", () => {
+    /**
+     * Where the sliding car meets a rock 4 long, 1 wide, lying along its way or across it.
+     *
+     * @param {boolean} along
+     */
+    const meets = (along) => {
+      const scene = new THREE.Scene();
+      const bolones = car(0, 0, BOLONES, 1160, 0);
+      const sliding = car(-8, 20, POLAKITO, 580, 0);
+      sliding.velocity.set(-20, 0, 0); // sideways, off the road
+      let x = 0;
+      sliding.onCrash = () => (x ||= sliding.object.position.x);
+      const rock = new THREE.Object3D();
+      const [hx, hz] = along ? [2, 0.5] : [0.5, 2];
+      const outline = [
+        [-hx, -hz],
+        [hx, -hz],
+        [hx, hz],
+        [-hx, hz],
+      ].map(([px, pz]) => new THREE.Vector2(px, pz));
+      const at = new THREE.Vector3(-14, 0, 20);
+      const post = { object: rock, at, radius: Math.hypot(hx, hz), outline, height: 0.8 };
+      scene.add(bolones.object, sliding.object, rock);
+      const crash = createCrash(scene, [bolones, sliding], () => [post]);
+      run(crash, 1);
+      crash.dispose();
+      return x;
+    };
+    // its side (1.25 from its middle) at the rock's end (-12) or flank (-13.5), a frame's way on
+    // at most
+    expect(meets(true)).toBeCloseTo(-12 + 1.25, 0);
+    expect(meets(false)).toBeCloseTo(-13.5 + 1.25, 0);
   });
 
   it("stands up the palms that come along as the camera goes on, where they are", () => {

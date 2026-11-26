@@ -11,6 +11,7 @@ import {
   OVER,
   overlap,
   penetration,
+  postBox,
 } from "./boxes.js";
 import {
   AHEAD,
@@ -32,6 +33,8 @@ import {
  * @property {THREE.Vector3} shift its box from the body's centre
  * @property {number} [roof] how much higher its box goes rolled over: up to its roof (boxes.js)
  * @property {Faces} [faces] how high its ends stand (a car's, game/crash.js facesOf)
+ * @property {THREE.Vector2[]} [outline] a post's seen from above round its middle (x, z), units:
+ *   none, it is round (a palm's trunk)
  * @property {number} stiffness its crumple zone's spring rate, force per unit of crush; Infinity:
  *   a post, it does not give
  *
@@ -298,13 +301,8 @@ export function createCrushes(world, met) {
      * @param {number} time game seconds
      */
     collide(a, b, time) {
-      // a post is round: as wide whichever way the car meets it
       const turn = rotation(a.body.rotation());
-      const { x, z } = AHEAD.clone().applyQuaternion(turn);
-      const round = isPost(b)
-        ? new THREE.Quaternion().setFromAxisAngle(UP, Math.atan2(x, z))
-        : undefined;
-      const boxes = [boxOf(a), boxOf(b, round)];
+      const boxes = [boxOf(a, turn), isPost(b) ? postBox(b, turn) : boxOf(b)];
       const [boxA, boxB] = boxes;
       const contact = overlap(boxA, boxB);
       if (!contact) return;

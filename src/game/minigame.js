@@ -7,6 +7,7 @@ import { createTrafficModels, drawFar, widestReach } from "../scene/traffic.js";
 import { boundsOf } from "../scene/instances.js";
 import { solidMeshes } from "../scene/wire.js";
 import { createCrash } from "./crash.js";
+import { convexOutline } from "./crash/boxes.js";
 
 /** @typedef {import("../config.js").Mode} Mode */
 
@@ -88,22 +89,39 @@ const TRUNK = [0.5, 1.8];
  * @param {THREE.Object3D} palm the model of the palms
  */
 function trunkOf(palm) {
-  palm.updateWorldMatrix(true, true);
-  const toPalm = palm.matrixWorld.clone().invert();
-  /** @type {THREE.Vector3[]} */
-  const points = [];
-  for (const mesh of solidMeshes(palm)) {
-    const position = mesh.geometry.getAttribute("position");
-    const matrix = toPalm.clone().multiply(mesh.matrixWorld);
-    for (let i = 0; i < position.count; i++) {
-      const v = new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix);
-      if (v.y > TRUNK[0] && v.y < TRUNK[1]) points.push(v);
-    }
-  }
+  const points = pointsOf(palm).filter(({ y }) => y > TRUNK[0] && y < TRUNK[1]);
   const box = new THREE.Box3().setFromPoints(points);
   const centre = box.getCenter(new THREE.Vector3()).setY(0);
   const size = box.getSize(new THREE.Vector3());
   return { centre, radius: (size.x + size.z) / 4 };
+}
+
+/**
+ * A rock seen from above, in its frame: the outline round it (x, z).
+ *
+ * @param {THREE.Object3D} rock the model of a rock
+ */
+const outlineOf = (rock) =>
+  convexOutline(pointsOf(rock).map(({ x, z }) => new THREE.Vector2(x, z)));
+
+/**
+ * The points of a model's meshes, in its frame.
+ *
+ * @param {THREE.Object3D} model
+ */
+function pointsOf(model) {
+  model.updateWorldMatrix(true, true);
+  const toModel = model.matrixWorld.clone().invert();
+  /** @type {THREE.Vector3[]} */
+  const points = [];
+  for (const mesh of solidMeshes(model)) {
+    const position = mesh.geometry.getAttribute("position");
+    const matrix = toModel.clone().multiply(mesh.matrixWorld);
+    for (let i = 0; i < position.count; i++) {
+      points.push(new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix));
+    }
+  }
+  return points;
 }
 
 /**
@@ -138,6 +156,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
   /** @type {ReturnType<typeof trunkOf> | undefined} */
   let trunk; // the palms are copies of one model: one trunk, measured at the first crash
+  /** @type {Map<THREE.Object3D, THREE.Vector2[]>} the rocks' models, each outline measured once */
+  const outlines = new Map();
   let pileup = 0; // crash mode: the share of the late traffic that runs in, rolled each game
   let keepComing = MINIGAME.crash.keepComing; // s, this game
   let forward = 0; // after a crash: how fast the camera goes on along the road, of WORLD.speed
@@ -349,9 +369,18 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     const rockPost = (rock) => {
       const bounds = boundsOf(rock);
       const { x, z } = bounds.getCenter(new THREE.Vector3());
-      const size = bounds.getSize(new THREE.Vector3());
       const at = new THREE.Vector3(x, bounds.min.y, z);
-      return { object: rock, at, radius: (size.x + size.z) / 4, height: size.y };
+      /** @type {THREE.Object3D} */
+      const model = rock.userData.model; // scene/instances.js
+      let around = outlines.get(model);
+      if (!around) outlines.set(model, (around = outlineOf(model)));
+      // as the rock stands, turned and scaled, round its middle (boundsOf brought it up to date)
+      const outline = around.map((p) => {
+        const { x: px, z: pz } = rock.localToWorld(new THREE.Vector3(p.x, 0, p.y));
+        return new THREE.Vector2(px - x, pz - z);
+      });
+      const radius = Math.max(...outline.map((p) => p.length()));
+      return { object: rock, at, radius, outline, height: bounds.max.y - bounds.min.y };
     };
     /**
      * @param {THREE.Object3D} object

@@ -7,12 +7,11 @@ import { crumple, reaches } from "../scene/crumple.js";
 import { createDebris } from "../scene/debris.js";
 import { partOf, wheelsOf } from "../scene/rig.js";
 import { solidMeshes } from "../scene/wire.js";
-import { OVER, boxOf, endOn, overlap } from "./crash/boxes.js";
+import { OVER, boxOf, endOn, headingOf, overlap } from "./crash/boxes.js";
 import { createCrushes, reachOf } from "./crash/crush.js";
 import { createDriver, hardest, lookAhead, stopping } from "./crash/drivers.js";
 import {
   ACROSS,
-  AHEAD,
   CARS,
   GRAVITY,
   IDENTITY,
@@ -805,16 +804,6 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
 
 /** @param {THREE.Vector3} v */
 const translation = (v) => new THREE.Matrix4().makeTranslation(v);
-
-/**
- * Which way a body turned so heads on the road: its length seen from above, radians about the up.
- *
- * @param {THREE.Quaternion} turn
- */
-function headingOf(turn) {
-  const { x, z } = AHEAD.clone().applyQuaternion(turn);
-  return Math.atan2(x, z);
-}
 
 /** @type {WeakMap<THREE.BufferGeometry, Hull>} by the model's body: clones share it */
 const roofs = new WeakMap();

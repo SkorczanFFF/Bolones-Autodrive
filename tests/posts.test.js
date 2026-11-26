@@ -36,4 +36,35 @@ describe("crash posts", () => {
     expect(wheel.linvel().x).toBeLessThanOrEqual(0); // stopped there
     world.free();
   });
+
+  it("stop a part torn off flying at a long rock's flank there, not where it reaches at most", () => {
+    const world = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    // 1 across the way the part flies, 4 along it
+    const outline = [
+      [-0.5, -2],
+      [0.5, -2],
+      [0.5, 2],
+      [-0.5, 2],
+    ].map(([x, z]) => new THREE.Vector2(x, z));
+    const rock = { object: new THREE.Object3D(), at: new THREE.Vector3(5, 0, 0), outline };
+    createPosts(
+      world,
+      () => [{ ...rock, radius: Math.hypot(0.5, 2), height: 2 }],
+      (point) => point.clone(),
+    ).sync();
+    const wheel = world.createRigidBody(
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(0, 1, 0)
+        .setLinvel(20, 0, 0)
+        .setCcdEnabled(true),
+    );
+    const desc = RAPIER.ColliderDesc.ball(0.4).setCollisionGroups(
+      groups(PARTS, ROAD | POSTS | PARTS),
+    );
+    world.createCollider(desc, wheel);
+    for (let i = 0; i < 120; i++) world.step();
+    expect(wheel.translation().x).toBeGreaterThan(4); // at the flank, 4.1 in
+    expect(wheel.translation().x).toBeLessThan(4.5);
+    world.free();
+  });
 });

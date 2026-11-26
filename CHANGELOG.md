@@ -140,6 +140,20 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car leaning or rolled over is dented where it really meets the other car: seen from above the
+  crash took it by its width and length alone, as if it stood upright, so where they met came out
+  up to a metre off, beside the cars, or was not found at all and the dent went as wide as they
+  overlapped any way.
+- A car running into a pile-up is dented as it hits, its dent growing with the crush: it waited
+  its turn behind the dents that follow where the wrecked cars slide along each other (each in
+  all at once, so they can wait), up to a third of a second.
+- A car dented again is dented where it is: a new dent went on top of the earlier ones as if they
+  had gone all the way in, so where an earlier crush had stopped short of it the new one came out
+  off by the rest, sheet metal standing out of place by centimetres, now and then by a metre or
+  two.
+- A part torn off a spinning wreck comes off where the crush leaves it: waiting its turn to be
+  dented, the wreck could turn on, and the part came off as far again the other way, up to a
+  metre off.
 - A head-on crash a little askew (by a degree or two, most of them) crushes the fronts as deep as
   a straight one again: the cars were caught in each other at once, as they met, the front hardly
   dented and the crash stopping dead.

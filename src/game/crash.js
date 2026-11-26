@@ -12,6 +12,7 @@ import { createCrushes, reachOf } from "./crash/crush.js";
 import { createDriver, hardest, lookAhead, stopping } from "./crash/drivers.js";
 import {
   ACROSS,
+  AHEAD,
   CARS,
   GRAVITY,
   IDENTITY,
@@ -255,15 +256,20 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
         /** @type {ReturnType<typeof crumple> | undefined} */
         let dent;
         let progress = 0;
-        crumpling.push(() => {
-          put(car.object, offset, at, turn);
-          dent = crumple(car.object, met());
-          dent.set(progress);
-          for (const { node, position, quaternion } of dent.moved) {
-            vehicle.skew(node, position, quaternion);
-          }
-          for (const tear of dent.torn)
-            tearing.push({ ...tear, car: entry, into: hit.into, speed });
+        crumpling.push({
+          going: () => progress < 1,
+          crumple() {
+            put(car.object, offset, at, turn);
+            dent = crumple(car.object, met());
+            dent.set(progress);
+            for (const { node, position, quaternion } of dent.moved) {
+              vehicle.skew(node, position, quaternion);
+            }
+            const heading = headingOf(turn); // as it was hit: it may have turned since
+            for (const { node, by } of dent.torn) {
+              tearing.push({ node, by, into: hit.into, heading, car: entry, speed });
+            }
+          },
         });
         return {
           set(value) {
@@ -279,12 +285,19 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   const bodies = cars.map((car, i) => board(car, i > 0));
   /** @typedef {(typeof bodies)[number]} Body */
   /**
-   * Parts torn off in a frame's physics steps, taken away after them.
+   * Parts torn off in a frame's physics steps, taken away after them: how far the crush pushes
+   * each and the way it went in, as the car was heading then (`heading`).
    *
-   * @type {{ car: Body, node: THREE.Object3D, by: THREE.Vector3, into: THREE.Vector3, speed: number }[]}
+   * @type {{ car: Body, node: THREE.Object3D, by: THREE.Vector3, into: THREE.Vector3, heading: number, speed: number }[]}
    */
   const tearing = [];
-  /** The cars hit, to crumple: one a frame (struck). @type {(() => void)[]} */
+  /**
+   * The cars hit, to crumple: one a frame (struck), the first whose crush is still going in (its
+   * dent grows with it: late, it would come in all at once), else the first. A dent all the way in
+   * at once (where the cars slide on, a roof) looks the same whenever it comes.
+   *
+   * @type {{ going: () => boolean, crumple: () => void }[]}
+   */
   const crumpling = [];
   /**
    * The parts torn off: on their own, meeting every car but the one they came off till clear of it
@@ -360,9 +373,13 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
    *
    * @param {(typeof tearing)[number]} tear
    */
-  function tearOff({ car, node, by, into, speed }) {
+  function tearOff({ car, node, by: push, into: along, heading, speed }) {
     /** @type {"wheel" | "bumper"} */
     const part = node.userData.part;
+    // the hit turned as far as the car has turned on the road since (a wreck spinning, its dent
+    // waiting its turn: crumpling), still level
+    const turned = headingOf(rotation(car.body.rotation())) - heading;
+    const [by, into] = [push, along].map((v) => v.clone().applyAxisAngle(UP, turned));
     // its middle and its size, in its own frame
     const toNode = node.matrixWorld.clone().invert();
     const bounds = new THREE.Box3();
@@ -672,7 +689,15 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       lag = Math.min(lag + dt, 30 * STEP); // further behind, the rest is dropped
       near = nearby(Math.floor(lag / STEP) * STEP);
       for (; lag >= STEP; lag -= STEP) step();
-      crumpling.shift()?.();
+      // how far each dent has gone, then one of them crumpled (its crush going in first)
+      for (const dent of dents) {
+        if (dent.progress !== dent.shown) dent.set((dent.shown = dent.progress));
+      }
+      const next = Math.max(
+        0,
+        crumpling.findIndex(({ going }) => going()),
+      );
+      crumpling.splice(next, 1)[0]?.crumple();
       camera += (-wrecks[which].body.linvel().z - camera) * settle(cameraLag, dt);
       travel += Math.max(0, camera) * dt;
 
@@ -683,9 +708,6 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       for (const tear of tearing.splice(0)) tearOff(tear);
       for (const { node, body, offset, size } of loose) put(node, offset, ...posed(body), size);
       stands.sway(time);
-      for (const dent of dents) {
-        if (dent.progress !== dent.shown) dent.set((dent.shown = dent.progress));
-      }
       debris.update(dt);
       inScene({ x: 0, y: 0, z: 0 }, debris.object.position);
       return Math.max(0, camera);
@@ -778,6 +800,17 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
 
 /** @param {THREE.Vector3} v */
 const translation = (v) => new THREE.Matrix4().makeTranslation(v);
+
+/**
+ * Which way a body turned so heads on the road: its length seen from above, radians about the up.
+ *
+ * @param {THREE.Quaternion} turn
+ */
+function headingOf(turn) {
+  const { x, z } = AHEAD.clone().applyQuaternion(turn);
+  return Math.atan2(x, z);
+}
+
 /** @type {WeakMap<THREE.BufferGeometry, Hull>} by the model's body: clones share it */
 const roofs = new WeakMap();
 /** @type {WeakMap<THREE.BufferGeometry, import("./crash/crush.js").Faces>} by the model's body */

@@ -19,10 +19,11 @@ import { solidMeshes, wireGeometry, wireOf } from "./wire.js";
  * @property {THREE.Vector3} position
  * @property {THREE.Quaternion} quaternion
  *
- * @typedef {object} Dentable a mesh to dent, its points as they will be after its dents so far
+ * @typedef {object} Dentable a mesh to dent, its points as they are shown, its dents so far as far
+ *   as they have gone
  * @property {THREE.Mesh} mesh
  * @property {Float32Array} world its points in the world
- * @property {Float32Array} full its points in its own frame
+ * @property {Float32Array} shown its points in its own frame
  * @property {Dents} dents
  */
 
@@ -32,8 +33,10 @@ const dentsOf = new WeakMap();
 const moverOf = new WeakMap();
 
 /**
- * The meshes under a root (not their wireframe twins), each with its points as they will be once
- * its dents so far have gone all the way: a new dent goes on top of them.
+ * The meshes under a root (not their wireframe twins), each with its points as they are shown, its
+ * dents so far as far as they have gone: a new dent goes on top of them as they are, where it meets
+ * the other car (as they will be in full, a crush that stopped short would leave it off by the
+ * rest).
  *
  * @param {THREE.Object3D} root its world matrices up to date
  * @returns {Dentable[]}
@@ -47,25 +50,25 @@ export function dentable(root) {
       base: Float32Array.from(mesh.geometry.getAttribute("position").array),
       moves: [],
     };
-    const full = shape(dents, true);
-    const world = new Float32Array(full.length);
-    for (let i = 0; i < full.length; i += 3) {
+    const shown = shape(dents);
+    const world = new Float32Array(shown.length);
+    for (let i = 0; i < shown.length; i += 3) {
       // not fromArray() / toArray(): three calls them with every kind of array, too slow for
       // every point of a car (crumple.js too)
-      p.set(full[i], full[i + 1], full[i + 2]).applyMatrix4(mesh.matrixWorld);
+      p.set(shown[i], shown[i + 1], shown[i + 2]).applyMatrix4(mesh.matrixWorld);
       world[i] = p.x;
       world[i + 1] = p.y;
       world[i + 2] = p.z;
     }
-    return { mesh, dents, full, world };
+    return { mesh, dents, shown, world };
   });
 }
 
 /**
  * Dents meshes: each point goes where `move` takes it (in the world), as far as set() says. Every
  * mesh that moves gets a dented copy of its geometry, and its wireframe twin new lines, drawn for
- * the full dent; set() moves the points part of the way. Dents stack: a mesh dented again keeps
- * its earlier dents going.
+ * the full dent on the mesh as shown; set() moves the points part of the way. Dents stack: a mesh
+ * dented again keeps its earlier dents going.
  *
  * @param {Dentable[]} meshes
  * @param {(mesh: Dentable, point: THREE.Vector3) => void} move
@@ -77,16 +80,16 @@ export function dent(meshes, move) {
   const inverse = new THREE.Matrix4();
   const v = new THREE.Vector3();
   for (const entry of meshes) {
-    const { mesh, dents, full, world } = entry;
-    const by = new Float32Array(full.length);
+    const { mesh, dents, shown, world } = entry;
+    const by = new Float32Array(shown.length);
     inverse.copy(mesh.matrixWorld).invert();
     let farthest = 0; // squared
-    for (let i = 0; i < full.length; i += 3) {
+    for (let i = 0; i < shown.length; i += 3) {
       move(entry, v.set(world[i], world[i + 1], world[i + 2]));
       v.applyMatrix4(inverse);
-      by[i] = v.x - full[i];
-      by[i + 1] = v.y - full[i + 1];
-      by[i + 2] = v.z - full[i + 2];
+      by[i] = v.x - shown[i];
+      by[i + 1] = v.y - shown[i + 1];
+      by[i + 2] = v.z - shown[i + 2];
       farthest = Math.max(farthest, by[i] ** 2 + by[i + 1] ** 2 + by[i + 2] ** 2);
     }
     if (farthest < 1e-12) continue;
@@ -101,8 +104,8 @@ export function dent(meshes, move) {
     if (!dents.original.boundingSphere) dents.original.computeBoundingSphere();
     const geometry = dents.original.clone();
     geometry.deleteAttribute("wireEdge");
-    const position = /** @type {THREE.BufferAttribute} */ (geometry.getAttribute("position"));
-    shape(dents, true, /** @type {Float32Array} */ (position.array));
+    const points = /** @type {Float32Array} */ (geometry.getAttribute("position").array);
+    for (let i = 0; i < points.length; i++) points[i] = shown[i] + by[i];
     flatNormals(geometry);
     evenNormals(geometry); // decals keep their even shading (scene/traffic.js)
     /** @type {THREE.Sphere} */ (geometry.boundingSphere).radius += dents.moves.reduce(
@@ -212,17 +215,15 @@ function flatNormals(geometry) {
 }
 
 /**
- * A mesh's points with its dents as far as they have gone, or in full.
+ * A mesh's points with its dents as far as they have gone.
  *
  * @param {Dents} dents
- * @param {boolean} [full]
  * @param {Float32Array} [points] written into (a geometry's own, every frame of a dent)
  */
-function shape({ base, moves }, full = false, points = new Float32Array(base.length)) {
+function shape({ base, moves }, points = new Float32Array(base.length)) {
   points.set(base);
   for (const { by, progress } of moves) {
-    const share = full ? 1 : progress;
-    if (share) for (let i = 0; i < points.length; i++) points[i] += by[i] * share;
+    if (progress) for (let i = 0; i < points.length; i++) points[i] += by[i] * progress;
   }
   return points;
 }
@@ -235,6 +236,6 @@ function shape({ base, moves }, full = false, points = new Float32Array(base.len
  */
 function show(mesh, dents) {
   const position = /** @type {THREE.BufferAttribute} */ (mesh.geometry.getAttribute("position"));
-  shape(dents, false, /** @type {Float32Array} */ (position.array));
+  shape(dents, /** @type {Float32Array} */ (position.array));
   position.needsUpdate = true;
 }

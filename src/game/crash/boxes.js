@@ -111,8 +111,8 @@ function middle(a, b, n) {
 }
 
 /**
- * Where two boxes' footprints (level) overlap once a has come `further` on along a level unit
- * normal (from a to b): the middle and half the width of it across the normal (as a distance
+ * Where two boxes' footprints (seen from above) overlap once a has come `further` on along a level
+ * unit normal (from a to b): the middle and half the width of it across the normal (as a distance
  * along UP × normal's other side, -normal.z, normal.x). Their extents across overlap far wider
  * than they meet when a corner goes into a side at an angle: over most of a car's length.
  *
@@ -123,21 +123,18 @@ function middle(a, b, n) {
  * @returns {{ middle: number, half: number } | null} null: they would not overlap
  */
 export function meeting(a, b, normal, further) {
-  const footprint = (/** @type {Box} */ box, /** @type {number} */ shift) => {
-    const [u, , w] = box.axes.map((axis, k) =>
-      new THREE.Vector2(axis.x, axis.z).multiplyScalar(box.half[k]),
+  /**
+   * A box seen from above, `shift` on along the normal: the outline round its corners, in turn.
+   * Upright it is a rectangle; a car leaning or on its side shows its height too (its roof stands
+   * out to the side), up to a hexagon.
+   *
+   * @param {Box} box
+   * @param {number} shift
+   */
+  const footprint = (box, shift) =>
+    outline(
+      corners(box).map(({ x, z }) => new THREE.Vector2(x + normal.x * shift, z + normal.z * shift)),
     );
-    const centre = new THREE.Vector2(
-      box.centre.x + normal.x * shift,
-      box.centre.z + normal.z * shift,
-    );
-    return [
-      [1, 1],
-      [-1, 1],
-      [-1, -1],
-      [1, -1],
-    ].map(([s, t]) => centre.clone().addScaledVector(u, s).addScaledVector(w, t));
-  };
   // a's footprint clipped by each side of b's (Sutherland-Hodgman)
   let region = footprint(a, further);
   const fence = footprint(b, 0);
@@ -161,6 +158,50 @@ export function meeting(a, b, normal, further) {
   const across = region.map((v) => -normal.z * v.x + normal.x * v.y);
   const [low, high] = [Math.min(...across), Math.max(...across)];
   return { middle: (low + high) / 2, half: (high - low) / 2 };
+}
+
+/**
+ * A box's eight corners.
+ *
+ * @param {Box} box
+ */
+const corners = (box) =>
+  [-1, 1].flatMap((x) =>
+    [-1, 1].flatMap((y) =>
+      [-1, 1].map((z) =>
+        box.centre
+          .clone()
+          .addScaledVector(box.axes[0], x * box.half[0])
+          .addScaledVector(box.axes[1], y * box.half[1])
+          .addScaledVector(box.axes[2], z * box.half[2]),
+      ),
+    ),
+  );
+
+/**
+ * The convex outline round points in a plane, in turn (Andrew's monotone chain): the points on it
+ * only, none twice.
+ *
+ * @param {THREE.Vector2[]} points
+ */
+function outline(points) {
+  const sorted = [...points].sort((p, q) => p.x - q.x || p.y - q.y);
+  /** > 0: o, p, q turn left. @param {THREE.Vector2} o @param {THREE.Vector2} p @param {THREE.Vector2} q */
+  const turn = (o, p, q) => (p.x - o.x) * (q.y - o.y) - (p.y - o.y) * (q.x - o.x);
+  /** One side of the outline, from the first point to the last. @param {THREE.Vector2[]} list */
+  const chain = (list) => {
+    /** @type {THREE.Vector2[]} */
+    const kept = [];
+    for (const p of list) {
+      while (kept.length >= 2 && turn(kept[kept.length - 2], kept[kept.length - 1], p) <= 0) {
+        kept.pop();
+      }
+      kept.push(p);
+    }
+    kept.pop(); // where the other side begins
+    return kept;
+  };
+  return [...chain(sorted), ...chain(sorted.reverse())];
 }
 
 /**
@@ -194,18 +235,6 @@ export function overlap(a, b) {
     const d = new THREE.Vector3().subVectors(p, box.centre);
     return box.axes.every((axis, k) => Math.abs(d.dot(axis)) <= box.half[k] + 1e-6);
   };
-  const corners = (/** @type {Box} */ box) =>
-    [-1, 1].flatMap((x) =>
-      [-1, 1].flatMap((y) =>
-        [-1, 1].map((z) =>
-          box.centre
-            .clone()
-            .addScaledVector(box.axes[0], x * box.half[0])
-            .addScaledVector(box.axes[1], y * box.half[1])
-            .addScaledVector(box.axes[2], z * box.half[2]),
-        ),
-      ),
-    );
   const touching = [
     ...corners(a).filter((p) => inside(b, p)),
     ...corners(b).filter((p) => inside(a, p)),

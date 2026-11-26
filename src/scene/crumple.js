@@ -38,8 +38,8 @@ const UP = new THREE.Vector3(0, 1, 0);
  * the crash to take away from where the crush pushes it (`by`, not into the other car): a wheel
  * as it is, a bumper bent as far as the crush had bent it when it went.
  *
- * The dents go on as the crash does (scene/dents.js); a car hit again (a pile-up) is crushed as
- * it will be after the earlier dents, and they keep going.
+ * The dents go on as the crash does (scene/dents.js); a car hit again (a pile-up) is crushed as it
+ * is shown, the earlier dents as far as they have gone, and they keep going.
  *
  * The buckling is a function of the world position, so points that touch (a triangle's
  * corners, the seams between meshes) stay together.
@@ -60,7 +60,7 @@ export function crumple(root, hit) {
   const p = new THREE.Vector3();
   const lateralOf = (/** @type {THREE.Vector3} */ q) => p.subVectors(q, point).dot(side);
 
-  // every mesh's points in the world, crushed as they will be after the earlier dents
+  // every mesh's points in the world as they are shown, the earlier dents as far as they have gone
   const entries = dentable(root).map((entry) => ({
     ...entry,
     node: partOf(entry.mesh, root),

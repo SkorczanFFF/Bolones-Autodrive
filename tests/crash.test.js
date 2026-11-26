@@ -168,6 +168,32 @@ describe("crash", () => {
     expect(dented()).toEqual([true, true]);
   });
 
+  it("crumples a crush still going in first: a car running into the wreck dents as it hits", () => {
+    const scene = new THREE.Scene();
+    // the corners meet: they slide along each other, the dents following where they overlap
+    // (each all the way in at once, in turn); the car behind runs into them meanwhile
+    const cars = [
+      car(0, 0, BOLONES, 1160, -14.4 * 1.5),
+      car(2.5, -6.4, POLAKITO, 580, 18.9 * 1.5),
+      car(1.5, -18, POLAKITO, 580, 18.9 * 1.5),
+    ];
+    scene.add(...cars.map(({ object }) => object));
+    const crash = createCrash(scene, cars);
+    const late = cars[2];
+    const body = /** @type {THREE.Mesh} */ (late.object.children[0]);
+    const original = body.geometry;
+    let frame = 0;
+    let hit = -1;
+    const { onCrash } = late;
+    late.onCrash = (crushed) => {
+      onCrash(crushed);
+      if (hit < 0) hit = frame;
+    };
+    for (; frame < 60 && body.geometry === original; frame++) crash.update(1 / 60);
+    expect(hit).toBeGreaterThan(2); // after the first crash
+    expect(frame - 1 - hit).toBeLessThanOrEqual(1); // the frame it is hit, or the next
+  });
+
   it("puts out the lamps where the cars were hit, not the others", () => {
     const { bolones, other, crash } = headOn();
     run(crash, 0.2);
@@ -769,6 +795,21 @@ describe("where two cars meet", () => {
     const across = new THREE.Vector3(0, 0, 1);
     expect(met.half).toBeLessThan(0.75 * (penetration(corner, side, across) / 2));
     expect(met.half).toBeLessThan(2);
+  });
+
+  it("sees a car on its side from above as all of it: its roof stands out to the side", () => {
+    const side = carBox([0, 0], [0, 1]);
+    // rolled onto its side next to the other car, its roof 10 cm into the other's side
+    const rolled = carBox([1.35 + 0.75, 0], [0, 1]);
+    rolled.axes = [
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(0, 0, 1),
+    ];
+    const met = meeting(rolled, side, new THREE.Vector3(-1, 0, 0), 0);
+    expect(met).not.toBeNull();
+    expect(met?.half).toBeCloseTo(3.8, 5); // along the length of both
+    expect(met?.middle).toBeCloseTo(0, 5);
   });
 });
 

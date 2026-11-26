@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CAR, MINIGAME, SPEED, WORLD } from "../src/config.js";
+import { CAR, MINIGAME, SPEED, TRAFFIC, WORLD } from "../src/config.js";
 import { ready } from "../src/game/crash.js";
 import { MOVING, createLanePicker, createMinigame } from "../src/game/minigame.js";
 import { createTrafficModels, widestReach } from "../src/scene/traffic.js";
@@ -45,15 +45,17 @@ describe("lane picker", () => {
 describe("crash", () => {
   beforeAll(() => ready); // Rapier
 
-  it("keeps the traffic coming a while after a crash, into the crash, then no more", () => {
+  /** Where the camera is in a minigame. */
+  const eye = new THREE.Vector3(0, 4, 7);
+
+  /** A minigame played till the first car to come hits the Bolones, as wide as the road. */
+  function crashed() {
     const scene = new THREE.Scene();
-    const bolones = testCar(0, 0, [3, 2.6, 7.8], CAR.mass, 0);
+    const bolones = testCar(0, 0, [40, 2.6, 7.8], CAR.mass, 0);
     scene.add(bolones.object);
-    const group = new THREE.Group();
-    // the Bolones as wide as the road: the first car to come hits it
     const wide = new THREE.Vector3(40, 2, 4);
     const car = {
-      group,
+      group: new THREE.Group(),
       wreck: bolones.object,
       box: bolones.box,
       sideways: 0,
@@ -64,14 +66,19 @@ describe("crash", () => {
       /** @type {any} */ ({ scene, car, materials: testMaterials(), palms: [], rocks: [] }),
     );
     minigame.spawning = true;
-    let crashed = false;
-    for (let i = 0; i < 60 * 30 && !crashed; i++) crashed = minigame.update(1 / 60, 1).crashed;
-    expect(crashed).toBe(true);
+    let hit = false;
+    for (let i = 0; i < 60 * 30 && !hit; i++) hit = minigame.update(1 / 60, 1).crashed;
+    expect(hit).toBe(true);
     const traffic = () => scene.children.filter(({ userData }) => userData.label);
-    const seen = new Set(traffic());
     const run = (/** @type {number} */ seconds) => {
-      for (let t = 0; t < seconds; t += 1 / 60) minigame.wreck(1 / 60, 0);
+      for (let t = 0; t < seconds; t += 1 / 60) minigame.wreck(1 / 60, 0, eye);
     };
+    return { minigame, traffic, run };
+  }
+
+  it("keeps the traffic coming a while after a crash, into the crash, then no more", () => {
+    const { minigame, traffic, run } = crashed();
+    const seen = new Set(traffic());
     run(MINIGAME.crash.keepComing);
     const came = traffic().filter((other) => !seen.has(other));
     expect(came.length).toBeGreaterThan(0);
@@ -80,10 +87,28 @@ describe("crash", () => {
     run(0.5);
     expect(came[0].position.z).toBeGreaterThan(at);
     // and on while the camera goes on along the road, then no more
-    for (let t = 0; t < 10 && minigame.wreck(1 / 60, 0) > MOVING; t += 1 / 60);
+    for (let t = 0; t < 10 && minigame.wreck(1 / 60, 0, eye) > MOVING; t += 1 / 60);
     for (const other of traffic()) seen.add(other);
     run(3);
     expect(traffic().filter((other) => !seen.has(other))).toEqual([]);
+    minigame.reset();
+  });
+
+  it("draws a car far from the camera as one mesh, as ahead on the road, till the crash dents it", () => {
+    const { minigame, traffic, run } = crashed();
+    run(MINIGAME.crash.keepComing);
+    /** Whether a car is drawn as one mesh. @param {THREE.Object3D} other */
+    const drawnFar = (other) =>
+      other.children.every(({ userData, visible }) => visible === Boolean(userData.far));
+    const far = traffic().filter((other) => other.position.distanceTo(eye) > TRAFFIC.far);
+    const dented = traffic().filter(({ userData }) => userData.dented);
+    expect(dented.length).toBeGreaterThan(0); // the car that hit the Bolones, at least
+    expect(far.length).toBeGreaterThan(0); // the ones coming along
+    for (const other of traffic())
+      expect(drawnFar(other)).toBe(far.includes(other) && !dented.includes(other));
+    // the camera pulled back from all of it: only the dented cars are whole
+    minigame.wreck(1 / 60, 0, new THREE.Vector3(0, 500, 0));
+    for (const other of traffic()) expect(drawnFar(other)).toBe(!dented.includes(other));
     minigame.reset();
   });
 });

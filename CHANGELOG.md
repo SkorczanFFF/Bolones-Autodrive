@@ -95,7 +95,8 @@ lets you recolor and tweak everything.
   draw calls for all of them instead of three each (the menu went from 243 draw calls to 80).
 - The traffic farther ahead than 50 units is drawn as one mesh a car (its lamps another): four
   draw calls instead of about 25, the same picture (only its wheels, a few pixels there, stand
-  still). Close up and in a crash every car is whole, its parts on its rig.
+  still). Close up every car is whole, its parts on its rig; after a crash, every car it dents
+  and every car within 50 units of the camera.
 - The loading screen shows what it is doing: the files loading, then building the landscape,
   preparing the Bolones, assembling the traffic and a crash test, each step on the screen before
   it runs, its bar going through all of it. It no longer types made-up messages, frozen while the
@@ -107,6 +108,12 @@ lets you recolor and tweak everything.
   in turn), its lamps still going out at once, and denting a car takes about a quarter less time
   (its lines and normals worked out straight from its points, its bounds from how far the dent
   moves them).
+- A big pile-up runs smoother still, its slowest frames about half as long on a laptop: the crash
+  measures only the cars, palms and rocks near enough to meet in a frame (it measured every car
+  against every other one and every palm and rock by the road, 240 times a second), a car on its
+  roof works out how fast it comes down in one go, the shards lying still on the road are no
+  longer worked out and sent to the graphics card every frame, and the size of the window is
+  measured only when it changes.
 - A crash leaves less garbage for the browser to clear up, a pause each time (about 40 % less in a
   pile-up): a car's anti-roll bars turn it in one go (they pushed it four times a step, each push
   two vectors made and freed), and the loops over every point of a car keep no throwaway arrays.

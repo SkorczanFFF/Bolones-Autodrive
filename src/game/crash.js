@@ -46,7 +46,7 @@ const FAR = 1e5; // units along the road the ground goes either way
  * @property {THREE.Vector3} velocity over the road, units/s
  * @property {THREE.Color} color its lines: the colour of its shards
  * @property {(crushed: (point: THREE.Vector3) => boolean) => void} [onCrash] told what each crash
- *   crushed (world space): its lamps there go out
+ *   crushed (world space): its lamps there go out, it is drawn whole
  * @property {string} label what it is called, for the one in view
  * @property {import("./crash/drivers.js").Driving} [driving] how its driver reacts and brakes, if
  *   not as MINIGAME.crash
@@ -306,6 +306,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   let postsAt = [];
   /** @type {import("./crash/drivers.js").Looking[]} the cars as the drivers saw them last */
   let looking = [];
+  /** @type {[number, number][]} the pairs of solids that may meet in this frame's steps (nearby) */
+  let near = [];
   let absorbed = 0; // J the crumple zones took up
   /** @type {Set<Party>} the palms and rocks hit */
   const struck = new Set();
@@ -468,14 +470,18 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     const { body, cabin } = entry;
     const { corners } = entry.shell;
     if (!cabin || entry.landings >= LANDINGS || time < entry.landed + LANDED) return;
-    const [at, turn] = [vector(body.translation()), rotation(body.rotation())];
+    const turn = rotation(body.rotation());
     if (UP.clone().applyQuaternion(turn).y > OVER[0]) return; // on its wheels, its roof up
+    const at = vector(body.translation());
+    const [{ y: sinking }, { x: pitch, z: roll }] = [body.linvel(), body.angvel()];
     let fall = nudge * METRE;
     let point;
+    const p = new THREE.Vector3();
     for (const corner of corners) {
-      const p = corner.clone().applyQuaternion(turn).add(at);
-      const down = -velocityAt(body, p).y;
-      if (down > fall && p.y < down * STEP + TOUCH) [fall, point] = [down, p]; // there this step
+      p.copy(corner).applyQuaternion(turn).add(at);
+      // how fast the corner comes down: the body's speed and its turn there (velocityAt's y)
+      const down = -(sinking + roll * (p.x - at.x) - pitch * (p.z - at.z));
+      if (down > fall && p.y < down * STEP + TOUCH) [fall, point] = [down, p.clone()]; // this step
     }
     if (!point) return;
     entry.landings++;
@@ -575,6 +581,40 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   });
 
   /**
+   * The pairs of solids (a car, then a car or a post) that may come within reach of each other in
+   * a frame's steps, from where they are as it starts: as if both went towards each other twice as
+   * fast as the fastest car (a crash throws none faster), a unit to spare. Most pairs are far
+   * apart, and the palms and rocks by the road are many: the steps measure only these.
+   *
+   * @param {number} span game seconds the frame's steps take
+   */
+  function nearby(span) {
+    const fastest = Math.max(0, ...looking.map(({ velocity }) => velocity.length()));
+    const slack = 4 * fastest * span + 1;
+    const at = (/** @type {number} */ i) =>
+      i < bodies.length ? looking[i].at : postsAt[i - bodies.length];
+    /** @type {[number, number][]} */
+    const pairs = [];
+    for (let i = 0; i < bodies.length; i++) {
+      for (let j = i + 1; j < solids.length; j++) if (within(at, i, j, slack)) pairs.push([i, j]);
+    }
+    return pairs;
+  }
+
+  /**
+   * Whether two solids are within reach of each other where `at` says they are, `slack` to spare.
+   *
+   * @param {(i: number) => THREE.Vector3} at
+   * @param {number} i
+   * @param {number} j
+   * @param {number} [slack]
+   */
+  function within(at, i, j, slack = 0) {
+    const reach = reachOf(solids[i]) + reachOf(solids[j]) + slack;
+    return at(i).distanceToSquared(at(j)) <= reach ** 2;
+  }
+
+  /**
    * One physics step: the drivers and the wheels, the crush pushing the cars through it (forces,
    * as gravity does: kicks at its start would lift a car standing on its springs), then the parts
    * torn off and the snags.
@@ -589,20 +629,16 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       vehicle.update();
     }
     for (const entry of bodies) land(entry);
-    // where each is (just remembered): most pairs are too far apart to touch, not worth their
-    // boxes, nor are two at rest
+    // where each is (just remembered): of the pairs that may meet this frame, most are still too
+    // far apart to touch, not worth their boxes, nor are two at rest
     const at = (/** @type {number} */ i) =>
       i < bodies.length
         ? /** @type {{ at: THREE.Vector3 }} */ (before.get(bodies[i].body)).at
         : postsAt[i - bodies.length];
-    const still = solids.map((solid, i) => i >= bodies.length || solid.body.isSleeping());
-    for (let i = 0; i < bodies.length; i++) {
-      for (let j = i + 1; j < solids.length; j++) {
-        if (still[i] && still[j]) continue;
-        const reach = reachOf(solids[i]) + reachOf(solids[j]);
-        if (at(i).distanceToSquared(at(j)) > reach ** 2) continue;
-        crushes.collide(solids[i], solids[j], time);
-      }
+    const still = (/** @type {number} */ i) => i >= bodies.length || bodies[i].body.isSleeping();
+    for (const [i, j] of near) {
+      if ((still(i) && still(j)) || !within(at, i, j)) continue;
+      crushes.collide(solids[i], solids[j], time);
     }
     world.step();
     time += STEP;
@@ -634,6 +670,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       }));
       bodies.forEach(({ driver }, i) => driver.see(lookAhead(looking[i], looking)));
       lag = Math.min(lag + dt, 30 * STEP); // further behind, the rest is dropped
+      near = nearby(Math.floor(lag / STEP) * STEP);
       for (; lag >= STEP; lag -= STEP) step();
       crumpling.shift()?.();
       camera += (-wrecks[which].body.linvel().z - camera) * settle(cameraLag, dt);

@@ -432,7 +432,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
           hud.setDriveOn(minigame.engine > 0);
           const scale = slowMotion(stateTime, dt);
           // the road under the camera, which rides along with the car in view
-          world.speedMultiplier = minigame.wreck(dt * scale, wreckFocus) * scale;
+          world.speedMultiplier = minigame.wreck(dt * scale, wreckFocus, camera.position) * scale;
           followWreck(dt);
           hud.setWreck(minigame.wrecks, wreckFocus);
           const { damage } = minigame;

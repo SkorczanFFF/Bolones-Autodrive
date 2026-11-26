@@ -50,7 +50,14 @@ export function createView(container = document.body) {
 
   const bloom = createBloom(renderer, scene, camera);
 
+  // measured when the canvas's size changes (and at first), not every frame: measured then, the
+  // browser lays the page out anew whenever the HUD changed since
+  let resized = true;
+  new ResizeObserver(() => (resized = true)).observe(canvas);
+
   function resize() {
+    if (!resized) return;
+    resized = false;
     const width = Math.floor(canvas.clientWidth * SCENE.renderScale);
     const height = Math.floor(canvas.clientHeight * SCENE.renderScale);
     if (canvas.width === width && canvas.height === height) return;

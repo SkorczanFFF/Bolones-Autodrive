@@ -277,20 +277,24 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   };
 
   /**
-   * A car of the traffic in the crash, at its speed over the road.
+   * A car of the traffic in the crash, at its speed over the road. Once the crash dents it, it is
+   * drawn whole (wreck): the one mesh far away is the car as it was.
    *
    * @param {THREE.Object3D} other
    * @returns {import("./crash.js").Car}
    */
   const asCar = (other) => {
-    drawFar(other, false); // whole in a crash: its parts move
+    const putOut = lampsOut(other);
     return {
       object: other,
       box: hitboxOf(other, new THREE.Box3()),
       mass: other.userData.mass,
       velocity: new THREE.Vector3(0, 0, overRoadOf(other, pace)),
       color: colorOf(materials.wire.traffic),
-      onCrash: lampsOut(other),
+      onCrash: (crushed) => {
+        other.userData.dented = true;
+        putOut(crushed);
+      },
       label: other.userData.label,
       driving: drivingOf(other),
     };
@@ -533,13 +537,15 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     },
 
     /**
-     * After a crash: plays it out (game/crash.js).
+     * After a crash: plays it out (game/crash.js). A car far from the camera is drawn as one mesh
+     * till the crash dents it, as ahead on the road.
      *
      * @param {number} dt seconds of game time
      * @param {number} which the car in view, by the order they crashed (0: the Bolones)
+     * @param {THREE.Vector3} eye where the camera is
      * @returns {number} the world's speed multiplier: the camera's forward along the road
      */
-    wreck(dt, which) {
+    wreck(dt, which, eye) {
       if (!crash) return 0;
       since += dt;
       // the traffic keeps coming a while into the crash, and on while the camera goes on along
@@ -549,6 +555,9 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       sameWay.update(dt, 0);
       for (const other of spawned.splice(0)) crash.join(asCar(other));
       forward = crash.update(dt, which) / WORLD.speed;
+      for (const other of traffic()) {
+        drawFar(other, !other.userData.dented && other.position.distanceTo(eye) > TRAFFIC.far);
+      }
       return forward;
     },
 

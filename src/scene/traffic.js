@@ -210,7 +210,8 @@ function farMeshes(car, materials) {
 
 /**
  * Draws a car of the traffic as one mesh (far) or whole, on its rig: far away its parts are a few
- * pixels each, yet as many draw calls as up close. A crash takes it whole (game/minigame.js).
+ * pixels each, yet as many draw calls as up close. After a crash, a car it dents or one near the camera is whole
+ * (game/minigame.js).
  *
  * @param {THREE.Object3D} car createTrafficModels()
  * @param {boolean} far

@@ -700,7 +700,9 @@ describe("crash", () => {
     scene.add(...cars.map(({ object }) => object));
     const crash = createCrash(scene, cars);
     const debris = /** @type {THREE.Mesh} */ (scene.children.at(-1));
-    const count = () => debris.geometry.getAttribute("position")?.count ?? 0;
+    // the points drawn (the buffers hold more, room for the bursts to come)
+    const count = () =>
+      debris.geometry.getAttribute("position") ? debris.geometry.drawRange.count : 0;
     let before = -1; // the shards there were when the third car was hit
     const { onCrash } = parked;
     parked.onCrash = (crushed) => {
@@ -714,8 +716,8 @@ describe("crash", () => {
     const position = debris.geometry.getAttribute("position");
     debris.updateWorldMatrix(true, false);
     const p = new THREE.Vector3();
-    expect(position.count).toBeGreaterThan(before);
-    for (let i = before; i < position.count; i++) {
+    expect(count()).toBeGreaterThan(before);
+    for (let i = before; i < count(); i++) {
       const { z } = p.fromBufferAttribute(position, i).applyMatrix4(debris.matrixWorld);
       expect(Math.abs(z - parked.object.position.z)).toBeLessThan(5); // where it was hit
     }

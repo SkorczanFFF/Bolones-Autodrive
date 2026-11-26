@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
+import { MINIGAME } from "../src/config.js";
 import { crumple, reaches } from "../src/scene/crumple.js";
 import { mountWheel, wheelsOf } from "../src/scene/rig.js";
 import { BasicLineMaterial } from "../src/scene/lines.js";
@@ -43,6 +44,37 @@ describe("crumple", () => {
       }
     }
     expect(crushed).toBeGreaterThan(0);
+  });
+
+  it("wrinkles what it crushes a little, never back out of the crush, and nothing else", () => {
+    const { dents } = MINIGAME.crash;
+    /** The box crushed, wrinkled as much as that. @param {number} wrinkle */
+    const crushed = (wrinkle) => {
+      const saved = dents.wrinkle;
+      dents.wrinkle = wrinkle;
+      try {
+        const root = car();
+        crumple(root, hit).set(1);
+        return meshOf(root).geometry.getAttribute("position").clone();
+      } finally {
+        dents.wrinkle = saved;
+      }
+    };
+    const [smooth, wrinkled] = [crushed(0), crushed(dents.wrinkle)];
+    const before = meshOf(car()).geometry.getAttribute("position");
+    const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    let changed = 0;
+    for (let i = 0; i < before.count; i++) {
+      a.fromBufferAttribute(before, i);
+      b.fromBufferAttribute(smooth, i);
+      c.fromBufferAttribute(wrinkled, i);
+      const off = b.distanceTo(c);
+      if (a.z >= plane) expect(off).toBe(0); // not crushed: as it was without
+      expect(c.z).toBeGreaterThanOrEqual(b.z - 1e-9); // as deep as without at least (into is +z)
+      if (off > 1e-6) changed++;
+      expect(off).toBeLessThan(2 * dents.wrinkle * hit.plane); // a little
+    }
+    expect(changed).toBeGreaterThan(0);
   });
 
   it("goes in as far as it is set, from nothing", () => {

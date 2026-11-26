@@ -130,6 +130,9 @@ lets you recolor and tweak everything.
   80 km/h in a second or so, ↑ held or not (turned fast, its tyres tip it as if they gripped
   lower than they do). At 60 km/h it leans hard, a quick turn left and right at 90 swings it from
   side to side; slower, it only leans, as low and wide as ever.
+- No dent comes out pressed smooth: what a crash crushes is wrinkled a little, finer than its
+  buckles, deeper here and there and up or down (along a side, along it), never back out towards
+  the other car.
 - A part torn off in a crash comes off bent: a bumper as far as the crush had bent it when it
   went, a wheel buckled, wobbling as it rolls away.
 - A car hit by another one's front or rear dents only as high as that end comes, as far in as

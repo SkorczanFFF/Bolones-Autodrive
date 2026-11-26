@@ -30,13 +30,14 @@ const UP = new THREE.Vector3(0, 1, 0);
  * within `reach` of the point across and `tall` of it up and down (as high as the cars met: a
  * small car dents the top of a tall one less), goes back onto the plane, running out beyond,
  * buckled a little deeper here and there, so two crushed fronts meet on one plane without
- * passing into each other. Behind it the sheet metal bends. The wheels (a node with
- * `userData.part` "wheel") are rigid, not crushed: pushed back as far as the crush reaches them,
- * they turn and lean (pushed up their springs, a car on its side hit underneath, they ride up
- * into their arches first, as far as their springs go). A wheel or a bumper (a node with
- * `userData.part`) crushed past by more than it takes (MINIGAME.crash.parts) is torn off, for
- * the crash to take away from where the crush pushes it (`by`, not into the other car): a wheel
- * as it is, a bumper bent as far as the crush had bent it when it went.
+ * passing into each other, and wrinkled finer than that (`wrinkle`): crushed sheet metal never
+ * comes out smooth. Behind it the sheet metal bends. The wheels (a node with `userData.part`
+ * "wheel") are rigid, not crushed: pushed back as far as the crush reaches them, they turn and
+ * lean (pushed up their springs, a car on its side hit underneath, they ride up into their arches
+ * first, as far as their springs go). A wheel or a bumper (a node with `userData.part`) crushed
+ * past by more than it takes (MINIGAME.crash.parts) is torn off, for the crash to take away from
+ * where the crush pushes it (`by`, not into the other car): a wheel as it is, a bumper bent as far
+ * as the crush had bent it when it went.
  *
  * The dents go on as the crash does (scene/dents.js); a car hit again (a pile-up) is crushed as it
  * is shown, the earlier dents as far as they have gone, and they keep going.
@@ -128,11 +129,15 @@ export function crumple(root, hit) {
       const back = (limit - at) * reached;
       const buckle = noise(v, 1);
       const lift = noise(v, 2);
-      v.addScaledVector(into, back * (1 + 0.2 * buckle));
-      const wave = back * 0.3 * (lift - 0.5); // buckling up and down on a front, along a side
+      // never smooth either, finer than the buckles: a little deeper, and up or down (along)
+      const [deeper, off] = [wrinkle(v, 4), wrinkle(v, 5)];
+      const pushed = back * (1 + 0.2 * buckle + sheet.wrinkle * deeper);
+      v.addScaledVector(into, pushed);
+      // buckling up and down on a front, along a side
+      const wave = back * (0.3 * (lift - 0.5) + sheet.wrinkle * (2 * off - 1));
       v.addScaledVector(UP, wave * end).addScaledVector(side, wave * (1 - end));
       v.y = Math.max(v.y, low); // not into the road
-      crushed += back * (1 + 0.2 * buckle);
+      crushed += pushed;
     }
     const folded = end * fold(crushed, across);
     const deck =
@@ -309,3 +314,12 @@ function measurer({ point, into }) {
  * @param {number} seed
  */
 const noise = (p, seed) => valueNoise(p, seed, sheet.buckle);
+
+/**
+ * The crush's wrinkles, finer than its buckles (MINIGAME.crash.dents wrinkle): points that touch
+ * wrinkle alike.
+ *
+ * @param {THREE.Vector3} p
+ * @param {number} seed
+ */
+const wrinkle = (p, seed) => valueNoise(p, seed, sheet.buckle / 2);

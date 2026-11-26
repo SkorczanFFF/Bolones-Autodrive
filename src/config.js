@@ -607,6 +607,9 @@ export const MINIGAME = {
      *   within `fold` of the car's length and of its height (a small car folds smaller);
      * - a side hit only pushes the side in, buckling along it; at an angle, a blend of the two
      *   (`ends`); the buckles are `buckle` apart;
+     * - crushed sheet metal is never smooth: wrinkled, half as far apart as the buckles, up to
+     *   `wrinkle` of how far it is crushed deeper, and as much up or down (a front) or along (a
+     *   side), never back out of the crush;
      * - a wheel pushed back by its size turns out (`toe`) and leans (`camber`), radians.
      */
     dents: {
@@ -618,6 +621,7 @@ export const MINIGAME = {
       kink: 0.35,
       fold: [0.35, 0.15],
       buckle: 0.25,
+      wrinkle: 0.2,
       toe: 0.4,
       camber: 0.25,
     },

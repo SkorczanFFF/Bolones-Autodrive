@@ -15,18 +15,29 @@ const AXES = [ACROSS, UP, AHEAD];
 export const OVER = [0.5, 0.94];
 
 /**
+ * How far a body turned so has rolled over: 0 up to 20° over, 1 from 60° (OVER).
+ *
+ * @param {THREE.Quaternion} turn
+ */
+export const overOf = (turn) =>
+  1 - THREE.MathUtils.smoothstep(UP.clone().applyQuaternion(turn).y, OVER[0], OVER[1]);
+
+/**
  * A body's box in the world, turned as the body is, or as `turn` says. A car's (the lower part of
  * it, MINIGAME.crash.car.box) goes up to its roof as it rolls over, from 20° over to 60°: on its
  * side it meets the others with its roof, not with the box inside it.
  *
  * @param {{ body: Body, half: number[], shift: THREE.Vector3, roof?: number }} solid
  * @param {THREE.Quaternion} [turn]
- * @param {boolean} [whole] up to its roof however it stands: all of the car
+ * @param {number} [over] how far up to its roof, 0 to 1 (all of the car): as far as it rolled over
  * @returns {Box}
  */
-export function boxOf({ body, half, shift, roof = 0 }, turn = rotation(body.rotation()), whole) {
+export function boxOf(
+  { body, half, shift, roof = 0 },
+  turn = rotation(body.rotation()),
+  over = overOf(turn),
+) {
   const axes = AXES.map((axis) => axis.clone().applyQuaternion(turn));
-  const over = whole ? 1 : 1 - THREE.MathUtils.smoothstep(axes[1].y, OVER[0], OVER[1]);
   const grow = (roof * over) / 2; // its half
   return {
     centre: shift

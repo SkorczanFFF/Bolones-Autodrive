@@ -61,8 +61,11 @@ lets you recolor and tweak everything.
 
 ### Changed
 
+- Cars meeting at 5 km/h dent a little already, a few centimetres, the deeper the faster: below
+  7 km/h they only touched. Only slower than 4 km/h is a touch.
 - A palm hit in a crash is left leaning further, as far as 11° (it was 7°): one hit at 50 km/h,
-  some 7°, clearly knocked over a little among the others, swaying first.
+  some 7°, clearly knocked over a little among the others, swaying first. It stays so after the
+  game, till the road leaves it behind (it stood up straight again).
 - The menu waits for a player as a 90s arcade machine does: a blinking PRESS ⏎ TO START (TAP TO
   START on touch screens) in place of the MINI GAME and FREE RIDE buttons and the steering hint.
   ENTER lists what to play, free ride the fourth card beside the three minigames (on a phone held
@@ -153,6 +156,9 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car rolling over into another meets it up to its roof, and one rolled up onto another lies on
+  it, held up: they went into each other roof to roof by up to half a metre, an upright car met by
+  its lower part only, nothing holding up a car on top of another.
 - A car over on its side lies on its body, leaning onto its roof as its sides come in to it: it
   stood upright on its side on a box as wide as its doors up to its windows, the Bolones on its
   mirror, its body 6 cm off the road (a traffic car's mirror went into the road).
@@ -163,11 +169,13 @@ lets you recolor and tweak everything.
 - A palm hit in a crash leans about the foot of its trunk, standing where it stood: it leaned about
   the middle of its model, some 65 cm beside the trunk, its foot rising off the road or sinking
   into it by up to 20 cm.
-- A car rolled over, sliding on its side or its roof, is no longer thrown up off the road now and
-  then, by as much as two metres: the physics took it for 20 cm into the road, a box far too long
-  for its contacts to be exact.
-- A wheel with nothing under it (a car in the air, on its side or its roof) hangs a few
-  centimetres out of its arch: it hung out by most of its height, as if falling off.
+- A car rolled over, sliding on its side or its roof, is no longer thrown metres up off the road
+  now and then (as much as six): the physics took it for 20 cm into the road, a box far too long
+  for its contacts to be exact, and an edge of its body just touching the road as meeting the road
+  along one of the body's own faces. Such a touch still tumbles it on, throwing it up 30 cm at
+  most.
+- A wheel with nothing under it (a car in the air, on its side or its roof) hangs barely out of
+  its arch, some 3 cm: it hung out by most of its height, as if falling off.
 - A car leaning or rolled over is dented where it really meets the other car: seen from above the
   crash took it by its width and length alone, as if it stood upright, so where they met came out
   up to a metre off, beside the cars, or was not found at all and the dent went as wide as they

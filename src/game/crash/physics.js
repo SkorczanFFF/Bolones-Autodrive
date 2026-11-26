@@ -19,10 +19,10 @@ export const IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
 
 /**
  * Who collides with whom in Rapier: the road holds up the cars' bodies and the parts torn off;
- * the parts hit the cars, the palms and each other. Cars meet cars and palms through their crush
- * (crash/crush.js), not Rapier's contacts.
+ * the parts hit the cars (each as one hull round its body: HULLS), the palms and each other. Cars
+ * meet cars and palms through their crush (crash/crush.js), not Rapier's contacts.
  */
-export const [ROAD, CARS, PARTS, POSTS] = [1, 2, 4, 8];
+export const [ROAD, CARS, PARTS, POSTS, HULLS] = [1, 2, 4, 8, 16];
 
 /**
  * Rapier interaction groups: what a collider is, what it meets.

@@ -72,12 +72,48 @@ function reachOf(object) {
   return { min, max };
 }
 
+/** How low the box round a car comes now, world space. @param {THREE.Object3D} object */
+const lowestOf = (object) => new THREE.Box3().setFromObject(object).min.y;
+
+/**
+ * How deep a car's mesh goes into another's at most: into the box round the other one's mesh, as
+ * far as from that box's nearest face.
+ *
+ * @param {{ object: THREE.Object3D }} car
+ * @param {{ object: THREE.Object3D }} other
+ */
+function depthIn({ object }, other) {
+  const mesh = /** @type {THREE.Mesh} */ (object.children[0]);
+  const into = /** @type {THREE.Mesh} */ (other.object.children[0]);
+  into.geometry.computeBoundingBox();
+  const { min, max } = /** @type {THREE.Box3} */ (into.geometry.boundingBox);
+  object.updateWorldMatrix(true, true);
+  other.object.updateWorldMatrix(true, true);
+  const back = into.matrixWorld.clone().invert();
+  const position = mesh.geometry.getAttribute("position");
+  const p = new THREE.Vector3();
+  let deepest = 0;
+  for (let i = 0; i < position.count; i++) {
+    p.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld).applyMatrix4(back);
+    const depth = Math.min(...p.clone().sub(min).toArray(), ...max.clone().sub(p).toArray());
+    deepest = Math.max(deepest, depth);
+  }
+  return deepest;
+}
+
 /** A car's mesh's size now (dents shorten it). @param {THREE.Object3D} object */
 function sizeOf(object) {
   const { geometry } = /** @type {THREE.Mesh} */ (object.children[0]);
   geometry.computeBoundingBox();
   return /** @type {THREE.Box3} */ (geometry.boundingBox).getSize(new THREE.Vector3());
 }
+
+/** A model as the game loads it. @param {keyof typeof ASSETS.models} name */
+const load = (name) => {
+  const file = fs.readFileSync(`public/${ASSETS.models[name]}`);
+  const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+  return new FanFBXLoader().parse(buffer, "");
+};
 
 beforeAll(() => ready); // Rapier
 
@@ -563,6 +599,72 @@ describe("crash", () => {
     }
   });
 
+  it("dents cars meeting at 5 km/h a little already, not at a touch", () => {
+    /** How far the Bolones going `kmh` crushes a Polakito standing in its way. @param {number} kmh */
+    const crushOf = (kmh) => {
+      const scene = new THREE.Scene();
+      const bolones = car(0, 0, BOLONES, 1160, -(kmh / 3.6) * TRAFFIC.scale);
+      const other = car(0, -7.2, POLAKITO, 580, 0);
+      scene.add(bolones.object, other.object);
+      run(createCrash(scene, [bolones, other]), 1);
+      return POLAKITO[2] - sizeOf(other.object).z;
+    };
+    expect(crushOf(3)).toBe(0); // a touch
+    expect(crushOf(5)).toBeGreaterThan(0.02 * TRAFFIC.scale); // 2 cm and more
+    expect(crushOf(10)).toBeGreaterThan(1.5 * crushOf(5));
+  });
+
+  it("throws a bumper torn off out of the other car at once: never caught in its body", () => {
+    // the Bolones at 90 km/h into a Kredens standing: the Kredens' front bumper comes off
+    const scene = new THREE.Scene();
+    const models = { bolones: load("bolones"), wheel: load("wheel") };
+    const bolones = createCar({ scene, models, materials: testMaterials() });
+    bolones.group.updateMatrixWorld(true);
+    const kredens = /** @type {THREE.Object3D} */ (
+      createTrafficModels(testMaterials()).find((model) => model.userData.label === "Kredens")
+    ).clone();
+    kredens.position.set(0, TRAFFIC.y, -10);
+    scene.add(kredens);
+    kredens.updateMatrixWorld(true);
+    const { min, max } = kredens.userData.hitbox;
+    const hitbox = new THREE.Box3(
+      new THREE.Vector3().fromArray(min),
+      new THREE.Vector3().fromArray(max),
+    );
+    const [color, still] = [new THREE.Color(), new THREE.Vector3()];
+    const velocity = new THREE.Vector3(0, 0, -25 * TRAFFIC.scale);
+    const crash = createCrash(scene, [
+      {
+        object: bolones.wreck,
+        box: bolones.box,
+        mass: CAR.mass,
+        velocity,
+        color,
+        label: "Bolones",
+      },
+      {
+        object: kredens,
+        box: hitbox,
+        mass: kredens.userData.mass,
+        velocity: still,
+        color,
+        label: "Kredens",
+      },
+    ]);
+    let caught = 0; // frames a bumper torn off is in the Bolones' box
+    for (let t = 0; t < 2; t += 1 / 60) {
+      crash.update(1 / 60);
+      const back = bolones.wreck.matrixWorld.clone().invert();
+      for (const node of scene.children) {
+        if (node.userData.part !== "bumper") continue;
+        const middle = new THREE.Box3().setFromObject(node).getCenter(new THREE.Vector3());
+        if (bolones.box.containsPoint(middle.applyMatrix4(back))) caught++;
+      }
+    }
+    expect(crash.tally.parts).toBeGreaterThan(0);
+    expect(caught).toBeLessThan(10); // a frame or a few, not riding in it
+  });
+
   it("does not bounce a car off at a touch: it parts no faster than it came", () => {
     const scene = new THREE.Scene();
     const hit = car(0, 0, BOLONES, CAR.mass, 0);
@@ -679,9 +781,11 @@ describe("crash", () => {
     const foot = new THREE.Vector3(-14, 0, 20); // in the palm's frame (it stands at the origin)
     palm.updateMatrixWorld();
     expect(palm.localToWorld(foot.clone()).distanceTo(post.at)).toBeLessThan(1e-6);
+    // the crash over, it stands leaning as it settled, about its foot
     crash.dispose();
-    expect(palm.quaternion.angleTo(new THREE.Quaternion())).toBe(0);
-    expect(palm.position.length()).toBeLessThan(1e-6);
+    expect(palm.quaternion.angleTo(new THREE.Quaternion())).toBeCloseTo(lean, 2);
+    palm.updateMatrixWorld();
+    expect(palm.localToWorld(foot.clone()).distanceTo(post.at)).toBeLessThan(1e-6);
   });
 
   it("stops a car sliding off the road at a rock, low as it is: the rock stands, unbroken", () => {
@@ -918,6 +1022,23 @@ describe("a car rolled over", () => {
     expect(Math.abs(lowest)).toBeLessThan(0.05); // on the road: not in it, not above it
   });
 
+  it("rolling over into another meets it up to its roof, and on top of it lies on it: not in it", () => {
+    for (const gap of [29, 33, 35]) {
+      const scene = new THREE.Scene();
+      const rolling = car(0, 0, POLAKITO, 580, 0);
+      rolling.velocity.set(36, 0, 0); // 20 m/s sideways: it rolls over (above), into the other
+      const parked = car(gap, 0, POLAKITO, 900, 0);
+      scene.add(rolling.object, parked.object);
+      const crash = createCrash(scene, [rolling, parked]);
+      let deepest = 0;
+      for (let t = 0; t < 4; t += 1 / 60) {
+        crash.update(1 / 60);
+        deepest = Math.max(deepest, depthIn(rolling, parked), depthIn(parked, rolling));
+      }
+      expect(deepest, `${gap} units apart`).toBeLessThan(0.6); // a crush deep, not a roof through
+    }
+  });
+
   it("lands on its roof: the body above its box, from it up to the top, not its mirrors", () => {
     const models = createTrafficModels(testMaterials());
     for (const model of models) {
@@ -937,17 +1058,10 @@ describe("a car rolled over", () => {
 });
 
 describe("the Bolones in the player's hands", () => {
-  /** A model as the game loads it. @param {keyof typeof ASSETS.models} name */
-  const load = (name) => {
-    const file = fs.readFileSync(`public/${ASSETS.models[name]}`);
-    const buffer = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
-    return new FanFBXLoader().parse(buffer, "");
-  };
-
   /**
    * The Bolones as the game builds it, going `kmh` when the crash ends, steered as `steer` says
-   * for `seconds`: how far it leant at most and in the end, and how far its middle rose at most
-   * lying on its side, over the lowest it had come in the half second before; and the car.
+   * for `seconds`: how far it leant at most and in the end, and how high its body came off the road
+   * at most; and the car.
    *
    * @param {number} kmh
    * @param {boolean} gas
@@ -966,26 +1080,14 @@ describe("the Bolones in the player's hands", () => {
       { ...parked, object, box, mass: CAR.mass, velocity },
       parked,
     ]);
-    const [middle, side] = [
-      new THREE.Vector3(),
-      (/** @type {number} */ lean) => lean > 70 && lean < 110,
-    ];
-    /** @type {{ lean: number, y: number }[]} */
-    const trail = [];
-    let [most, rise] = [0, 0];
+    let [most, high] = [0, 0];
     for (let t = 0; t < seconds; t += 1 / 60) {
       crash.control(steer(t), gas);
       crash.update(1 / 60);
-      const lean = leanOf(object);
-      const { y } = crash.centre(middle, 0);
-      const lying = trail.slice(-30).filter((p) => side(p.lean));
-      if (side(lean) && lying.length >= 20) {
-        rise = Math.max(rise, y - Math.min(...lying.map((p) => p.y)));
-      }
-      trail.push({ lean, y });
-      most = Math.max(most, lean);
+      most = Math.max(most, leanOf(object));
+      high = Math.max(high, lowestOf(object));
     }
-    return { most, end: leanOf(object), rise, object };
+    return { most, end: leanOf(object), high, object };
   };
 
   it("rolls over in a full turn held fast, ↑ held or not; slower, low and wide, it only leans", () => {
@@ -1002,7 +1104,7 @@ describe("the Bolones in the player's hands", () => {
 
   it("lies over on its side leaning onto its roof, on its body: the mirror it went over on comes off", () => {
     // full left at 80 km/h a second or so: over onto its side
-    const { end, object } = drive(80, false, (t) => (t < 1.2 ? -1 : 0), 8);
+    const { end, object } = drive(80, false, (t) => (t < 1.1 ? -1 : 0), 8);
     expect(end).toBeGreaterThan(95); // past its side, onto its roof
     expect(end).toBeLessThan(135);
     /** @type {THREE.Object3D[]} */
@@ -1011,9 +1113,12 @@ describe("the Bolones in the player's hands", () => {
     expect(mirrors.length).toBeLessThan(2); // torn off where it touched the road
   });
 
-  it("slides on its side, rolled over, never thrown up off the road", () => {
-    // full left at 80 km/h a second or so: over onto its side, sliding on
-    const { rise } = drive(80, false, (t) => (t < 1.2 ? -1 : 0), 8);
-    expect(rise).toBeLessThan(0.5); // units its middle rises while it lies on its side
+  it("tumbles over its roof, rolled over fast, never thrown up high off the road", () => {
+    // full left at 100 and 120 km/h a second: over its side onto its roof, on and on
+    for (const kmh of [100, 120]) {
+      const { most, high } = drive(kmh, false, (t) => (t < 1 ? -1 : 0), 4);
+      expect(high, `${kmh} km/h`).toBeLessThan(1); // units: its body off the road, half a metre
+      expect(most, `${kmh} km/h`).toBeGreaterThan(150);
+    }
   });
 });

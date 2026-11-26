@@ -574,7 +574,7 @@ export const MINIGAME = {
       moving: [1, 3],
       springs: { bounce: 1.2, damping: 0.4, antiRoll: 1.5 },
       hub: 0.4,
-      droop: 0.3,
+      droop: 0.1,
     },
     stiffness: 700, // N/m per kg of car: a front crushes about 0.5 m into a wall at 56 km/h
     /** Coefficient of restitution falling off with the closing speed (m/s), as in crash tests:
@@ -582,7 +582,7 @@ export const MINIGAME = {
     // contact: a car's body or a part on the road
     restitution: { atRest: 0.4, falloff: 10, contact: 0.2 },
     scrape: 0.5, // friction of sheet metal: crushing cars, a car's body on the road
-    nudge: 2, // m/s: cars closing slower only touch (no crumple zones, no dents, no debris)
+    nudge: 1.2, // m/s (4 km/h): cars closing slower only touch (no crumple zones, no dents, no debris)
     /** A wheel, a bumper or a mirror comes off a car crushed past it by `tear` of its size (the
      * farthest of its points from its middle; a wheel pushed up its spring, past how far that
      * goes), flung on along the hit at `fling` of the closing speed (and up half as fast), on its

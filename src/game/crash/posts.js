@@ -21,8 +21,8 @@ const HEIGHT = 4 * METRE; // a palm's trunk, for a crash: taller than any car
 /**
  * The palms and the rocks by the road in a crash: posts that do not give, fixed where they are on
  * the road. Cars meet them through the crush (crash/crush.js), the parts torn off bounce off them.
- * A palm hit by a car leans away from it for good about the foot of its trunk and sways back and
- * forth, dying down (MINIGAME.crash.palm).
+ * A palm hit by a car leans away from it for good about the foot of its trunk (still after the
+ * crash) and sways back and forth, dying down (MINIGAME.crash.palm).
  *
  * @param {RAPIER.World} world
  * @param {() => Post[]} posts the ones by the road now (more come up as the camera goes on)
@@ -108,9 +108,11 @@ export function createPosts(world, posts, onRoad) {
       }
     },
 
-    /** Stands the palms up straight. */
+    /** Leaves the palms hit leaning as they settled, swaying no more: they stand so on. */
     dispose() {
-      for (const [object, { original, foot }] of sways) turnAbout(object, foot, original);
+      for (const [object, { original, foot, axis, lean }] of sways) {
+        turnAbout(object, foot, turn.setFromAxisAngle(axis, lean).multiply(original));
+      }
     },
   };
 }

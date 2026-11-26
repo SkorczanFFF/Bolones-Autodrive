@@ -9,6 +9,7 @@ import {
   meeting,
   middleOf,
   OVER,
+  overOf,
   overlap,
   penetration,
   postBox,
@@ -76,6 +77,7 @@ const FOLLOWS = 3; // the dents follow where two overlap this often at most (a c
 const DEEPER = 0.1 * METRE; // how much deeper than their dents they may overlap
 const MEETINGS = 4; // a pair meets again through other faces at most this often (they slid past)
 const SLACK = 0.1; // units: how much deeper the old faces must overlap than the new ones
+const TOP = 0.7; // a face's normal this far up (or down): a top or a bottom
 
 /** Whether a solid is a post (a palm's trunk, a rock): it does not give. @param {Solid} solid */
 const isPost = ({ stiffness }) => stiffness === Infinity;
@@ -90,7 +92,7 @@ const isPost = ({ stiffness }) => stiffness === Infinity;
  * @param {number} deep how far the crush goes in
  */
 function meetsWith(solid, towards, deep) {
-  const whole = boxOf(solid, undefined, true);
+  const whole = boxOf(solid, undefined, 1);
   const low = whole.centre.y - extent(whole, UP);
   const high = whole.centre.y + extent(whole, UP);
   const turn = rotation(solid.body.rotation());
@@ -186,7 +188,8 @@ export const reachOf = (solid) => {
  * 0.1 s), unloading only a little (MINIGAME.crash.restitution). Momentum is kept, the energy goes
  * into the crush, the lighter car takes the deeper dent, and both grow with the speed. Ends
  * crushed into each other are caught for a while (MINIGAME.crash.interlock); a post takes
- * nothing, the car all of the crush.
+ * nothing, the car all of the crush. A car rolling over meets the other one up to its roof, and
+ * one on top of another lies on it, held up.
  *
  * @template {Solid} T
  * @param {RAPIER.World} world
@@ -200,6 +203,44 @@ export function createCrushes(world, met) {
   const crushes = new WeakMap();
   /** @type {Set<Crush>} */
   const snagged = new Set();
+
+  /**
+   * How hard two solids push apart along a unit normal at a point, solid: a step stops them and
+   * parts them, as fast as `past` goes in SETTLE (a touch hardly at all), not throwing them apart
+   * (PARTING); as heavy as they are there (a corner turns away easily).
+   *
+   * @param {T} a
+   * @param {T} b
+   * @param {THREE.Vector3} point
+   * @param {THREE.Vector3} normal from a to b
+   * @param {number} past how much deeper they overlap than they may, units
+   * @param {number} closing units/s
+   */
+  function solid(a, b, point, normal, past, closing) {
+    const mass = 1 / (giving(a.body, point, normal) + giving(b.body, point, normal));
+    return (mass * (Math.min(PARTING, past / SETTLE) + closing)) / STEP;
+  }
+
+  /**
+   * Pushes two solids apart along a unit normal at a point, rubbing along their faces (`scrape`).
+   *
+   * @param {T} a
+   * @param {T} b
+   * @param {THREE.Vector3} point
+   * @param {THREE.Vector3} normal from a to b
+   * @param {number} force
+   * @param {THREE.Vector3} moving b's velocity there from a's
+   * @param {number} closing units/s
+   */
+  function push(a, b, point, normal, force, moving, closing) {
+    const slip = moving.addScaledVector(normal, closing); // along the faces
+    const along = normal.clone().multiplyScalar(force);
+    const speed = slip.length();
+    // Coulomb friction, eased in below 1 m/s of slip so it does not jitter
+    if (speed > 0) along.addScaledVector(slip, -(scrape * force) / Math.max(speed, METRE));
+    b.body.addForceAtPoint(along, point, true);
+    a.body.addForceAtPoint(along.negate(), point, true);
+  }
 
   /**
    * Two solids crushing for the first time (or again).
@@ -302,12 +343,31 @@ export function createCrushes(world, met) {
      */
     collide(a, b, time) {
       const turn = rotation(a.body.rotation());
-      const boxes = [boxOf(a, turn), isPost(b) ? postBox(b, turn) : boxOf(b)];
+      // one rolling over meets the other's roof too: both up to their roofs as far as either is over
+      const over = isPost(b)
+        ? overOf(turn)
+        : Math.max(overOf(turn), overOf(rotation(b.body.rotation())));
+      const boxes = [
+        boxOf(a, turn, over),
+        isPost(b) ? postBox(b, turn) : boxOf(b, undefined, over),
+      ];
       const [boxA, boxB] = boxes;
       const contact = overlap(boxA, boxB);
       if (!contact) return;
+      // a car on top of another (rolled up onto it, come down on it: they overlap less than half
+      // as high as either is): it holds it up, solid; the crush goes along the road
+      const top = contact.faces.reduce((best, f) => (f.depth < best.depth ? f : best));
+      const half = Math.min(extent(boxA, UP), extent(boxB, UP));
+      if (!isPost(b) && Math.abs(top.normal.y) >= TOP && top.depth < half) {
+        const middle = middleOf(boxA, boxB, top.normal);
+        const moving = velocityAt(b.body, middle).sub(velocityAt(a.body, middle));
+        const closing = -moving.dot(top.normal);
+        const force = solid(a, b, middle, top.normal, top.depth, closing);
+        if (force > 0) push(a, b, middle, top.normal, force, moving, closing);
+        return;
+      }
       const k = 1 / (1 / a.stiffness + 1 / b.stiffness); // the fronts in series
-      const sides = contact.faces.filter((f) => Math.abs(f.normal.y) < 0.7); // not top or bottom
+      const sides = contact.faces.filter((f) => Math.abs(f.normal.y) < TOP);
       const least = sides.reduce((best, f) => (f.depth < best.depth ? f : best));
       const pairs = crushes.get(a) ?? new WeakMap();
       crushes.set(a, pairs);
@@ -423,23 +483,11 @@ export function createCrushes(world, met) {
       }
       crush.dent(crush.deepest);
       // beyond them (or a nudge): solid, so the cars do not pass into each other (not even swung
-      // into each other by a turn): a step stops them and parts them, as fast as their overlap
-      // goes in SETTLE (a touch hardly at all), not throwing them apart (PARTING)
+      // into each other by a turn)
       if (depth > crush.capacity) {
-        // as heavy as they are where they touch (a corner turns away easily)
-        const mass = 1 / (giving(a.body, middle, normal) + giving(b.body, middle, normal));
-        const parting = Math.min(PARTING, (depth - crush.capacity) / SETTLE);
-        force += Math.max(0, (mass * (parting + closing)) / STEP - force);
+        force = Math.max(force, solid(a, b, middle, normal, depth - crush.capacity, closing));
       }
-      if (force <= 0) return;
-
-      const slip = moving.addScaledVector(normal, closing); // along the faces
-      const push = normal.clone().multiplyScalar(force);
-      const speed = slip.length();
-      // Coulomb friction, eased in below 1 m/s of slip so it does not jitter
-      if (speed > 0) push.addScaledVector(slip, -(scrape * force) / Math.max(speed, METRE));
-      b.body.addForceAtPoint(push, middle, true);
-      a.body.addForceAtPoint(push.negate(), middle, true);
+      if (force > 0) push(a, b, middle, normal, force, moving, closing);
     },
 
     /**

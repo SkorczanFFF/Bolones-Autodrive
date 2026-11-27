@@ -70,6 +70,9 @@ import {
  * @property {number} [covered] how deep they overlap where the dents meet
  * @property {number} [follows] how many times the dents followed where they overlap (FOLLOWS)
  * @property {RAPIER.ImpulseJoint} [snag] holds the crushed fronts together, until `free`
+ * @property {number} [cut] how much less their boxes overlap since they were done crushing and
+ *   pushed each other no more (each gave up its share of the crush, `give`): their own overlap
+ *   is measured as it was before
  * @property {number} [free] game time the snag lets go
  */
 
@@ -171,18 +174,38 @@ function slid({ dented, reach = 0 }, middle, normal, a, b) {
   });
 }
 
-/** @type {WeakMap<Solid, number>} a solid's box does not change: its reach, measured once */
-const reaches = new WeakMap();
-/** How far from its body's middle a solid's box reaches at most. @param {Solid} solid */
-export const reachOf = (solid) => {
-  let reach = reaches.get(solid);
-  if (reach === undefined) {
-    const { half, shift, roof = 0 } = solid; // rolled over, its box up to the roof at most
-    const up = half[1] + roof / 2;
-    reaches.set(solid, (reach = Math.hypot(half[0], up, half[2]) + shift.length() + roof / 2));
-  }
-  return reach;
-};
+/**
+ * How far from its body's middle a solid's box reaches at most (rolled over, up to its roof).
+ *
+ * @param {Solid} solid
+ */
+export function reachOf({ half, shift, roof = 0 }) {
+  return Math.hypot(half[0], half[1] + roof / 2, half[2]) + shift.length() + roof / 2;
+}
+
+/**
+ * Moves a car's box face in where it was crushed: the face towards a level direction (world),
+ * one of its ends or sides (a roof crushes as it lands, game/crash.js), by `by` times how much of
+ * the face's width `reach` either way covers (a corner crushed takes the face in less), half the
+ * box at most.
+ *
+ * @param {Solid} solid
+ * @param {THREE.Vector3} towards
+ * @param {number} by
+ * @param {number} reach
+ * @returns {number} how far that takes the face in along `towards`
+ */
+function cut(solid, towards, by, reach) {
+  const local = towards.clone().applyQuaternion(rotation(solid.body.rotation()).invert());
+  const axis = Math.abs(local.x) > Math.abs(local.z) ? 0 : 2;
+  const along = local.getComponent(axis);
+  if (Math.abs(local.y) > Math.abs(along)) return 0; // its roof or its floor towards it
+  const covered = Math.min(1, reach / solid.half[2 - axis]);
+  const inward = Math.min(by * covered, solid.half[axis]);
+  solid.half[axis] -= inward / 2;
+  solid.shift.setComponent(axis, solid.shift.getComponent(axis) - (Math.sign(along) * inward) / 2);
+  return inward * Math.abs(along);
+}
 
 /**
  * Cars meet through their crumple zones, not as rigid boxes: a front is a spring as stiff as the
@@ -385,7 +408,7 @@ export function createCrushes(world, met) {
       // overlap (a fast crush goes deeper than the fronts are wide): they stay in each other,
       // corners glance off. Only touched, they crash when they close fast enough.
       const facing = level(last.facing.clone().applyQuaternion(turn));
-      const stale = penetration(boxA, boxB, facing);
+      const stale = penetration(boxA, boxB, facing) + (last.cut ?? 0);
       const done = last.free !== undefined || stale > last.capacity;
       const wide = (last.share ?? 0) >= interlock.overlap;
       const beyond = stale - (wide ? last.deepest : 0);
@@ -476,6 +499,43 @@ export function createCrushes(world, met) {
     crush.free = time + (caught ? interlock.time : 0);
   }
 
+  /**
+   * Two solids done crushing (lock) that push each other no more (the crumple zones gave back what
+   * they may, or they parted): their boxes give up the crush (`give`), once.
+   *
+   * @param {T} a
+   * @param {T} b
+   * @param {Crush} crush theirs
+   * @param {THREE.Vector3} normal they met along, level, from a to b
+   */
+  function settle(a, b, crush, normal) {
+    if (crush.free === undefined || crush.cut !== undefined || crush.nudge) return;
+    crush.cut = give(a, b, crush, normal);
+  }
+
+  /**
+   * Two solids done crushing (settle): each car's box gives up its share of the crush on the face
+   * it was hit on (the stiffer the less; a post none), so what comes at it next meets its crushed
+   * face, not the face it had.
+   *
+   * @param {T} a
+   * @param {T} b
+   * @param {Crush} crush theirs
+   * @param {THREE.Vector3} normal they met along, level, from a to b
+   * @returns {number} how much less their boxes overlap along the normal
+   */
+  function give(a, b, { deepest, reach = 0 }, normal) {
+    const k = 1 / (1 / a.stiffness + 1 / b.stiffness);
+    let less = 0;
+    for (const [solid, towards] of /** @type {const} */ ([
+      [a, normal],
+      [b, normal.clone().negate()],
+    ])) {
+      if (!isPost(solid)) less += cut(solid, towards, (deepest * k) / solid.stiffness, reach);
+    }
+    return less;
+  }
+
   return {
     /**
      * Two solids (a car, then a car or a post) that overlap: an elastic-plastic spring between
@@ -495,14 +555,22 @@ export function createCrushes(world, met) {
       const boxes = [boxOf(a, turn, over), other ? boxOf(b, other, over) : postBox(b, turn)];
       const [boxA, boxB] = boxes;
       const contact = overlap(boxA, boxB);
-      if (!contact || onTop(a, b, boxes, contact.least)) return;
+      if (!contact) {
+        const last = crushes.get(a)?.get(b); // parted
+        if (last) settle(a, b, last, level(last.facing.clone().applyQuaternion(turn)));
+        return;
+      }
+      if (onTop(a, b, boxes, contact.least)) return;
       const k = 1 / (1 / a.stiffness + 1 / b.stiffness); // the fronts in series
       const sides = contact.faces.filter((f) => Math.abs(f.normal.y) < TOP);
       const least = sides.reduce((best, f) => (f.depth < best.depth ? f : best));
       const crush = crushOf(a, b, boxes, contact.point, sides, least, turn, k);
       const normal = level(crush.facing.clone().applyQuaternion(turn));
-      const depth = penetration(boxA, boxB, normal);
-      if (depth <= 0) return;
+      const depth = penetration(boxA, boxB, normal) + (crush.cut ?? 0);
+      if (depth <= 0) {
+        settle(a, b, crush, normal);
+        return;
+      }
       // they push in the middle of where they overlap (not low on a tall palm: it would trip the
       // car)
       const middle = middleOf(boxA, boxB, normal);
@@ -537,6 +605,7 @@ export function createCrushes(world, met) {
         force = Math.max(force, solid(a, b, middle, normal, depth - crush.capacity, closing));
       }
       if (force > 0) push(a, b, middle, normal, force, moving, closing);
+      else settle(a, b, crush, normal);
     },
 
     /**

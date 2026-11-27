@@ -171,6 +171,10 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A crushed front, rear or side meets what comes at it next where it is crushed: a car running
+  into the Bolones' crushed bonnet, or the wreck driven on into a palm, stopped as far off as the
+  crush had gone in (some 30 cm after a crash at 30 km/h, 45 cm at 40), meeting nothing there. The
+  two cars that crushed each other part and come together again as they did.
 - A car down a wheel sits on that corner's hub: the hub was put far off the car (behind it, or as
   far out on the road as the car had come), its corner coming down onto its floor.
 - A wheel torn off rolls on the road as round as it is: it was taken for as big as it looked

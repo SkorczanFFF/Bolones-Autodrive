@@ -869,6 +869,46 @@ describe("crash", () => {
     expect(meets(false)).toBeCloseTo(-13.5 + 1.25, 0);
   });
 
+  it("meets a crushed front where it is crushed, not where it was whole", () => {
+    const scene = new THREE.Scene();
+    const crushed = car(0, 0, BOLONES, 1160, -14); // into a wall, its front towards -z
+    const far = car(30, 400, POLAKITO, 580, 0); // a crash takes two: this one stays out of it
+    const rock = new THREE.Object3D();
+    let standing = true;
+    const wall = {
+      object: rock,
+      at: new THREE.Vector3(0, 0, -10),
+      radius: 3.2,
+      height: 4, // taller than the car: all of its front crushed
+      outline: [
+        new THREE.Vector2(-3, -0.5),
+        new THREE.Vector2(3, -0.5),
+        new THREE.Vector2(3, 0.5),
+        new THREE.Vector2(-3, 0.5),
+      ],
+    };
+    scene.add(crushed.object, far.object, rock);
+    const crash = create(scene, [crushed, far], () => (standing ? [wall] : []), mulberry32(1));
+    const run = (/** @type {number} */ seconds) => {
+      for (let t = 0; t < seconds * 60; t++) crash.update(1 / 60);
+    };
+    run(2.5);
+    standing = false; // the wall goes, the crushed front bare
+    run(0.5);
+    const { min: front, max: rear } = reachOf(crushed.object);
+    expect(BOLONES[2] - (rear - front)).toBeGreaterThan(0.4); // crushed in
+    const blind = { seen: 100 }; // drives into it
+    const coming = { ...car(0, front - 15, POLAKITO, 580, 6), driving: blind };
+    scene.add(coming.object);
+    crash.join(coming);
+    let closest = Infinity;
+    for (let t = 0; t < 4 * 60; t++) {
+      crash.update(1 / 60);
+      closest = Math.min(closest, reachOf(crushed.object).min - reachOf(coming.object).max);
+    }
+    expect(closest).toBeLessThan(0.1); // not stopped as far off as the crush went in
+  });
+
   it("stands up the palms that come along as the camera goes on, where they are", () => {
     const scene = new THREE.Scene();
     // the Bolones going on, the camera riding along; the other car sliding off the road, sideways

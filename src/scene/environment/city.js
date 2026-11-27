@@ -139,8 +139,9 @@ function quads(quads) {
     c.copy(b).add(up);
     e.copy(a).add(up);
     for (const point of [c, b, a, a, e, c]) {
-      positions.set([point.x, point.y, point.z], i);
-      i += 3;
+      positions[i++] = point.x;
+      positions[i++] = point.y;
+      positions[i++] = point.z;
     }
   }
   const geometry = new THREE.BufferGeometry();

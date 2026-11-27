@@ -74,10 +74,15 @@ export function createWorld(assets) {
     /** 1 = base speed; the minigame raises it per tier. */
     speedMultiplier: 1,
 
-    /** Rebuilds the landscape from settings.mountains: everything that grows from its seed. */
-    regenerate() {
+    /** Reshapes the mountains from settings.mountains (the city grows from the seed alone). */
+    reshape() {
       parts.sideHills.regenerate();
       parts.hills.regenerate();
+    },
+
+    /** Rebuilds the landscape from settings.mountains: everything that grows from its seed. */
+    regenerate() {
+      world.reshape();
       parts.city.regenerate(); // built from the same seed
     },
 

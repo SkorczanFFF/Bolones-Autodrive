@@ -85,7 +85,9 @@ export function dent(meshes, move) {
     inverse.copy(mesh.matrixWorld).invert();
     let farthest = 0; // squared
     for (let i = 0; i < shown.length; i += 3) {
-      move(entry, v.set(world[i], world[i + 1], world[i + 2]));
+      const [x, y, z] = [world[i], world[i + 1], world[i + 2]];
+      move(entry, v.set(x, y, z));
+      if (v.x === x && v.y === y && v.z === z) continue; // not moved (rounding back would)
       v.applyMatrix4(inverse);
       by[i] = v.x - shown[i];
       by[i + 1] = v.y - shown[i + 1];
@@ -116,6 +118,8 @@ export function dent(meshes, move) {
     if (wire) {
       const material = /** @type {THREE.Material} */ (wire.material);
       const lines = wireGeometry(geometry, material, dents.original);
+      // the lines' bounds as the solid's: measured now, the dent not in yet, they would cull early
+      if (lines !== geometry) lines.boundingSphere = geometry.boundingSphere?.clone() ?? null;
       if (wire.geometry !== dents.originalWire && wire.geometry !== mesh.geometry) {
         wire.geometry.dispose();
       }

@@ -789,9 +789,13 @@ export function mergeParts(parts) {
   );
   /** @type {number[]} */
   const polygon = [];
+  let next = 0; // the first number free
   for (const part of parts) {
-    const offset = polygon.length ? Math.max(...polygon) + 1 : 0;
-    polygon.push(...part.polygon.map((id) => id + offset));
+    const offset = next;
+    for (const id of part.polygon) {
+      polygon.push(id + offset);
+      next = Math.max(next, id + offset + 1);
+    }
   }
   return { geometry, polygon };
 }
@@ -805,12 +809,16 @@ export function mergeParts(parts) {
  */
 export function innerEdges(geometry, polygon) {
   const position = geometry.getAttribute("position");
-  const point = (/** @type {number} */ i) =>
-    [position.getX(i), position.getY(i), position.getZ(i)].map((v) => Math.round(v * 1e5)).join();
-  const edgeKey = (/** @type {number} */ t, /** @type {number} */ k) => {
-    const [a, b] = [point(3 * t + ((k + 1) % 3)), point(3 * t + ((k + 2) % 3))];
+  const points = Array.from({ length: position.count }, (_, i) =>
+    [position.getX(i), position.getY(i), position.getZ(i)].map((v) => Math.round(v * 1e5)).join(),
+  );
+  // each triangle's edges, the one opposite vertex k at 3 * t + k, by their ends
+  const edges = Array.from({ length: 3 * polygon.length }, (_, e) => {
+    const t = Math.floor(e / 3);
+    const [a, b] = [points[3 * t + ((e + 1) % 3)], points[3 * t + ((e + 2) % 3)]];
     return a < b ? `${a}|${b}` : `${b}|${a}`;
-  };
+  });
+  const edgeKey = (/** @type {number} */ t, /** @type {number} */ k) => edges[3 * t + k];
   /** @type {Map<string, number[]>} */
   const owners = new Map();
   for (let t = 0; t < polygon.length; t++) {

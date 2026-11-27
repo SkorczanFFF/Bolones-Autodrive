@@ -102,14 +102,21 @@ export function createInstances(parent, models) {
         const i = counts[m]++;
         if (i >= CAPACITY) continue;
         node.updateMatrix();
+        const opacity = opacities.get(node) ?? 1;
         for (const { solid, fade, offset } of parts[m]) {
           solid.setMatrixAt(i, matrix.multiplyMatrices(node.matrix, offset));
-          fade.setX(i, opacities.get(node) ?? 1);
+          fade.setX(i, opacity);
         }
       }
       parts.forEach((meshes, m) => {
+        const count = Math.min(counts[m], CAPACITY);
         for (const { solid, lines, fade } of meshes) {
-          solid.count = lines.count = Math.min(counts[m], CAPACITY);
+          solid.count = lines.count = count;
+          // only the copies drawn go up to the GPU
+          solid.instanceMatrix.clearUpdateRanges();
+          solid.instanceMatrix.addUpdateRange(0, count * 16);
+          fade.clearUpdateRanges();
+          fade.addUpdateRange(0, count);
           solid.instanceMatrix.needsUpdate = fade.needsUpdate = true;
         }
       });

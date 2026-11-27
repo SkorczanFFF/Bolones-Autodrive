@@ -57,6 +57,7 @@ export function createDebris(gravity) {
      * @param {Burst} burst
      */
     burst(at, { count, velocity, spread, color, size, life }) {
+      if (count <= 0) return; // nothing to add, nothing to redraw
       const alive = shards.filter((shard) => shard.age < shard.life); // the sparks gone make room
       shards.splice(0, shards.length, ...alive);
       for (const shard of shards) shard.done = false; // moved up: drawn where they are now
@@ -115,8 +116,8 @@ export function createDebris(gravity) {
           position.setXYZ(3 * i + k, end.x, end.y, end.z);
           colors.setXYZ(3 * i + k, r * fade, g * fade, b * fade);
         });
-        // lying there for good, or gone: as it is drawn now from here on
-        shard.done = lying && (shard.life === Infinity || shard.age >= shard.life);
+        // lying there for good, or gone (drawn black now): as it is drawn now from here on
+        shard.done = (lying && shard.life === Infinity) || shard.age >= shard.life;
         if (first < 0) first = i;
         last = i;
       });

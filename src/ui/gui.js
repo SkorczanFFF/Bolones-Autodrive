@@ -243,9 +243,9 @@ export function createSceneGui({ scene, materials, world, crt, tweens, bloom, de
     nightFolder.close();
   }
 
-  // A rebuild of the landscape takes ~6 ms: live while dragging; the seed when typed in.
+  // Reshaping the mountains takes ~6 ms: live while dragging; the seed when typed in.
   const { mountains } = world.settings;
-  const { regenerate } = world;
+  const { regenerate, reshape } = world;
 
   /** The mountain generator's shape (the seed is global: it builds the city too). */
   function addMountains() {
@@ -253,15 +253,15 @@ export function createSceneGui({ scene, materials, world, crt, tweens, bloom, de
     mountainFolder
       .add(mountains, "height", ...RANGES.mountainHeight)
       .name(L.mountainHeight)
-      .onChange(regenerate);
+      .onChange(reshape);
     mountainFolder
       .add(mountains, "roughness", ...RANGES.mountainRoughness)
       .name(L.mountainRoughness)
-      .onChange(regenerate);
+      .onChange(reshape);
     mountainFolder
       .add(mountains, "start", ...RANGES.mountainStart)
       .name(L.mountainStart)
-      .onChange(regenerate);
+      .onChange(reshape);
     mountainFolder.close();
   }
 

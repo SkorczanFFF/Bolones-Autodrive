@@ -321,11 +321,11 @@ function carGeometry(model) {
     }
   }
 
-  const leaned = leanEnds(withPolygons(parts), model);
-  if (!model.decals?.length) return centred(leaned, model);
-  /** @type {Part} */
-  const body = { geometry: leaned, polygon: Array.from(leaned.userData.polygons.polygon) };
-  const decals = decalParts(model.decals, leaned);
+  if (!model.decals?.length) return centred(leanEnds(withPolygons(parts), model), model);
+  // leaned, then its edges found once with the decals' (withPolygons)
+  const body = mergeParts(parts);
+  leanEnds(body.geometry, model);
+  const decals = decalParts(model.decals, body.geometry);
   const geometry = withPolygons([body, ...decals]);
   // the flat decals shaded each as if flat (polygons.js evenNormals(); scene/dents.js again)
   geometry.userData.even = Uint8Array.from(

@@ -19,9 +19,10 @@ export const CONVEYOR_END = FAR + CHUNK_COUNT * CHUNK_LENGTH;
  * @property {number | null} index landscape stretch it shows (null: needs a reshape)
  * @property {Float32Array} heights full-grown height of every vertex
  * @property {Growth | null} growth applied growth (null: not applied yet)
+ * @property {number} at where it was when it was applied (its far edge's z)
  */
 
-/** @typedef {0 | 1 | "partial"} Growth flat, full-grown, or in between (rewritten every frame) */
+/** @typedef {0 | 1 | "partial"} Growth flat, full-grown, or in between (rewritten as it moves) */
 
 /**
  * Endless mountains on both sides of the road, rolling towards the camera with the world speed.
@@ -72,7 +73,7 @@ export function createSideHills({ scene, materials, mountains }) {
       mesh.position.x = x;
       scene.add(mesh);
       const heights = new Float32Array(geometry.getAttribute("position").count);
-      chunks.push({ mesh, index: null, heights, growth: null });
+      chunks.push({ mesh, index: null, heights, growth: null, at: 0 });
     }
   }
 
@@ -108,8 +109,9 @@ export function createSideHills({ scene, materials, mountains }) {
     /** @type {Growth} */
     const growth =
       z + length <= growFrom ? 0 : z >= growTo && z + length <= shrinkFrom ? 1 : "partial";
-    if (growth !== "partial" && growth === chunk.growth) return; // already applied
+    if (growth === chunk.growth && (growth !== "partial" || z === chunk.at)) return; // applied
     chunk.growth = growth;
+    chunk.at = z;
     const position = mesh.geometry.getAttribute("position");
     const array = position.array;
     for (let v = 0; v < heights.length; v++) {

@@ -235,8 +235,14 @@ function nearPlan(position, hidden, polygon) {
   const count = hidden.length;
   /** @param {number} i */
   const at = (i) => new THREE.Vector3().fromBufferAttribute(position, i);
+  // every point's key once: its polygon and where it is (the polygon's corners meeting there)
+  const keys = Array.from(
+    { length: 3 * count },
+    (_, i) =>
+      `${polygon[Math.floor(i / 3)]} ${position.getX(i)},${position.getY(i)},${position.getZ(i)}`,
+  );
   /** @param {number} t @param {number} v */
-  const corner = (t, v) => `${polygon[t]} ${at(3 * t + v).toArray()}`;
+  const corner = (t, v) => keys[3 * t + v];
   /** The end of an edge (by its first corner) that is not at `from`, as a point index. */
   const otherEnd = (/** @type {number} */ edge, /** @type {THREE.Vector3} */ from) => {
     const [i, j] = [1, 2].map((s) => edge - (edge % 3) + ((edge + s) % 3));
@@ -284,7 +290,8 @@ function nearPlan(position, hidden, polygon) {
         for (let step = 0; step < 64; step++) {
           const here = at(end);
           let beyond = end;
-          const next = (through.get(`${polygon[t]} ${here.toArray()}`) ?? []).find((n) => {
+          // the outline's edges at the far end (of this polygon: so is every edge met here)
+          const next = (through.get(keys[end]) ?? []).find((n) => {
             if (n === last) return false;
             beyond = otherEnd(n, here);
             const onward = at(beyond).sub(here);

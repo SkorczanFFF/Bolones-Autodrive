@@ -48,7 +48,7 @@ const fragmentShader = /* glsl */ `
 `;
 
 /**
- * Procedural, anti-aliased line grid for the terrain overlay (replaces gridline2.png). Exposes
+ * Procedural, anti-aliased line grid for the terrain overlay. Exposes
  * `color` like regular materials (the GUI sets it) and `offset` for scrolling, in cells.
  *
  * @param {{ color: THREE.ColorRepresentation, cells: [number, number], halfWidth: number, gapHalfWidth?: number, outerHalfWidth?: number }} options

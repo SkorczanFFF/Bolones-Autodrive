@@ -32,7 +32,7 @@ export function easeInOutCubic(t) {
 /** @typedef {ReturnType<typeof createTweens>} Tweens */
 
 /**
- * Tweens driven by the main loop (replaces the per-animation requestAnimationFrame loops of v1).
+ * Tweens driven by the main loop.
  */
 export function createTweens() {
   /** @type {Set<{ options: TweenOptions, elapsed: number }>} */

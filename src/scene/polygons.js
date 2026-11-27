@@ -3,8 +3,8 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { WIRE } from "../config.js";
 
 /**
- * Flat-shaded geometry built polygon by polygon, for the minigame traffic (scene/traffic.js,
- * scene/van.js): each triangle knows the polygon it belongs to, so lines are drawn along the
+ * Flat-shaded geometry built polygon by polygon (the traffic, scene/traffic.js and scene/van.js;
+ * the Bolones' fuel cap; the dents' normals): each triangle knows the polygon it belongs to, so lines are drawn along the
  * polygons' outlines (`userData.polygons`, as core/fbx.js), not along every triangle.
  *
  * @typedef {[number, number]} Point
@@ -17,6 +17,16 @@ import { WIRE } from "../config.js";
 export const CORNER_STEPS = 4;
 /** Stations along and round a car's body at least this close, metres (a crash bends them). */
 export const STATION = 0.15;
+/**
+ * Segments round something round a few centimetres across (a hole in a rim, the Bolones' fuel cap,
+ * scene/car.js): an octagon is round enough.
+ */
+export const HOLE_SEGMENTS = 8;
+/**
+ * Points inside a flat panel for a crash to bend it (fillPoints): every STATION along, every
+ * other one up; the stations round it do the rest.
+ */
+export const SPARSE = /** @type {const} */ ([STATION, 0.03, 2 * STATION]);
 /** Lamps and marks sit this far off the body, so they draw their own outline, metres. */
 export const OFFSET = 0.005;
 /** Segments of a round lamp (rectangle() with `round` 0.5). */
@@ -604,18 +614,11 @@ export function densifyLine(line, step) {
  * @returns {Point[]}
  */
 export function densify(polygon, step) {
-  return polygon.flatMap((p, i) => {
-    const q = polygon[(i + 1) % polygon.length];
-    const pieces = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / step));
-    return Array.from({ length: pieces }, (_, j) => {
-      const t = j / pieces;
-      return /** @type {Point} */ ([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
-    });
-  });
+  return densifyLine([...polygon, polygon[0]], step).slice(0, -1);
 }
 
 /** @param {Point[]} polygon @param {Point} p */
-export function contains(polygon, [x, y]) {
+function contains(polygon, [x, y]) {
   let inside = false;
   polygon.forEach(([ax, ay], i) => {
     const [bx, by] = polygon[(i + 1) % polygon.length];
@@ -625,7 +628,7 @@ export function contains(polygon, [x, y]) {
 }
 
 /** How far a point is from a polygon's sides. @param {Point[]} polygon @param {Point} p */
-export function distanceTo(polygon, [x, y]) {
+function distanceTo(polygon, [x, y]) {
   return Math.min(
     ...polygon.map(([ax, ay], i) => {
       const [bx, by] = polygon[(i + 1) % polygon.length];
@@ -841,7 +844,7 @@ export function flatGeometry(positions) {
  *
  * @param {THREE.BufferGeometry} geometry
  */
-export function plain(geometry) {
+function plain(geometry) {
   const flat = geometry.index ? geometry.toNonIndexed() : geometry;
   flat.deleteAttribute("uv");
   return flat;

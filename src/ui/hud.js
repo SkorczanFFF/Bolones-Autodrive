@@ -21,7 +21,7 @@ function show(element, text) {
 }
 
 /**
- * Restarts a one-shot CSS animation (class "is-pop"/"is-flash").
+ * Restarts a one-shot CSS animation (class "is-pop", "is-flash" or "is-tick").
  *
  * @param {HTMLElement} element
  * @param {string} className

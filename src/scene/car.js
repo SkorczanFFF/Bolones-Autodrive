@@ -4,8 +4,7 @@ import { unionFind } from "../core/fbx.js";
 import { easeInOutCubic, settle } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
 import { mountWheel, partOf, wheelsOf } from "./rig.js";
-import { withPolygons } from "./polygons.js";
-import { HOLE_SEGMENTS } from "./traffic.js";
+import { HOLE_SEGMENTS, withPolygons } from "./polygons.js";
 import { dress, solidMeshes } from "./wire.js";
 
 /** @typedef {-1 | 0 | 1} SteerInput left, none, right */
@@ -152,7 +151,7 @@ function trianglesOf(geometry, triangles) {
  *     └ 4× wheel   on its rig (scene/rig.js): the mount on the axle, mid-width; front ones steer
  *       └ … spin → mirror → wheel model, offset so its axle and mid-width sit on the mount
  *
- * The wheels never roll with the body, which gives the suspension feel of v1. Speeds are per
+ * The wheels never roll with the body: a feel of suspension. Speeds are per
  * second and easings time constants (settle), so 60 Hz and 144 Hz feel the same.
  *
  * @param {{ scene: THREE.Scene, models: Record<string, THREE.Group>, materials: import("./materials.js").Materials }} deps
@@ -192,7 +191,7 @@ export function createCar({ scene, models, materials }) {
     if (mirrored) mirror.rotation.y = Math.PI;
     mirror.add(wheel);
 
-    // (x, y, z) is where v1 put the model origin; the mount sits in the middle of the width
+    // (x, y, z) is the model origin; the mount sits in the middle of the width
     const centerOffset = center.clone().applyAxisAngle(UP, mirrored ? Math.PI : 0);
     const at = new THREE.Vector3(x, y, z).add(centerOffset);
     const mount = mountWheel(mirror, at, radius, z < 0); // the nose is towards -z
@@ -233,7 +232,7 @@ export function createCar({ scene, models, materials }) {
   }
 
   /**
-   * Lateral motion (v1 feel): hold to speed up, momentum after release.
+   * Lateral motion: hold to speed up, momentum after release.
    *
    * Soft edges (free ride, where the camera rides along and every jolt shakes the whole view): the
    * car brakes into the road edge instead of stopping dead there, comes to a standstill before it
@@ -337,7 +336,7 @@ export function createCar({ scene, models, materials }) {
       return sideways;
     },
 
-    /** A steering key was released (v1: speed drops right away). */
+    /** A steering key was released: the speed drops right away. */
     release() {
       speed *= s.releaseDamp;
     },
@@ -369,7 +368,7 @@ export function createCar({ scene, models, materials }) {
     },
 
     /**
-     * World-space bounds of the body (wheels excluded, as in v1).
+     * World-space bounds of the body (wheels excluded).
      *
      * @param {THREE.Box3} target
      */

@@ -21,7 +21,9 @@ import {
   glassTriangles,
   joined,
   ladder,
+  HOLE_SEGMENTS,
   mergeParts,
+  SPARSE,
   mirrored,
   prism,
   recessed,
@@ -57,11 +59,6 @@ const ARCH_FOOT = 0.01;
 /** A curve's point closer than this to a station is left out: the loft samples it, metres. */
 const STATION_GAP = 0.04;
 const WHEEL_SEGMENTS = 12;
-/**
- * Segments round something round a few centimetres across (a hole in a rim, the Bolones' fuel cap,
- * scene/car.js): an octagon is round enough.
- */
-export const HOLE_SEGMENTS = 8;
 /** How far a rim sits in its tyre, and a hubcap stands out of the rim, metres. */
 const [RIM_DEPTH, HUBCAP] = [0.04, 0.03];
 /** Bumper thickness, metres. */
@@ -209,7 +206,6 @@ function farMeshes(car, materials) {
     mergeGeometries(lamps.map((lamp) => placed(lamp.geometry, lamp))),
     materials.headlight,
   );
-  lit.castShadow = false; // as the lamps (createTrafficModels); the body casts the car's
   for (const mesh of [body, lit]) Object.assign(mesh, { visible: false }).userData.far = true;
   return [body, lit];
 }
@@ -1086,7 +1082,7 @@ function cabinParts({ cabin, windows }, halfWidth, deckCrown) {
   const panes = windows.map((window) =>
     densify(rounded(window, cabin.windowCorners ?? 0, 1), STATION),
   );
-  const steiner = fillPoints(outline, panes, STATION, 0.03, 2 * STATION);
+  const steiner = fillPoints(outline, panes, ...SPARSE);
   const roofLine = outline.filter(([, y]) => y >= roof - 1e-6);
   for (const side of [-1, 1]) {
     const out = new THREE.Vector3(side, 0, 0);
@@ -1280,7 +1276,7 @@ function bumper({ y, height, plan, depth: thick = BUMPER_DEPTH }, end, back) {
 }
 
 /**
- * A tyre or hubcap along x: its sides are one polygon each, its tread one more (no lines across).
+ * A hubcap along x: its sides are one polygon each, its tread one more (no lines across).
  *
  * @param {number} radius
  * @param {number} width

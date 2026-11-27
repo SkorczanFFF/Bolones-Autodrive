@@ -56,7 +56,7 @@ function slowMotion(time, dt) {
 }
 
 /**
- * Orchestrates the game: maps input to state events (and gates the menu, glow and randomize keys),
+ * Orchestrates the game: maps input to state events (and gates the menu key; glow and randomize work always),
  * runs per-state timers inside update(dt) and performs the enter actions of each state (camera,
  * car, minigame, HUD, menu).
  *
@@ -134,8 +134,8 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
 
   /**
    * Controls stay disabled during the move; controls.update() applies the orbit limits, so the
-   * game camera ends up clamped exactly like in v1. The orbit target eases back to the home
-   * target too (it is off it after free ride); a move into free ride ends pinned to the car.
+   * game camera ends up clamped. The orbit target eases back to the home target too (it is off
+   * it after free ride or a crash); a move into free ride ends pinned to the car.
    *
    * @param {THREE.Vector3} to
    * @param {() => void} [onDone]

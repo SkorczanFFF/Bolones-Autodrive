@@ -27,7 +27,7 @@ export const lineWidth = { value: WIRE.width };
  * @param {(geometry: THREE.BufferGeometry) => T} derive
  * @returns {(geometry: THREE.BufferGeometry) => T}
  */
-export function memoByGeometry(derive) {
+function memoByGeometry(derive) {
   /** @type {WeakMap<THREE.BufferGeometry, T>} */
   const cache = new WeakMap();
   return (geometry) => {
@@ -507,7 +507,7 @@ function withLines(Base) {
 /** Unlit lines. */
 export const BasicLineMaterial = withLines(THREE.MeshBasicMaterial);
 
-/** Lit lines (v1 wireframes were Phong). */
+/** Lit lines. */
 export const PhongLineMaterial = withLines(THREE.MeshPhongMaterial);
 
 /** @typedef {InstanceType<typeof BasicLineMaterial> | InstanceType<typeof PhongLineMaterial>} LineMaterial */

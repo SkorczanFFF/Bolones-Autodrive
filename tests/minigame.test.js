@@ -164,7 +164,7 @@ describe("overtake", () => {
       /** @type {any} */ ({ scene, car, materials: testMaterials(), palms: [], rocks: [] }),
     );
     const cars = () => scene.children.filter(({ userData }) => userData.label);
-    const { speed, platoon, window, group } = MINIGAME.modes.overtake;
+    const { platoon, window, group } = MINIGAME.modes.overtake;
     minigame.play("overtake");
     const lined = cars();
     expect(lined.length).toBeGreaterThan(0); // lined up ahead, going its way

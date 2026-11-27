@@ -24,7 +24,7 @@ import { createDevStats } from "./ui/devstats.js";
 import { inject } from "@vercel/analytics";
 
 async function main() {
-  // Match the v1 (r116) look: colors are used as-is and the output stays linear (ui/color.js and
+  // Colors are used as-is and the output stays linear (ui/color.js and
   // core/renderer.js count on it).
   THREE.ColorManagement.enabled = false;
 

@@ -69,7 +69,7 @@ export function createInput(target = window) {
     const action = actionByCode.get(code);
     if (!action || (ACTIONS[action].optional && !armed.has(action))) return;
     event.preventDefault();
-    if (repeat) return; // OS auto-repeat must not restart presses (v1 bug)
+    if (repeat) return; // OS auto-repeat must not restart presses
     press(action, code);
   });
 

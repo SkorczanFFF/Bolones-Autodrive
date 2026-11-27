@@ -20,7 +20,7 @@ import { convexOutline } from "./crash/boxes.js";
 function lanesOf(halfWidth) {
   const { innerGap, outerMargin, safeZone } = MINIGAME;
   const reach = CAR.steer.maxOffset;
-  const minLaneWidth = 0.1; // v1 guard for tiny steering ranges
+  const minLaneWidth = 0.1; // guard for tiny steering ranges
   const lanes = {
     left: [-reach + outerMargin, -safeZone - halfWidth - innerGap],
     right: [safeZone + halfWidth + innerGap, reach - outerMargin],
@@ -32,7 +32,7 @@ function lanesOf(halfWidth) {
 }
 
 /**
- * Obstacle x positions from v1: obstacles fill one lane (left or right of the centre safe zone)
+ * Obstacle x positions: obstacles fill one lane (left or right of the centre safe zone)
  * for a batch of 1-3, then switch lanes.
  *
  * @param {number} halfWidth half the widest obstacle (widestReach)

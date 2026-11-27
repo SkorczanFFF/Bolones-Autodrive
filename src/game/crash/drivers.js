@@ -62,9 +62,9 @@ export const hardest = (driving) => MINIGAME.crash.friction.brake * (driving?.br
  * that one brake as hard as it can: units/s².
  *
  * @param {Seen | undefined} seen
- * @param {number} [hard] how hard the car ahead can brake, units/s² (as they reckon: as they can)
+ * @param {number} hard how hard the car ahead can brake, units/s² (as they reckon: as they can)
  */
-export function stopping(seen, hard = hardest()) {
+export function stopping(seen, hard) {
   if (!seen) return 0;
   const { drivers } = MINIGAME.crash;
   const room = seen.gap - drivers.gap * METRE + Math.max(seen.leading, 0) ** 2 / (2 * hard);

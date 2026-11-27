@@ -1,7 +1,6 @@
 /**
  * Single source of truth: palette, layer defaults, scene, gameplay, assets, keys and UI text.
- * Values are ported 1:1 from v1-legacy unless a comment says otherwise. Rates are per second;
- * easings are time constants in seconds (v1 tuned both per 60 Hz frame).
+ * Rates are per second; easings are time constants in seconds.
  */
 
 export const PALETTE = {
@@ -131,7 +130,7 @@ export const LAYERS = {
  * from these values, so changing them rescales the scene consistently.
  */
 export const WORLD = {
-  length: 400, // scenery travels from -length/2 to +length/2; default fog end
+  length: 400, // the ground and the side hills run from -length/2 to +length/2; default fog end
   width: 200, // rock bands fit inside this width
   /** The farthest fog end the GUI allows (GUI.fogFar); the default is `length` (SCENE.fog). */
   get fogReach() {
@@ -145,12 +144,12 @@ export const WORLD = {
     return 2 * WORLD.fogReach;
   },
   cellSize: 4, // units per ground texture tile (terrain grid and road lines)
-  speed: 14.4, // units/s at speedMultiplier 1 (v1 ground: 0.06 tiles/frame; scenery was 200/14 = 14.3)
+  speed: 14.4, // units/s at speedMultiplier 1
 };
 
 /** Procedural terrain grid (one cell per WORLD.cellSize). */
 export const GRID = {
-  halfWidth: 3 / 512, // line half-width in cells, as in the v1 gridline texture (6 px of 512)
+  halfWidth: 3 / 512, // line half-width in cells (6 px of a 512 px cell)
 };
 
 /**
@@ -219,8 +218,7 @@ export const ROAD = {
 export const SUN = {
   top: PALETTE.sunYellow, // color at the top of the disc
   bottom: PALETTE.neonPink, // color at the horizon and of the halo
-  /** Centre 40 below the ground, so the ground horizon cuts the disc; 2x the v1 size and
-   * distance, so it looks just as big. */
+  /** Centre 40 below the ground, so the ground horizon cuts the disc. */
   disc: { radius: 400, position: [2, -40, -700] },
   /** Horizontal cuts in the lower part (fractions of the radius), wider towards the horizon. */
   stripes: { count: 6, top: 0.55, gap: [0.08, 0.55] },
@@ -303,7 +301,7 @@ export const SCENE = {
     },
     position: [0, 3, 7],
     target: [0, 1.8, 0],
-    gamePosition: [0, 4, 7], // OrbitControls clamps it to maxDistance -> (0, 3.9, 6.68), as in v1
+    gamePosition: [0, 4, 7], // OrbitControls clamps it to maxDistance -> (0, 3.9, 6.68)
     transition: 1, // seconds for camera moves between menu and minigame
     followMargin: 0.5, // units; on narrow screens the camera slides sideways to keep the car this far inside
   },
@@ -315,18 +313,18 @@ export const SCENE = {
   },
   lights: {
     color: PALETTE.white,
-    /** Slightly above v1 (0.95): the low sunset light reaches flat ground less. */
+    /** The low sunset light reaches flat ground little: the ambient makes up for it. */
     ambient: 1.05,
     /**
      * The sun as a wide light source: `samples` shadow-casting directional lights spread over
      * `spread` of the sun disc's apparent size, aimed from the middle of the visible sun. Their
-     * overlapping shadows give the soft, wide-source shadow of v1 (five lights in a small arc)
+     * overlapping shadows give a soft, wide-source shadow (five lights in a small arc)
      * and long sunset shadows towards the camera. Follows SUN, so resizing the sun reshapes it.
      */
     sun: {
       samples: 5,
       spread: 0.4, // fraction of the sun disc's apparent size covered by the samples
-      intensity: 1.6, // total of all samples (v1: 1.3 from higher up)
+      intensity: 1.6, // total of all samples
       distance: 53, // light distance from the scene origin (shadow camera placement)
     },
     /**
@@ -335,18 +333,18 @@ export const SCENE = {
      * into every sample's shadow map.
      */
     shadow: { mapSize: 1024, near: 1, far: 120, extent: 50, bias: 0, radius: 3 },
-    /** three >= r155 dropped the implicit PI factor of "legacy" lights; restores the v1 brightness. */
+    /** three >= r155 dropped the implicit PI factor of "legacy" lights; makes up for it. */
     legacyScale: Math.PI,
   },
   /**
    * Pushes solid surfaces back so their wireframe children never z-fight (crisp, complete lines).
-   * enabled: false reproduces the v1 look, where lines were thinner, dashed and shimmering.
+   * enabled: false: thinner lines, dashed and shimmering.
    */
   polygonOffset: { enabled: true, factor: 1, units: 1 },
 };
 
 /**
- * Line overlay on models (scene/lines.js): every triangle edge, as in v1, or the modelled
+ * Line overlay on models (scene/lines.js): every triangle edge, or the modelled
  * polygons' outlines (Layer.wirePolygons); the dense lines also hide small model flaws.
  * edgeAngle: a turn this sharp or more is a corner of a polygon's outline (scene/polygons.js).
  * width: triangle lines in world units, so they thin out with distance, never below a pixel
@@ -374,10 +372,10 @@ export const BLOOM = {
 };
 
 /**
- * Solid surfaces. "toon": flat bands of color like crayon fills; "phong": smooth v1 shading.
+ * Solid surfaces. "toon": flat bands of color like crayon fills; "phong": smooth shading.
  * toonSteps: light multipliers from surfaces facing away from the sun to facing it. The middle
  * band (0.2) keeps flat ground as bright as with Phong under the low sunset light.
- * flat: one shade per triangle. Some models ship smooth normals (the v1 hills did), which
+ * flat: one shade per triangle. Some models ship smooth normals (the hills do), which
  * would bend the shading across faces so it no longer matches the wireframe lines.
  */
 export const SHADING = {
@@ -390,9 +388,9 @@ export const CAR = {
   bodyX: -0.013,
   rollCenterY: 0.56, // the body rolls around the axle line, so the wheels stay on the road
   mass: 1160, // kg, in a crash (game/crash.js): a Kredens and 150 kg, on the same floor pan
-  lift: 0.04, // raises body and wheels: v1 tires sat a few mm into the road and looked sunk
+  lift: 0.04, // raises body and wheels: the tyres would sit a few mm into the road
   /**
-   * Wheel model origins (v1 placement): back-left, front-left, back-right, front-right.
+   * Wheel model origins: back-left, front-left, back-right, front-right.
    * The car faces -z, so wheels with z < 0 steer; right wheels (x > 0) are mirrored.
    */
   wheels: [
@@ -406,11 +404,11 @@ export const CAR = {
    * the right meets it. */
   fuelCap: { at: [2.18, 1.39], radius: 0.08 },
   steer: {
-    baseSpeed: 4.8, // units/s as soon as a key is held (v1: 0.08 per frame)
-    maxSpeed: 24, // units/s (v1: 0.4 per frame)
+    baseSpeed: 4.8, // units/s as soon as a key is held
+    maxSpeed: 24, // units/s
     holdAccel: 2.4, // units/s added to the target speed per second of holding the key
-    speedEasing: 0.158, // s: time constant of the speed catching up with its target (v1: 0.1 per frame)
-    decel: 144, // units/s² after release (v1: 0.04 per frame per frame)
+    speedEasing: 0.158, // s: time constant of the speed catching up with its target
+    decel: 144, // units/s² after release
     releaseDamp: 0.45, // speed multiplier on key release
     edgeBrake: 30, // units/s²: free ride brakes into the road edge instead of stopping dead
     roadMargin: 1.975, // the car's travel limit stays this far from the road edge
@@ -430,7 +428,7 @@ export const CAR = {
      * WORLD.speed), by this share of that angle (all of it looks like drifting), softly up to max.
      */
     yaw: { share: 0.4, max: 0.22, easing: 0.12 },
-    /** Body roll (wheels stay upright) per rad/s of yaw rate. outward: false = lean into the turn (v1). */
+    /** Body roll (wheels stay upright) per rad/s of yaw rate. outward: false = lean into the turn. */
     roll: { perYawRate: 0.2, max: 0.08, easing: 0.1, outward: true },
     /**
      * Front wheel angle in radians: where the player steers, plus the swing of the nose (so they
@@ -443,8 +441,8 @@ export const CAR = {
 };
 
 export const SPEED = {
-  wheelSpin: -13.2, // radians/s at speedMultiplier 1 (v1: -0.22 per frame)
-  traffic: 200 / 6, // units per second (v1: boxes crossed the 200-unit world in 6 s)
+  wheelSpin: -13.2, // radians/s at speedMultiplier 1
+  traffic: 200 / 6, // units per second: across the 200-unit world in 6 s
   tierStep: 0.15, // speed multiplier added per tier
   /** km/h per unit/s: what the speeds shown and set in km/h are in the scene's units. */
   get kmh() {
@@ -469,7 +467,6 @@ export const SPAWN = {
       return [-x, x];
     },
   },
-  /** v1 ran two 1.5 s intervals offset by half -> one 0.75 s interval. */
   rocks: {
     models: ["rockmd", "rocksm"],
     interval: 0.75,
@@ -668,8 +665,8 @@ export const MINIGAME = {
     dodge: { start: 50, every: 20, density: 1 },
     /**
      * Crash: the traffic comes at the Bolones fast, and the crash is the goal. It
-     * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel or
-     * bumper torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
+     * scores what it wrecks: `crush` points per kJ the crumple zones take up, `part` per wheel,
+     * bumper or mirror torn off, `post` per palm or rock hit, all of it times the other cars in the wreck.
      * Its drivers are a little slower to react: a few more pile in. How big the pile-up gets is
      * rolled each game: a share (`pileup.share`) of the traffic coming along after the crash does
      * not see the wreck in time (only `seen` seconds later) and runs into it, coming in line with

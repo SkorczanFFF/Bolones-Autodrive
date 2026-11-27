@@ -32,7 +32,7 @@ export function createScenery({ scene, models, materials }) {
   const rocks = rockCfg.models.map((key) =>
     dress(models[key], materials.solid.rock, materials.wire.rock),
   );
-  // they cast no shadows (they still take the cars'): theirs were faint on the dark ground, each
+  // they cast no shadows (they still take the cars'): theirs are faint on the dark ground, each
   // a caster in five sun shadow passes; the cars' stay (scene/car.js, scene/traffic.js)
   for (const model of [palm, ...rocks]) {
     for (const mesh of solidMeshes(model)) mesh.castShadow = false;

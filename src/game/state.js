@@ -18,7 +18,7 @@ const TRANSITIONS = {
   select: { start: "countdown", free: "free", exit: "idle" },
   free: { start: "select", exit: "idle" },
   countdown: { exit: "idle", timeout: "playing" },
-  playing: { exit: "idle", crash: "gameover" }, // start is ignored on purpose (v1 bug: reset mid-game)
+  playing: { exit: "idle", crash: "gameover" }, // start is ignored on purpose: it would reset mid-game
   gameover: { start: "countdown", free: "free", exit: "idle" }, // start: the same minigame again
 };
 

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import {
   OFFSET,
+  SPARSE,
   STATION,
   CORNER_STEPS,
   bars,
@@ -31,11 +32,6 @@ import {
  * @typedef {{ x: number, y: number, w: number }} Spot a point on the body: along, up, across
  */
 
-/**
- * Points inside a flat panel for a crash to bend it (polygons.js fillPoints): every STATION
- * along, every other one up; the stations round it do the rest.
- */
-const SPARSE = /** @type {const} */ ([STATION, 0.03, 2 * STATION]);
 /** The roof's corners, rounded in plan, keep at least this radius, metres. */
 const MIN_RADIUS = 0.02;
 /** Points closer than this are one, metres; a band is closed off where an arch gets this near. */
@@ -148,7 +144,7 @@ export function vanGeometry(model) {
   /** The stations from `a` to `b`. @param {number} a @param {number} b */
   const alongIn = (a, b) => along.filter((x) => x >= a - EPS && x <= b + EPS);
   /** Highest flare at x (-Infinity clear of them). @param {number} x */
-  const flareAt = (x) => Math.max(-Infinity, ...archLines.map(({ outer }) => heightOn(outer, x)));
+  const flareAt = (x) => Math.max(...archLines.map(({ outer }) => heightOn(outer, x)));
   /** Snapped to the nearest band line. @param {number} y */
   const snap = (y) => heights.find((h) => Math.abs(h - y) < EPS) ?? y;
 
@@ -302,7 +298,7 @@ export function vanGeometry(model) {
     }
     // round to the front, across it, back down the left side, round the rear and across it
     const frontArc = cornerArc(tanFront, faceHalf, corner, 1).slice(1);
-    const frontEdge = [faceHalf, ...[...frontW].reverse(), -faceHalf].slice(1, -1);
+    const frontEdge = [...frontW].reverse();
     const rearArc = cornerArc(tanRear, faceHalf, corner, -1);
     /** @type {Point[]} */
     const plan = [

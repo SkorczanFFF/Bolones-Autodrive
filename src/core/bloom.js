@@ -58,7 +58,7 @@ export function createBloom(renderer, scene, camera) {
     }),
   );
 
-  /** @type {Map<THREE.Mesh | THREE.Line, THREE.Material | THREE.Material[]>} */
+  /** @type {Map<THREE.Mesh, THREE.Material | THREE.Material[]>} */
   const swapped = new Map();
   const fogColor = new THREE.Color();
   /** @type {WeakMap<THREE.Material, THREE.Material & { color: THREE.Color }>} */
@@ -84,7 +84,7 @@ export function createBloom(renderer, scene, camera) {
 
   /** Lines glowing less than fully: their dimmed copies. @param {THREE.Object3D} object */
   function dim(object) {
-    if (!(object instanceof THREE.Mesh || object instanceof THREE.Line)) return;
+    if (!(object instanceof THREE.Mesh)) return;
     const { material } = object;
     if (!object.layers.isEnabled(BLOOM.layer) || Array.isArray(material)) return;
     const factor = material.userData.glow ?? WIRE.glow;

@@ -15,8 +15,8 @@ import { unzlibSync } from "three/addons/libs/fflate.module.js";
 
 /**
  * FBXLoader that splits n-gons into triangle fans, like the loader the models were made with
- * (three r116). Since r15x FBXLoader flattens each n-gon and runs earcut on it, which drops and
- * flips triangles of non-planar quads (the v1 hills lost 37 of their 252), leaving holes with
+ * (three r116). three's own flattens each n-gon and runs earcut on it, which drops and flips
+ * triangles of non-planar quads (the hills lose 37 of their 252), leaving holes with
  * back faces and wire edges showing through. GeometryParser is not exported, so the
  * triangulation is swapped for the duration of the (synchronous) parse. Mesh geometries get
  * `userData.polygons` (Polygons).

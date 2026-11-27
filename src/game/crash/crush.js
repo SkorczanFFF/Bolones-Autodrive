@@ -386,13 +386,7 @@ export function createCrushes(world, met) {
         const done = last.free !== undefined || stale > last.capacity;
         const wide = (last.share ?? 0) >= interlock.overlap;
         const beyond = stale - (wide ? last.deepest : 0);
-        if (facing.lengthSq() < 0.5) {
-          crush = undefined; // rolled over: the faces they met through face up or down now
-        } else if (
-          done &&
-          least.normal.dot(facing) < Math.SQRT1_2 &&
-          beyond > least.depth + SLACK
-        ) {
+        if (done && least.normal.dot(facing) < Math.SQRT1_2 && beyond > least.depth + SLACK) {
           crush = undefined;
         } else if (last.nudge && -relative.dot(facing) >= nudge * METRE) {
           crush = undefined;

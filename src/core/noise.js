@@ -118,7 +118,7 @@ const smooth = (t) => t * t * (3 - 2 * t);
  * @param {number} cell
  */
 export function valueNoise({ x, y, z }, seed, cell) {
-  // plain numbers, no arrays: a crash takes it twice for every point it crushes
+  // plain numbers, no arrays: a crash takes it several times for every point it crushes
   const fx = x / cell;
   const fy = y / cell;
   const fz = z / cell;

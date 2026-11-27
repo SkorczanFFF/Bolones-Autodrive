@@ -334,7 +334,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
   const bodies = cars.map((car, i) => board(car, i > 0));
   /** @typedef {(typeof bodies)[number]} Body */
   /**
-   * Parts torn off in a frame's physics steps, taken away after them: how far the crush pushes
+   * Parts torn off (crushed past, or a mirror touching the road), taken away once the cars are
+   * posed: how far the crush pushes
    * each and the way it went in, as the car was heading then (`heading`).
    *
    * @type {{ car: Body, node: THREE.Object3D, by: THREE.Vector3, into: THREE.Vector3, heading: number, speed: number }[]}

@@ -59,7 +59,6 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     vec2 p = vLocal / uRadius; // disc of radius 1, centre on the horizon line
-    if (p.y < 0.0) discard;    // only the upper half, as in v1
 
     float r = length(p);
     float edge = fwidth(r);
@@ -81,9 +80,9 @@ const fragmentShader = /* glsl */ `
 
 /**
  * Synthwave sun: gradient from `bottom` (horizon) to `top`, horizontal cuts in the lower part
- * and a soft halo. Replaces the v1 half disc + striped texture overlay (suneffectalt.png).
+ * and a soft halo.
  * `topColor` / `bottomColor` are the uniforms themselves (the GUI sets them); `effect` toggles
- * gradient, cuts and halo (off = plain disc in the top color, like v1 without the overlay).
+ * gradient, cuts and halo (off = plain disc in the top color).
  *
  * @param {{
  *   top: THREE.ColorRepresentation,

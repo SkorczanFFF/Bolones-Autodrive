@@ -26,7 +26,7 @@ import { createSunMaterial } from "./sunMaterial.js";
  */
 
 /**
- * The only place that creates scene materials. Colors come from LAYERS and SUN.
+ * Creates the layers', the sun's and the headlights' materials. Colors come from LAYERS and SUN.
  *
  * @param {Record<string, THREE.Texture>} textures
  * @param {number} anisotropy

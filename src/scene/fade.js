@@ -1,8 +1,8 @@
 import * as THREE from "three";
 
-/** @typedef {THREE.MeshBasicMaterial | THREE.MeshPhongMaterial | THREE.LineBasicMaterial} ColoredMaterial */
+/** @typedef {THREE.MeshBasicMaterial | THREE.MeshPhongMaterial | THREE.MeshToonMaterial} ColoredMaterial */
 
-/** @typedef {[THREE.Mesh | THREE.Line, ColoredMaterial, ColoredMaterial][]} Swaps object, shared, own copy */
+/** @typedef {[THREE.Mesh, ColoredMaterial, ColoredMaterial][]} Swaps object, shared, own copy */
 
 /**
  * Makes objects partly transparent (spawn fade-in, fade-out before removal). Materials are shared
@@ -32,8 +32,7 @@ export function createFader() {
     /** @type {Swaps} */
     const swaps = [];
     object.traverse((child) => {
-      const drawable = child instanceof THREE.Mesh || child instanceof THREE.Line; // outlines too
-      if (!drawable || Array.isArray(child.material)) return;
+      if (!(child instanceof THREE.Mesh) || Array.isArray(child.material)) return;
       const shared = /** @type {ColoredMaterial} */ (child.material);
       const own = copyOf(shared);
       child.material = own;

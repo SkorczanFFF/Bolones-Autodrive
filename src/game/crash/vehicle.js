@@ -74,20 +74,21 @@ export function createVehicle(world, body, rig, centre, groups) {
       point,
       axle,
       rest,
-      toe: 0, // radians: a wheel broken or pushed askew
+      toe: 0, // radians: a wheel broken (one pushed askew turns its axle: skew)
       lost: false,
       from: { spin: spin.rotation.x, steer: steer.rotation.y },
     };
   });
   let steering = 0;
   // the anti-roll bars: the wheels of an axle, left and right
-  const bars = wheels.flatMap((left, i) =>
-    wheels
-      .map((right, j) => /** @type {const} */ ([i, j, right]))
-      .filter(([, j, right]) => j > i && Math.abs(along[j] - along[i]) < 1e-3)
-      .filter(([, , right]) => right.mount.position.x * left.mount.position.x < 0)
-      .map(([, j]) => /** @type {const} */ ([i, j])),
-  );
+  /** @type {[number, number][]} */
+  const bars = [];
+  for (let i = 0; i < wheels.length; i++) {
+    for (let j = i + 1; j < wheels.length; j++) {
+      const across = wheels[i].mount.position.x * wheels[j].mount.position.x < 0;
+      if (across && Math.abs(along[j] - along[i]) < 1e-3) bars.push([i, j]);
+    }
+  }
   const { moving } = car;
   let tip = car.tip;
   const { antiRoll } = car.springs;

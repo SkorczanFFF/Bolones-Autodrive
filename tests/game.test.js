@@ -629,7 +629,7 @@ describe("overtake", () => {
     const { world, minigame, run, play } = setup();
     /** @type {number[]} */
     const levels = [];
-    const recording = (/** @type {number} */ dt, /** @type {number} */ speed, level = speed) => {
+    const recording = (/** @type {number} */ _dt, /** @type {number} */ speed, level = speed) => {
       levels.push(level);
       return { crashed: false, scored: false };
     };

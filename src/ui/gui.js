@@ -54,8 +54,7 @@ export function createSceneGui({ scene, materials, world, crt, tweens, bloom, de
   const picker = createColorPicker({ touch, small, beside: gui.domElement });
 
   /**
-   * What "Randomize all" gives a color control (ui/randomPalette.js); a layer's line is picked
-   * against its own fill.
+   * What "Randomize all" gives a color control (ui/randomPalette.js).
    *
    * @typedef {{ role: import("./randomPalette.js").PaletteRole, layer?: string }} ColorRole
    */
@@ -291,23 +290,17 @@ export function createSceneGui({ scene, materials, world, crt, tweens, bloom, de
   const mixed = new THREE.Color();
 
   /**
-   * Blends every color control to a fresh random palette (night, day or mixed, lines always
-   * readable against their fill, see ui/randomPalette.js); the controllers' onChange applies it.
+   * Blends every color control to a fresh random palette (the default one's turned round, by
+   * night, by day or mixed, lines always readable against their fill, see ui/randomPalette.js);
+   * the controllers' onChange applies it.
    */
   function randomize() {
     if (randomizing?.isActive()) return;
     const palette = createRandomPalette();
-    /** @type {Record<string, string>} new fill per layer, for its line */
-    const fills = {};
     const targets = colors.map(({ controller, role, layer = "" }) => ({
       controller,
       from: /** @type {string} */ (controller.getValue()),
-      to:
-        role === "wire"
-          ? palette.wire(fills[layer])
-          : role === "solid"
-            ? (fills[layer] = palette.solid())
-            : palette[role](),
+      to: role === "solid" || role === "wire" ? palette.layers[layer][role] : palette[role],
     }));
     randomizing = tweens.add({
       duration: RANGES.randomizeDuration,

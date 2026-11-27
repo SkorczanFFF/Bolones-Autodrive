@@ -1,116 +1,181 @@
+import { CRT, LAYERS, NIGHT, SCENE, SUN } from "../config.js";
 import { createRandom } from "../core/random.js";
-import { contrast, hsl, hueDistance, hueOf, luminance } from "./color.js";
+import { contrast, luminance, oklch, oklchOf } from "./color.js";
+
+/** @typedef {import("./color.js").Oklch} Oklch */
 
 /**
- * Hue schemes for "Randomize all", as offsets from a random base hue (in turns): complementary,
- * triad, split complementary, analogous with an accent. A few related hues read as one palette;
- * colors picked independently read as noise.
+ * The default palette (config.LAYERS, SCENE, SUN, NIGHT, CRT) in oklch: every random palette is
+ * made from it, keeping what each color does in it. The fills are a family (the landscape's
+ * violets, the rocks' and the traffic's blues, the Bolones the most colorful of them); every
+ * layer's lines have a hue of their own (the Bolones' pink apart from the traffic's lavender, the
+ * rocks' cyan and the palms' orange); the sun goes from the road's yellow to the Bolones' pink,
+ * the fog glows in the Bolones' hue.
  */
-const SCHEMES = [
-  [0, 1 / 2],
-  [0, 1 / 3, 2 / 3],
-  [0, 5 / 12, 7 / 12],
-  [0, 1 / 12, 1 / 2],
-];
+const TEMPLATE = {
+  layers: Object.fromEntries(
+    Object.entries(LAYERS).map(([key, { solid, wire }]) => [
+      key,
+      { solid: oklchOf(solid), wire: oklchOf(wire) },
+    ]),
+  ),
+  sky: oklchOf(SCENE.background),
+  fog: oklchOf(SCENE.fog.color),
+  sunTop: oklchOf(SUN.top),
+  sunBottom: oklchOf(SUN.bottom),
+  night: oklchOf(NIGHT.color),
+  stars: oklchOf(NIGHT.starColor),
+  moon: oklchOf(NIGHT.moon.color),
+  crt: oklchOf(CRT.lineColor),
+};
+
+/** The things on the road; the other layers and the sky are the world they are in. */
+const THINGS = new Set(["bolones", "traffic", "palm", "rock"]);
 
 /**
  * Contrast (WCAG ratio) a line needs against its fill to stand out: the coloring-book look. 3:1
- * is the WCAG minimum for graphics; it leaves the lines saturated instead of pushing them
+ * is the WCAG minimum for graphics; it leaves the lines colorful instead of pushing them
  * towards white (on dark fills) or black (on light ones).
  */
 export const MIN_LINE_CONTRAST = 3;
 
-/** Lines are brightened (or darkened) up to these lightnesses to reach it, staying colorful. */
-const MAX_LINE_LIGHTNESS = 0.85;
-const MIN_LINE_LIGHTNESS = 0.12;
+/** Fills at least this bright (relative luminance) get lines darker than them, not lighter. */
+const LIGHT_FILL = 0.18;
 
 /**
- * Palette moods, with their odds: "night" is the default look (dark fills, neon lines, dark sky);
- * "day" turns it inside out (light fills, dark lines, light sky); "mixed" flips a coin for every
- * layer.
+ * Palette moods, with their odds: "night" is the default look (dark fills, neon lines, a dark sky
+ * glowing at the horizon); "day" turns it pastel (soft colorful fills, deep lines, a light sky);
+ * "mixed" gives the things on the road one of them, the world the other.
  *
  * @typedef {"night" | "day" | "mixed"} PaletteMood
  * @type {[PaletteMood, number][]}
  */
 const MOODS = [
-  ["night", 0.4],
-  ["day", 0.3],
-  ["mixed", 0.3],
+  ["night", 0.45],
+  ["day", 0.35],
+  ["mixed", 0.2],
 ];
 
-/** Fills at least this bright (relative luminance) get dark lines instead of neon ones. */
-const LIGHT_FILL = 0.18;
+/**
+ * How much lighter a pastel of a hue (oklch degrees) is picked: the most at yellow, none from 45°
+ * either side of it.
+ *
+ * @param {number} hue
+ */
+const yellow = (hue) => 0.12 * Math.max(0, Math.cos(((hue - 105) * Math.PI) / 90));
 
 /**
- * A random retrowave palette in one of the MOODS: a few related hues of a scheme, lines in
- * another hue than their fill and always readable against it (neon on dark fills, dark on light
- * ones). Every call of a role gives a new color of that role.
+ * How light and how colorful a color of the template comes out by night and by day (oklch
+ * lightness, chroma). By night as it is. By day inside out: a layer's fill is its lines' color made
+ * pastel (every layer a hue of its own, as colorful as its lines were; turned as far from it as
+ * its fill is from the landscape's, as the rocks' from the ground they lie on, whose lines are
+ * alike), its lines its fill's made deep (the coloring book's outlines); the sky and the fog a light haze, the sun pastel from its
+ * top to its bottom, the scan lines dark. Lit, a fill comes out up to about 2.5 times as bright
+ * (SCENE.lights): a pastel picked as it should look would come out white. A yellow one is picked
+ * lighter (`yellow`): as light as the others, it would come out mustard. The night behind the
+ * car, its stars and moon stay as they are.
+ *
+ * @type {Record<"night" | "day", Record<string, (color: Oklch, hue: number) => { l: number, c: number }>>}
+ */
+const LOOKS = {
+  night: {},
+  day: {
+    solid: ({ l, c }, hue) => ({ l: 0.68 + 0.15 * (l - 0.75) + yellow(hue), c: 0.55 * c }),
+    wire: ({ l, c }) => ({ l: 0.3 + 0.5 * (l - 0.14), c: 0.1 + 0.5 * c }),
+    sky: () => ({ l: 0.86, c: 0.07 }),
+    fog: ({ c }) => ({ l: 0.88, c: 0.5 * c }),
+    sunTop: ({ c }) => ({ l: 0.9, c: 0.8 * c }),
+    sunBottom: ({ c }) => ({ l: 0.74, c: 0.8 * c }),
+    crt: ({ c }) => ({ l: 0.45, c }),
+  },
+};
+
+/**
+ * A random palette made from the default one: its hues turned round together (mirrored or not),
+ * so every color keeps its part (the landscape one family, every layer's lines their own hue, the
+ * Bolones apart from the rest), in one of the MOODS; lines always readable against their fill.
+ * The fills' family (by day the lines') stays mint to red through blue: lit, a dark olive or a
+ * yellow-green pastel comes out muddy.
  *
  * @param {() => number} [random] numbers in [0, 1), e.g. seeded in tests
  */
 export function createRandomPalette(random = Math.random) {
-  const { between, pick } = createRandom(random);
+  const { between } = createRandom(random);
   let roll = random();
   const [mood] = /** @type {[PaletteMood, number]} */ (
     MOODS.find(([, odds]) => (roll -= odds) < 0) ?? MOODS[0]
   );
-  const day = mood === "day";
-  const base = random();
-  const hues = pick(SCHEMES).map((offset) => (base + offset) % 1);
-  const anyHue = () => pick(hues);
-  const jitter = (/** @type {number} */ hue, /** @type {number} */ amount) =>
-    (hue + between(-amount, amount) + 1) % 1;
+  const world = mood === "mixed" ? (random() < 0.5 ? "night" : "day") : mood;
+  const things = mood === "mixed" ? (world === "night" ? "day" : "night") : mood;
+  // the turn: the landscape's hue goes there, the others along (or mirrored about it)
+  const anchor = TEMPLATE.sky.h;
+  const to = between(150, 390);
+  const mirror = random() < 0.5 ? -1 : 1;
+  const vivid = between(0.85, 1.15); // all of it a little more or less colorful
 
-  const darkFill = () => hsl(jitter(anyHue(), 0.04), between(0.45, 0.85), between(0.05, 0.13));
-  const lightFill = () => hsl(jitter(anyHue(), 0.04), between(0.45, 0.8), between(0.72, 0.88));
+  /**
+   * A color of the template in this palette: its hue turned (a few degrees either way), as light
+   * and as colorful as the mood makes its role.
+   *
+   * @param {Oklch} color
+   * @param {string} role
+   * @param {"night" | "day"} look
+   */
+  const made = (color, role, look) => {
+    const turned = mirror * (color.h - anchor) + to + between(-4, 4);
+    const h = ((turned % 360) + 360) % 360;
+    const { l, c } = LOOKS[look][role]?.(color, h) ?? color;
+    return { l: l + between(-0.03, 0.03), c: c * vivid * between(0.9, 1.1), h };
+  };
+  const hex = (/** @type {Oklch} */ { l, c, h }) => oklch(l, c, h);
 
+  /**
+   * A line for a fill: lighter on a dark fill, darker on a light one, until it stands out.
+   *
+   * @param {Oklch} line
+   * @param {string} fill
+   */
+  const readable = (line, fill) => {
+    const step = luminance(fill) >= LIGHT_FILL ? -0.03 : 0.03;
+    let { l } = line;
+    let color = hex(line);
+    while (contrast(color, fill) < MIN_LINE_CONTRAST && l > 0.15 && l < 0.97) {
+      l += step;
+      color = oklch(l, line.c, line.h);
+    }
+    return color;
+  };
+
+  const layers = Object.fromEntries(
+    Object.entries(TEMPLATE.layers).map(([key, { solid, wire }]) => {
+      const look = THINGS.has(key) ? things : world;
+      const [filled, lined] =
+        look === "day" ? [{ ...wire, h: wire.h + solid.h - anchor }, solid] : [solid, wire];
+      const fill = hex(made(filled, "solid", look));
+      return [key, { solid: fill, wire: readable(made(lined, "wire", look), fill) }];
+    }),
+  );
+  /** @param {"sky" | "fog" | "sunTop" | "sunBottom" | "crt"} role */
+  const sky = (role) => hex(made(TEMPLATE[role], role, world));
   return {
     mood,
-
-    /** Model fill: dark at night, light by day, either when mixed. */
-    solid: () => (day || (mood === "mixed" && random() < 0.5) ? lightFill() : darkFill()),
-
-    /**
-     * Line for a fill, in another hue of the scheme: neon brightened on a dark fill, deep and
-     * darkened on a light one, until it stands out.
-     *
-     * @param {string} fill
-     */
-    wire(fill) {
-      const fillHue = hueOf(fill);
-      const others = hues.filter((hue) => hueDistance(hue, fillHue) > 0.12);
-      const hue = jitter(pick(others.length > 0 ? others : hues), 0.03);
-      const saturation = between(0.85, 1);
-      const onLight = luminance(fill) >= LIGHT_FILL;
-      const limit = onLight ? MIN_LINE_LIGHTNESS : MAX_LINE_LIGHTNESS;
-      let lightness = onLight ? between(0.3, 0.4) : between(0.55, 0.65);
-      let color = hsl(hue, saturation, lightness);
-      while (contrast(color, fill) < MIN_LINE_CONTRAST && lightness !== limit) {
-        // a step towards the limit, never past it
-        lightness = onLight ? Math.max(lightness - 0.05, limit) : Math.min(lightness + 0.05, limit);
-        color = hsl(hue, saturation, lightness);
-      }
-      return color;
-    },
-
-    sky: () =>
-      hsl(
-        jitter(hues[0], 0.05),
-        between(0.5, 0.8),
-        day ? between(0.72, 0.85) : between(0.06, 0.12),
-      ),
-    // the horizon glow: bright at night, a pastel haze by day
-    fog: () => hsl(anyHue(), between(0.75, 1), day ? between(0.6, 0.72) : between(0.3, 0.42)),
-    sunTop: () =>
-      hsl(jitter(anyHue(), 0.05), between(0.9, 1), day ? between(0.55, 0.65) : between(0.6, 0.72)),
-    sunBottom: () => hsl(anyHue(), between(0.9, 1), day ? between(0.42, 0.52) : between(0.5, 0.6)),
+    /** @type {Record<string, { solid: string, wire: string }>} each layer's fill and lines */
+    layers,
+    sky: sky("sky"),
+    fog: sky("fog"),
+    sunTop: sky("sunTop"),
+    sunBottom: sky("sunBottom"),
+    crt: sky("crt"),
     // the night behind the car stays night in every mood, with pale stars and moon
-    night: () => hsl(jitter(hues[0], 0.05), between(0.5, 0.8), between(0.03, 0.07)),
-    stars: () => hsl(anyHue(), between(0.2, 0.5), between(0.86, 0.95)),
-    moon: () => hsl(anyHue(), between(0.3, 0.6), between(0.8, 0.9)),
-    // faint scan lines: light at night, dark by day
-    crt: () => hsl(anyHue(), between(0.5, 0.8), day ? between(0.3, 0.4) : between(0.75, 0.85)),
+    night: hex(made(TEMPLATE.night, "night", "night")),
+    stars: hex(made(TEMPLATE.stars, "stars", "night")),
+    moon: hex(made(TEMPLATE.moon, "moon", "night")),
   };
 }
 
-/** @typedef {Exclude<keyof ReturnType<typeof createRandomPalette>, "mood">} PaletteRole */
+/** @typedef {ReturnType<typeof createRandomPalette>} Palette */
+/**
+ * What "Randomize all" gives a color control: a layer's fill or lines, or a color of the sky.
+ *
+ * @typedef {"solid" | "wire" | Exclude<keyof Palette, "mood" | "layers">} PaletteRole
+ */

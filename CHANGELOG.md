@@ -93,6 +93,15 @@ lets you recolor and tweak everything.
 - Crashes stutter less: a car crumples about a quarter faster, its dent no longer copies all of
   its points every frame, and a device too slow to keep up plays the crash in slower motion
   rather than in ever longer frames (at most 1/30 s of it a frame).
+- "Randomize all" makes its palettes out of the default one: all its colors turn round the color
+  wheel together (mirrored or not), so each keeps its part in it. The landscape stays one family
+  of colors, every layer's lines get a color of their own, the Bolones stands apart from the
+  traffic, the rocks and the palms, and the sun runs from top to bottom as far round as the
+  default's (two or three hues went to every layer at random). By day a palette turns inside out
+  into pastels: every layer a soft color of its own under deep outlines, picked darker than it
+  shows, as the light brightens it (they came out white). A mixed palette gives the cars, the
+  palms and the rocks one mood and the landscape and the sky the other. The landscape is never a
+  muddy olive.
 - Lighter frames and loading: the traffic is built about a third faster (on a desktop 0.6 s
   instead of 0.9); the palms and rocks send the graphics card only the copies drawn, the side
   hills only what moved, and the mountain sliders no longer rebuild the city. A dent skips the

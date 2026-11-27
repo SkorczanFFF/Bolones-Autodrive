@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   contrast,
   hexToHsv,
-  hsl,
-  hslOf,
   hsvToHex,
   luminance,
+  oklch,
   oklchHue,
+  oklchOf,
   parseHex,
 } from "../src/ui/color.js";
 import { PALETTE } from "../src/config.js";
@@ -27,10 +27,12 @@ describe("color math", () => {
       expect(contrast("#000000", "#ffffff")).toBeCloseTo(21);
     });
 
-    it(`round-trips HSL as seen on screen with ColorManagement ${enabled ? "on" : "off"}`, () => {
+    it(`round-trips oklch as seen on screen with ColorManagement ${enabled ? "on" : "off"}`, () => {
       THREE.ColorManagement.enabled = enabled;
-      expect(hsl(0, 1, 0.5)).toBe("#ff0000");
-      expect(hslOf(PALETTE.uiDeep).l).toBeCloseTo(0.2216, 3);
+      for (const color of Object.values(PALETTE)) {
+        const { l, c, h } = oklchOf(color);
+        expect(oklch(l, c, h)).toBe(color);
+      }
     });
   }
 
@@ -38,6 +40,16 @@ describe("color math", () => {
     expect(oklchHue("#ff0000")).toBeCloseTo(29.2, 0);
     expect(oklchHue("#00ff00")).toBeCloseTo(142.5, 0);
     expect(oklchHue("#0000ff")).toBeCloseTo(264.1, 0);
+    expect(oklchOf("#ffffff").l).toBeCloseTo(1);
+  });
+
+  it("brings an oklch color too colorful for the screen into it, lightness and hue kept", () => {
+    const asked = { l: 0.85, c: 0.4, h: 250 }; // no sky blue this light is this colorful
+    const made = oklchOf(oklch(asked.l, asked.c, asked.h));
+    expect(made.c).toBeLessThan(asked.c);
+    expect(made.c).toBeGreaterThan(0.05); // as colorful as it goes, not gray
+    expect(made.l).toBeCloseTo(asked.l, 2);
+    expect(made.h).toBeCloseTo(asked.h, 0);
   });
 
   it("turns HSV into hex and back, for the color picker", () => {

@@ -4,10 +4,8 @@ import { createRandom, pick, randomIn, randomInt } from "../core/random.js";
 import { wheelsOf } from "../scene/rig.js";
 import { createSpawner } from "../scene/spawner.js";
 import { createTrafficModels, drawFar, widestReach } from "../scene/traffic.js";
-import { boundsOf } from "../scene/instances.js";
-import { solidMeshes } from "../scene/wire.js";
 import { createCrash } from "./crash.js";
-import { convexOutline } from "./crash/boxes.js";
+import { roadside } from "./crash/posts.js";
 
 /** @typedef {import("../config.js").Mode} Mode */
 
@@ -79,51 +77,6 @@ function hitboxOf(car, target, which = "hitbox") {
 /** Below this (of WORLD.speed) the camera has come to rest after a crash. */
 export const MOVING = 0.05;
 
-/** The heights a palm's trunk is measured at for a crash: where the cars hit it, units. */
-const TRUNK = [0.5, 1.8];
-
-/**
- * A palm's trunk where the cars hit it (TRUNK), in the palm's frame: the middle and half the
- * width of what is there (the trunk, leaning a little).
- *
- * @param {THREE.Object3D} palm the model of the palms
- */
-function trunkOf(palm) {
-  const points = pointsOf(palm).filter(({ y }) => y > TRUNK[0] && y < TRUNK[1]);
-  const box = new THREE.Box3().setFromPoints(points);
-  const centre = box.getCenter(new THREE.Vector3()).setY(0);
-  const size = box.getSize(new THREE.Vector3());
-  return { centre, radius: (size.x + size.z) / 4 };
-}
-
-/**
- * A rock seen from above, in its frame: the outline round it (x, z).
- *
- * @param {THREE.Object3D} rock the model of a rock
- */
-const outlineOf = (rock) =>
-  convexOutline(pointsOf(rock).map(({ x, z }) => new THREE.Vector2(x, z)));
-
-/**
- * The points of a model's meshes, in its frame.
- *
- * @param {THREE.Object3D} model
- */
-function pointsOf(model) {
-  model.updateWorldMatrix(true, true);
-  const toModel = model.matrixWorld.clone().invert();
-  /** @type {THREE.Vector3[]} */
-  const points = [];
-  for (const mesh of solidMeshes(model)) {
-    const position = mesh.geometry.getAttribute("position");
-    const matrix = toModel.clone().multiply(mesh.matrixWorld);
-    for (let i = 0; i < position.count; i++) {
-      points.push(new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix));
-    }
-  }
-  return points;
-}
-
 /**
  * @typedef {object} Damage what a crash has wrecked so far, crash mode's score
  * @property {number} kJ the crumple zones took up
@@ -154,10 +107,6 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
   /** @type {Mode} */
   let mode = "dodge";
   let platoon = 0; // overtake: how many of the group towards the Bolones are still to come
-  /** @type {ReturnType<typeof trunkOf> | undefined} */
-  let trunk; // the palms are copies of one model: one trunk, measured at the first crash
-  /** @type {Map<THREE.Object3D, THREE.Vector2[]>} the rocks' models, each outline measured once */
-  const outlines = new Map();
   let pileup = 0; // crash mode: the share of the late traffic that runs in, rolled each game
   let keepComing = MINIGAME.crash.keepComing; // s, this game
   let forward = 0; // after a crash: how fast the camera goes on along the road, of WORLD.speed
@@ -353,47 +302,6 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     // the physics has the traffic now: wherever it goes, it stays to be seen (and hit)
     for (const stream of streams) stream.keeping = true;
     const road = WORLD.speed * world;
-    // every palm and rock by the road, measured where it is when it comes up
-    /** @type {WeakMap<THREE.Object3D, import("./crash.js").Post>} */
-    const measured = new WeakMap();
-    /** @param {THREE.Object3D} palm */
-    const palmPost = (palm) => {
-      const { centre, radius } = (trunk ??= trunkOf(palm.userData.model)); // scene/instances.js
-      palm.updateWorldMatrix(true, false);
-      const at = palm.localToWorld(centre.clone()).setY(0);
-      const color = colorOf(materials.wire.palm);
-      return { object: palm, at, radius: radius * palm.scale.x, sways: true, color };
-    };
-    /** @param {THREE.Object3D} rock */
-    const rockPost = (rock) => {
-      const bounds = boundsOf(rock);
-      const { x, z } = bounds.getCenter(new THREE.Vector3());
-      const at = new THREE.Vector3(x, bounds.min.y, z);
-      /** @type {THREE.Object3D} */
-      const model = rock.userData.model; // scene/instances.js
-      let around = outlines.get(model);
-      if (!around) outlines.set(model, (around = outlineOf(model)));
-      // as the rock stands, turned and scaled, round its middle (boundsOf brought it up to date)
-      const outline = around.map((p) => {
-        const { x: px, z: pz } = rock.localToWorld(new THREE.Vector3(p.x, 0, p.y));
-        return new THREE.Vector2(px - x, pz - z);
-      });
-      const radius = Math.max(...outline.map((p) => p.length()));
-      return { object: rock, at, radius, outline, height: bounds.max.y - bounds.min.y };
-    };
-    /**
-     * @param {THREE.Object3D} object
-     * @param {(object: THREE.Object3D) => import("./crash.js").Post} measure
-     */
-    const known = (object, measure) => {
-      let post = measured.get(object);
-      if (!post) measured.set(object, (post = measure(object)));
-      return post;
-    };
-    const posts = () => [
-      ...palms.map((palm) => known(palm, palmPost)),
-      ...rocks.map((rock) => known(rock, rockPost)),
-    ];
     crash = createCrash(
       scene,
       [
@@ -403,7 +311,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
           .filter((other) => other !== obstacle)
           .map(asCar),
       ],
-      posts,
+      roadside(palms, rocks, colorOf(materials.wire.palm)),
     );
   }
 

@@ -1,35 +1,38 @@
 import * as THREE from "three";
 import {
-  OFFSET,
+  bars,
+  CORNER_STEPS,
+  densify,
+  fillPoints,
+  mirrored,
+  rectangle,
+  rounded,
   SPARSE,
   STATION,
-  CORNER_STEPS,
-  bars,
+} from "./outline.js";
+import { zipBy } from "./triangulate.js";
+import {
   builtIn,
   byFaces,
-  densify,
   face,
   facingPositions,
-  fillPoints,
   fineFace,
   flatGeometry,
   glassTriangles,
   innerEdges,
   joined,
-  mirrored,
+  OFFSET,
   recessed,
-  rectangle,
-  rounded,
   withPolygons,
-  zipBy,
 } from "./polygons.js";
 
 /**
- * @typedef {import("./polygons.js").Point} Point
+ * @typedef {import("./outline.js").Point} Point
  * @typedef {import("./polygons.js").Part} Part
  * @typedef {import("./trafficModels.js").VanModel} VanModel
  * @typedef {import("./trafficModels.js").Mark} Mark
  * @typedef {{ x: number, y: number, w: number }} Spot a point on the body: along, up, across
+ * @typedef {ReturnType<typeof vanContext>} VanContext what the sections of a van share
  */
 
 /** The roof's corners, rounded in plan, keep at least this radius, metres. */
@@ -64,7 +67,7 @@ const distinct = (values) =>
 /**
  * A van (VanModel, scene/trafficModels.js), in metres, its origin on the ground in the
  * middle of its length, its front towards +z: the body as one geometry, with `userData.polygons`
- * (its lines run round the polygons, see scene/traffic.js), and the lit lamps, one geometry each.
+ * (its lines run round the polygons, see scene/polygons.js), and the lit lamps, one geometry each.
  *
  * Below the belt the body runs round the plan (a rectangle, its corners rounded) in bands
  * between the sill, the ribs and the belt, each band a polygon all round the rear and along each
@@ -80,12 +83,36 @@ const distinct = (values) =>
  * @returns {{ body: THREE.BufferGeometry, lamps: THREE.BufferGeometry[] }}
  */
 export function vanGeometry(model) {
+  const context = vanContext(model);
+  addBands(context);
+  addFrontPanel(context);
+  addArches(context);
+  addUnderside(context);
+  addWalls(context);
+  addTailgate(context);
+  addCab(context);
+  addRoof(context);
+  addDetails(context);
+  return assembled(context);
+}
+
+/**
+ * What the sections of a van share: its measurements, the walls and the tailgate leaning in above
+ * the belt, the corners rounded in plan, the points along and up the body where the pieces of one
+ * section meet another's, and the pieces of the body as the sections add them.
+ *
+ * @param {VanModel} model
+ */
+function vanContext(model) {
   const { van, wheel, length } = model;
   const [rear, front] = van.ends;
   const { half, corner, sill, belt, gutter, cab, roof } = van;
   const [tanRear, tanFront] = [rear + corner, front - corner]; // where the sides meet the corners
   const faceHalf = half - corner; // the end faces' flat half width
   const heights = [sill, ...van.ribs, belt];
+  // the corners below the belt, [along, across]: from the sides round to the end faces
+  const rearArc = cornerArc(tanRear, faceHalf, corner, -1);
+  const frontArc = cornerArc(tanFront, faceHalf, corner, 1);
 
   // above the belt: the walls lean in, the tailgate leans forward, its corners tighten
   const lean = (half - gutter.half) / (gutter.y - belt);
@@ -125,8 +152,7 @@ export function vanGeometry(model) {
     for (const pane of recessed(rim, triangles, at, out)) add(pane, own("glass"), mirror);
   };
 
-  // --- the lower body: bands round the plan, cut round the arches ---------------------------
-
+  // below the belt: each arch's edge and its flare's outer edge, the side panels' edges
   const archLines = van.arches.map((arch) => {
     const inner = rounded(arch, [0, van.archRound, van.archRound, 0]);
     return { inner, outer: offsetArch(inner, van.lip, sill) };
@@ -143,16 +169,105 @@ export function vanGeometry(model) {
   ]).filter((x) => x >= tanRear - EPS && x <= tanFront + EPS);
   /** The stations from `a` to `b`. @param {number} a @param {number} b */
   const alongIn = (a, b) => along.filter((x) => x >= a - EPS && x <= b + EPS);
-  /** Highest flare at x (-Infinity clear of them). @param {number} x */
-  const flareAt = (x) => Math.max(...archLines.map(({ outer }) => heightOn(outer, x)));
   /** Snapped to the nearest band line. @param {number} y */
   const snap = (y) => heights.find((h) => Math.abs(h - y) < EPS) ?? y;
-
   const side = new THREE.Vector3(1, 0, 0);
   const sideAt = (/** @type {Point} */ [x, y]) => at3(x, y, half);
-  const rearW = steps(0, faceHalf, STATION);
-  const frontW = between(-van.panel, van.panel, 8);
+  const rearW = steps(0, faceHalf, STATION); // across the rear face, from its middle to the corner
+  const frontW = between(-van.panel, van.panel, 8); // across the front face's middle panel
+  // how far across the wheel wells' inner walls stand: a little inside the tyres
+  const wellHalf = Math.min(...wheel.track) / 2 - wheel.width / 2 - 0.03;
 
+  // stations across half the windscreen (flat: the roof over it needs them to crown), up the
+  // corner windows
+  const screenSteps = 2;
+  const upright = steps(belt, gutter.y, STATION); // up the walls' rear edges and corners
+  const [screenX, screenY] = cab.screenBottom;
+  const [topX, topY] = cab.screenTop;
+  // along the gutter, from the rear corner to the pillar: the stations and the seams
+  const top = distinct([...steps(tanRear, cab.pillar, STATION), ...van.seams]);
+  const gutterRear = steps(0, tailHalf(gutter.y), STATION); // across the tailgate's top
+
+  return {
+    van,
+    wheel,
+    length,
+    rear,
+    front,
+    half,
+    sill,
+    belt,
+    gutter,
+    cab,
+    roof,
+    tanRear,
+    tanFront,
+    faceHalf,
+    heights,
+    rearArc,
+    frontArc,
+    wallHalf,
+    radiusAt,
+    tailHalf,
+    wallNormal,
+    wallAt,
+    tailNormal,
+    tailAt,
+    right,
+    whole,
+    add,
+    own,
+    glass,
+    archLines,
+    panels,
+    along,
+    alongIn,
+    snap,
+    side,
+    sideAt,
+    rearW,
+    frontW,
+    wellHalf,
+    screenSteps,
+    upright,
+    screenX,
+    screenY,
+    topX,
+    topY,
+    top,
+    gutterRear,
+  };
+}
+
+/**
+ * The bands below the belt, between the sill, the ribs and the belt: along each side panel by
+ * panel, cut round the flares, then round the rear corner and across the rear face, and round the
+ * front corner and across the front face beside its middle panel. A band is one polygon a panel,
+ * the rear's with the rearmost panel's, the front's with the frontmost's.
+ *
+ * @param {VanContext} context
+ */
+function addBands({
+  van,
+  rear,
+  front,
+  tanRear,
+  tanFront,
+  faceHalf,
+  heights,
+  rearArc,
+  frontArc,
+  archLines,
+  panels,
+  alongIn,
+  snap,
+  side,
+  sideAt,
+  rearW,
+  add,
+}) {
+  /** Highest flare at x (-Infinity clear of them). @param {number} x */
+  const flareAt = (x) => Math.max(...archLines.map(({ outer }) => heightOn(outer, x)));
   heights.slice(1).forEach((y1, k) => {
     const y0 = heights[k];
     const band = (/** @type {number} */ panel) => `band:${k}:${panel}`;
@@ -162,7 +277,6 @@ export function vanGeometry(model) {
       }
     }
     // the rear: its corner and its face, one band with the rearmost panel's
-    const rearArc = cornerArc(tanRear, faceHalf, corner, -1);
     add(
       shell(
         strip(
@@ -186,7 +300,6 @@ export function vanGeometry(model) {
     );
     // the front: its corner and the face beside the middle panel, with the frontmost panel's
     const last = panels.length - 2;
-    const frontArc = cornerArc(tanFront, faceHalf, corner, 1);
     add(
       shell(
         strip(
@@ -211,36 +324,47 @@ export function vanGeometry(model) {
       band(last),
     );
   });
+}
 
-  // the front face's middle panel, up to the belt
-  {
-    /** @type {Point[]} */
-    const outline = [
-      ...frontW.map((w) => /** @type {Point} */ ([w, sill])),
-      ...heights.slice(1).map((y) => /** @type {Point} */ ([van.panel, y])),
-      ...[...frontW]
-        .reverse()
-        .slice(1)
-        .map((w) => /** @type {Point} */ ([w, belt])),
-      ...[...heights]
-        .reverse()
-        .slice(1, -1)
-        .map((y) => /** @type {Point} */ ([-van.panel, y])),
-    ];
-    add(
-      face(
-        outline,
-        ([w, y]) => at3(front, y, w),
-        new THREE.Vector3(0, 0, 1),
-        fillPoints(outline, [], 2 * STATION, 0.03, (belt - sill) / 2),
-      ),
-      "front",
-      false,
-    );
-  }
+/**
+ * The front face's middle panel, round the grille and the lamps: one polygon from the sill up to
+ * the belt, meeting the bands beside it at the ribs.
+ *
+ * @param {VanContext} context
+ */
+function addFrontPanel({ van, front, sill, belt, heights, frontW, add }) {
+  /** @type {Point[]} */
+  const outline = [
+    ...frontW.map((w) => /** @type {Point} */ ([w, sill])),
+    ...heights.slice(1).map((y) => /** @type {Point} */ ([van.panel, y])),
+    ...[...frontW]
+      .reverse()
+      .slice(1)
+      .map((w) => /** @type {Point} */ ([w, belt])),
+    ...[...heights]
+      .reverse()
+      .slice(1, -1)
+      .map((y) => /** @type {Point} */ ([-van.panel, y])),
+  ];
+  add(
+    face(
+      outline,
+      ([w, y]) => at3(front, y, w),
+      new THREE.Vector3(0, 0, 1),
+      fillPoints(outline, [], 2 * STATION, 0.03, (belt - sill) / 2),
+    ),
+    "front",
+    false,
+  );
+}
 
-  // the arches: each flare, the well behind it
-  const wellHalf = Math.min(...wheel.track) / 2 - wheel.width / 2 - 0.03;
+/**
+ * The wheel arches: round each, its flare from the arch out to the flare's outer edge and down to
+ * the sill, and the well behind it, from the arch in to the well's wall.
+ *
+ * @param {VanContext} context
+ */
+function addArches({ wheel, half, sill, archLines, alongIn, snap, side, sideAt, wellHalf, add }) {
   archLines.forEach(({ inner, outer }, i) => {
     const [a0, a1] = [inner[0][0], inner[inner.length - 1][0]];
     const [l0, l1] = [outer[0][0], outer[outer.length - 1][0]];
@@ -272,70 +396,106 @@ export function vanGeometry(model) {
       "well",
     );
   });
+}
 
-  // the underside, notched round the wells
-  {
-    /** @type {Point[]} [along, across] */
-    const rightSide = [];
-    for (const x of along) {
-      const well = archLines.find(
-        ({ inner }) => x > inner[0][0] + EPS && x < inner[inner.length - 1][0] - EPS,
-      );
-      if (well) continue;
-      const starts = archLines.find(({ inner }) => Math.abs(x - inner[0][0]) < EPS);
-      const ends = archLines.find(({ inner }) => Math.abs(x - inner[inner.length - 1][0]) < EPS);
-      if (ends) rightSide.push([x, wellHalf]);
-      rightSide.push([x, half]);
-      if (starts) {
-        const to = starts.inner[starts.inner.length - 1][0];
-        rightSide.push(
-          [x, wellHalf],
-          ...alongIn(x, to)
-            .filter((s) => s > x + EPS && s < to - EPS)
-            .map((s) => /** @type {Point} */ ([s, wellHalf])),
-        );
-      }
-    }
-    // round to the front, across it, back down the left side, round the rear and across it
-    const frontArc = cornerArc(tanFront, faceHalf, corner, 1).slice(1);
-    const frontEdge = [...frontW].reverse();
-    const rearArc = cornerArc(tanRear, faceHalf, corner, -1);
-    /** @type {Point[]} */
-    const plan = [
-      ...rightSide,
-      ...frontArc,
-      ...frontEdge.map((w) => /** @type {Point} */ ([front, w])),
-      ...[...frontArc].reverse().map(([x, w]) => /** @type {Point} */ ([x, -w])),
-      ...[...rightSide].reverse().map(([x, w]) => /** @type {Point} */ ([x, -w])),
-      ...rearArc.slice(1).map(([x, w]) => /** @type {Point} */ ([x, -w])),
-      ...rearW
-        .slice(1, -1)
-        .reverse()
-        .map((w) => /** @type {Point} */ ([rear, -w])),
-      ...rearW.slice(0, -1).map((w) => /** @type {Point} */ ([rear, w])),
-      ...[...rearArc].reverse().slice(0, -1),
-    ];
-    add(
-      face(
-        plan,
-        ([x, w]) => at3(x, sill, w),
-        new THREE.Vector3(0, -1, 0),
-        fillPoints(plan, [], 2 * STATION, 0.03, half),
-      ),
-      "under",
-      false,
+/**
+ * The underside at the sill, one polygon: along the right side, notched in round the wells, round
+ * the front corner and across the front, back down the left side, round the rear corner and across
+ * the rear.
+ *
+ * @param {VanContext} context
+ */
+function addUnderside({
+  front,
+  rear,
+  half,
+  sill,
+  frontArc,
+  rearArc,
+  archLines,
+  along,
+  alongIn,
+  rearW,
+  frontW,
+  wellHalf,
+  add,
+}) {
+  /** @type {Point[]} [along, across] */
+  const rightSide = [];
+  for (const x of along) {
+    const well = archLines.find(
+      ({ inner }) => x > inner[0][0] + EPS && x < inner[inner.length - 1][0] - EPS,
     );
+    if (well) continue;
+    const starts = archLines.find(({ inner }) => Math.abs(x - inner[0][0]) < EPS);
+    const ends = archLines.find(({ inner }) => Math.abs(x - inner[inner.length - 1][0]) < EPS);
+    if (ends) rightSide.push([x, wellHalf]);
+    rightSide.push([x, half]);
+    if (starts) {
+      const to = starts.inner[starts.inner.length - 1][0];
+      rightSide.push(
+        [x, wellHalf],
+        ...alongIn(x, to)
+          .filter((s) => s > x + EPS && s < to - EPS)
+          .map((s) => /** @type {Point} */ ([s, wellHalf])),
+      );
+    }
   }
+  // round to the front, across it, back down the left side, round the rear and across it
+  const frontCorner = frontArc.slice(1);
+  const frontEdge = [...frontW].reverse();
+  /** @type {Point[]} */
+  const plan = [
+    ...rightSide,
+    ...frontCorner,
+    ...frontEdge.map((w) => /** @type {Point} */ ([front, w])),
+    ...[...frontCorner].reverse().map(([x, w]) => /** @type {Point} */ ([x, -w])),
+    ...[...rightSide].reverse().map(([x, w]) => /** @type {Point} */ ([x, -w])),
+    ...rearArc.slice(1).map(([x, w]) => /** @type {Point} */ ([x, -w])),
+    ...rearW
+      .slice(1, -1)
+      .reverse()
+      .map((w) => /** @type {Point} */ ([rear, -w])),
+    ...rearW.slice(0, -1).map((w) => /** @type {Point} */ ([rear, w])),
+    ...[...rearArc].reverse().slice(0, -1),
+  ];
+  add(
+    face(
+      plan,
+      ([x, w]) => at3(x, sill, w),
+      new THREE.Vector3(0, -1, 0),
+      fillPoints(plan, [], 2 * STATION, 0.03, half),
+    ),
+    "under",
+    false,
+  );
+}
 
-  // --- the walls above the belt ---------------------------------------------------------------
-
-  // stations across half the windscreen (flat: the roof over it needs them to crown), up the
-  // corner windows
-  const screenSteps = 2;
-  const upright = steps(belt, gutter.y, STATION); // up the walls' rear edges and corners
-  const [screenX, screenY] = cab.screenBottom;
+/**
+ * The walls above the belt, leaning in up to the gutter: one polygon a panel, from the rear corner
+ * past the seams to the pillar, the side windows set in them (each in one panel); the blind panels
+ * and the louvres standing out of them.
+ *
+ * @param {VanContext} context
+ */
+function addWalls({
+  van,
+  cab,
+  belt,
+  gutter,
+  tanRear,
+  screenSteps,
+  screenY,
+  upright,
+  top,
+  alongIn,
+  wallAt,
+  wallNormal,
+  add,
+  own,
+  glass,
+}) {
   const paneUp = between(screenY, gutter.y, screenSteps); // up the pillar, beside a corner window
-  const top = distinct([...steps(tanRear, cab.pillar, STATION), ...van.seams]);
   const wallPanels = distinct([tanRear, ...van.seams, cab.pillar]);
   for (const { x } of van.windows) {
     const fits = wallPanels.some(
@@ -388,8 +548,29 @@ export function vanGeometry(model) {
       add(fineFace(bar, onWall(1), wallNormal, STATION), own("mark"));
     }
   }
+}
 
-  // the rear corners above the belt, with the walls' rearmost panel; the tailgate between them
+/**
+ * The rear above the belt: its corners, one polygon with the walls' rearmost panel, and the
+ * tailgate between them, leaning forward, its window set in it.
+ *
+ * @param {VanContext} context
+ */
+function addTailgate({
+  van,
+  belt,
+  gutter,
+  tanRear,
+  upright,
+  rearW,
+  gutterRear,
+  radiusAt,
+  tailHalf,
+  tailAt,
+  tailNormal,
+  add,
+  glass,
+}) {
   for (let i = 0; i + 1 < upright.length; i++) {
     const arc = (/** @type {number} */ y) =>
       cornerArc(tanRear, tailHalf(y), radiusAt(y), -1).map(([x, w]) => at3(x, y, w));
@@ -401,37 +582,58 @@ export function vanGeometry(model) {
       "wall:0",
     );
   }
-  const gutterRear = steps(0, tailHalf(gutter.y), STATION); // across the tailgate's top
-  {
-    const bottom = [...rearW]
+  const bottom = [...rearW]
+    .reverse()
+    .map((w) => -w)
+    .concat(rearW.slice(1));
+  const upper = [...gutterRear].reverse().concat(gutterRear.slice(1).map((w) => -w));
+  /** @type {Point[]} */
+  const outline = [
+    ...bottom.map((w) => /** @type {Point} */ ([w, belt])),
+    ...upright.slice(1, -1).map((y) => /** @type {Point} */ ([tailHalf(y), y])),
+    ...upper.map((w) => /** @type {Point} */ ([w, gutter.y])),
+    ...upright
+      .slice(1, -1)
       .reverse()
-      .map((w) => -w)
-      .concat(rearW.slice(1));
-    const upper = [...gutterRear].reverse().concat(gutterRear.slice(1).map((w) => -w));
-    /** @type {Point[]} */
-    const outline = [
-      ...bottom.map((w) => /** @type {Point} */ ([w, belt])),
-      ...upright.slice(1, -1).map((y) => /** @type {Point} */ ([tailHalf(y), y])),
-      ...upper.map((w) => /** @type {Point} */ ([w, gutter.y])),
-      ...upright
-        .slice(1, -1)
-        .reverse()
-        .map((y) => /** @type {Point} */ ([-tailHalf(y), y])),
-    ];
-    const { half: windowHalf, y, corners } = van.rearWindow;
-    const window = densify(rounded(box([-windowHalf, windowHalf], y), corners, 1), STATION);
-    add(
-      face(outline, tailAt, tailNormal, [window, ...fillPoints(outline, [window], ...SPARSE)]),
-      "tailgate",
-      false,
-    );
-    glass(window, tailAt, tailNormal, false);
-  }
+      .map((y) => /** @type {Point} */ ([-tailHalf(y), y])),
+  ];
+  const { half: windowHalf, y, corners } = van.rearWindow;
+  const window = densify(rounded(box([-windowHalf, windowHalf], y), corners, 1), STATION);
+  add(
+    face(outline, tailAt, tailNormal, [window, ...fillPoints(outline, [window], ...SPARSE)]),
+    "tailgate",
+    false,
+  );
+  glass(window, tailAt, tailNormal, false);
+}
 
-  // --- the cab's front --------------------------------------------------------------------------
-
+/**
+ * The cab's front above the belt: the ledge and the panel up from the front face to the
+ * windscreen, the windscreen, the corner windows from its sides back to the pillars, and the
+ * corner under each corner window, from the belt up.
+ *
+ * @param {VanContext} context
+ */
+function addCab({
+  van,
+  cab,
+  front,
+  half,
+  belt,
+  gutter,
+  tanFront,
+  frontArc,
+  screenSteps,
+  screenX,
+  screenY,
+  topX,
+  topY,
+  alongIn,
+  wallHalf,
+  add,
+  glass,
+}) {
   const [ledgeX, ledgeY] = cab.ledge;
-  const [topX, topY] = cab.screenTop;
   const across = between(-1, 1, 2 * screenSteps); // -1 left to 1 right
   const frontTop = (/** @type {number} */ w) => at3(front, belt, w);
   const ledge = (/** @type {number} */ w) => at3(ledgeX, ledgeY, w);
@@ -536,7 +738,6 @@ export function vanGeometry(model) {
   }
   // the corner under each corner window, from the belt up
   {
-    const frontArc = cornerArc(tanFront, faceHalf, corner, 1);
     const belted = [
       ...alongIn(cab.pillar, tanFront).map((x) => at3(x, belt, half)),
       ...frontArc.slice(1).map(([x, w]) => at3(x, belt, w)),
@@ -553,9 +754,28 @@ export function vanGeometry(model) {
       "corner",
     );
   }
+}
 
-  // --- the roof: rings from the gutter in and up to its edge, then its crowned top -------------
-
+/**
+ * The roof, one polygon: rings from the gutter in and up to its edge, then its crowned top.
+ *
+ * @param {VanContext} context
+ */
+function addRoof({
+  cab,
+  roof,
+  belt,
+  gutter,
+  tanRear,
+  screenSteps,
+  topX,
+  topY,
+  top,
+  gutterRear,
+  radiusAt,
+  tailHalf,
+  add,
+}) {
   /** @type {Spot[]} the gutter, from the windscreen's middle round to the tailgate's */
   const gutterRing = [
     ...between(0, cab.screenHalf, screenSteps).map((w) => ({ x: topX, y: topY, w })),
@@ -615,9 +835,15 @@ export function vanGeometry(model) {
       false,
     );
   }
+}
 
-  // --- details: marks, lamps, the fog lamps, the tail lamps, mudflaps, the frame ---------------
-
+/**
+ * The details: the marks on the front and rear faces, the fog lamps, the tail lamps, the mudflaps
+ * and the frame under the body.
+ *
+ * @param {VanContext} context
+ */
+function addDetails({ van, front, rear, add, own }) {
   for (const { marks, x, facing } of [
     { marks: van.frontMarks, x: front + OFFSET, facing: 1 },
     { marks: van.rearMarks, x: rear - OFFSET, facing: -1 },
@@ -677,7 +903,17 @@ export function vanGeometry(model) {
     frame.translate(0, (y[0] + y[1]) / 2, (x[0] + x[1]) / 2);
     add(byFaces(frame), "frame", false);
   }
+}
 
+/**
+ * The van's geometries from the pieces added: the body, the pieces on the right mirrored to the
+ * left, as one geometry with its polygons; the lit lamps, one geometry each; all with the origin
+ * in the middle of the van's length.
+ *
+ * @param {VanContext} context
+ * @returns {{ body: THREE.BufferGeometry, lamps: THREE.BufferGeometry[] }}
+ */
+function assembled({ van, front, length, right, whole }) {
   const pieces = [
     ...right,
     ...right.map(({ part, name }) => ({ part: flipped(part), name })),
@@ -702,6 +938,7 @@ export function vanGeometry(model) {
   };
 
   // the lit lamps: the headlamps on the front face, the fog lamps' glass
+  const { fogLamps: fog } = van;
   const lit = (/** @type {Mark} */ mark, /** @type {number} */ x) =>
     withPolygons([face(rectangle(mark), ([w, y]) => at3(x, y, w), new THREE.Vector3(0, 0, 1))]);
   const lamps = [

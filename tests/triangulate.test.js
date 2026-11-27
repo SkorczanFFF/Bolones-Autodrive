@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { densify, fillPoints, ladder, rounded, triangulate } from "../src/scene/polygons.js";
+import { densify, fillPoints, rounded } from "../src/scene/outline.js";
+import { ladder, triangulate } from "../src/scene/triangulate.js";
 
-/** @typedef {[number, number]} Point */
+/** @typedef {import("../src/scene/outline.js").Point} Point */
 
 /** The smallest angle of each triangle, degrees. @param {Point[]} points @param {number[][]} triangles */
 const smallestAngles = (points, triangles) =>

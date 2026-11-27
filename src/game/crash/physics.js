@@ -32,6 +32,9 @@ export const [ROAD, CARS, PARTS, POSTS, HULLS] = [1, 2, 4, 8, 16];
  */
 export const groups = (member, meets) => (member << 16) | meets;
 
+/** A translation matrix. @param {THREE.Vector3} v */
+export const translation = (v) => new THREE.Matrix4().makeTranslation(v);
+
 /** A Rapier vector as three.js'. @param {{ x: number, y: number, z: number }} v */
 export const vector = ({ x, y, z }) => new THREE.Vector3(x, y, z);
 

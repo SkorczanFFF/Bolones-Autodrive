@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
 import { MINIGAME } from "../src/config.js";
 import { METRE, POSTS, PARTS, ROAD, groups, ready } from "../src/game/crash/physics.js";
-import { createPosts } from "../src/game/crash/posts.js";
+import { createPosts, roadside } from "../src/game/crash/posts.js";
 
 beforeAll(() => ready);
 
@@ -93,5 +93,56 @@ describe("crash posts", () => {
     expect(tilt()).toBeGreaterThan(0.5 * lean); // further over
     expect(tilt()).toBeLessThan(lean + 1e-6); // as far as `lean` at most
     world.free();
+  });
+});
+
+describe("the palms and rocks by the road", () => {
+  /** A model standing on the ground, a box of that size (in metres up, to measure a trunk at). */
+  const model = (/** @type {number} */ x, /** @type {number} */ y, /** @type {number} */ z) =>
+    new THREE.Group().add(
+      new THREE.Mesh(new THREE.BoxGeometry(x, y, z, 1, Math.round(y), 1).translate(0, y / 2, 0)),
+    );
+  /** A copy of a model by the road (scene/instances.js), turned and scaled. */
+  const copy = (
+    /** @type {THREE.Object3D} */ of,
+    /** @type {number[]} */ [x, z],
+    turn = 0,
+    scale = 1,
+  ) => {
+    const node = new THREE.Object3D();
+    node.userData.model = of;
+    node.position.set(x, 0, z);
+    node.rotation.y = turn;
+    node.scale.setScalar(scale);
+    return node;
+  };
+
+  it("measure a palm's trunk round, as wide as it is scaled, and a rock as it is turned", () => {
+    const color = new THREE.Color();
+    const palm = copy(model(0.4, 6, 0.4), [3, -10], 0.5, 2);
+    const rock = copy(model(2, 1, 1), [-4, -20], Math.PI / 2);
+    const [trunk, stone] = roadside([palm], [rock], color)();
+    expect(trunk.at.distanceTo(new THREE.Vector3(3, 0, -10))).toBeCloseTo(0);
+    expect(trunk.radius).toBeCloseTo(0.4); // half of 0.4 wide, twice the size
+    expect(trunk).toMatchObject({ sways: true, color });
+    expect(stone.at.distanceTo(new THREE.Vector3(-4, 0, -20))).toBeCloseTo(0);
+    expect(stone.height).toBeCloseTo(1);
+    // turned a quarter: 1 wide across the road, 2 along it
+    const outline = /** @type {THREE.Vector2[]} */ (stone.outline);
+    expect(Math.max(...outline.map(({ x }) => Math.abs(x)))).toBeCloseTo(0.5);
+    expect(Math.max(...outline.map(({ y }) => Math.abs(y)))).toBeCloseTo(1);
+    expect(stone.radius).toBeCloseTo(Math.hypot(0.5, 1));
+    expect(stone.color).toBeUndefined(); // a rock sheds no shards
+  });
+
+  it("measure each once, as it stood when it came up, the new ones as they come", () => {
+    const palms = [copy(model(0.4, 6, 0.4), [3, -10])];
+    const posts = roadside(palms, [], new THREE.Color());
+    const [first] = posts();
+    palms[0].position.x = 5;
+    palms.push(copy(palms[0].userData.model, [-3, -30]));
+    const [again, next] = posts();
+    expect(again).toBe(first);
+    expect(next.at.x).toBeCloseTo(-3);
   });
 });

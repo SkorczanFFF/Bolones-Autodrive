@@ -1,6 +1,9 @@
 import RAPIER from "@dimforge/rapier3d-compat";
 import * as THREE from "three";
 import { MINIGAME } from "../../config.js";
+import { boundsOf } from "../../scene/instances.js";
+import { solidMeshes } from "../../scene/wire.js";
+import { convexOutline } from "./boxes.js";
 import { METRE, PARTS, POSTS, UP, groups } from "./physics.js";
 
 /**
@@ -17,6 +20,111 @@ import { METRE, PARTS, POSTS, UP, groups } from "./physics.js";
  */
 
 const HEIGHT = 4 * METRE; // a palm's trunk, for a crash: taller than any car
+/** The heights a palm's trunk is measured at for a crash: where the cars hit it, units. */
+const TRUNK = [0.5, 1.8];
+
+/**
+ * A palm's trunk where the cars hit it (TRUNK), in the palm's frame: the middle and half the
+ * width of what is there (the trunk, leaning a little).
+ *
+ * @param {THREE.Object3D} palm the model of the palms
+ */
+function trunkOf(palm) {
+  const points = pointsOf(palm).filter(({ y }) => y > TRUNK[0] && y < TRUNK[1]);
+  const box = new THREE.Box3().setFromPoints(points);
+  const centre = box.getCenter(new THREE.Vector3()).setY(0);
+  const size = box.getSize(new THREE.Vector3());
+  return { centre, radius: (size.x + size.z) / 4 };
+}
+
+/**
+ * A rock seen from above, in its frame: the outline round it (x, z).
+ *
+ * @param {THREE.Object3D} rock the model of a rock
+ */
+const outlineOf = (rock) =>
+  convexOutline(pointsOf(rock).map(({ x, z }) => new THREE.Vector2(x, z)));
+
+/**
+ * The points of a model's meshes, in its frame.
+ *
+ * @param {THREE.Object3D} model
+ */
+function pointsOf(model) {
+  model.updateWorldMatrix(true, true);
+  const toModel = model.matrixWorld.clone().invert();
+  /** @type {THREE.Vector3[]} */
+  const points = [];
+  for (const mesh of solidMeshes(model)) {
+    const position = mesh.geometry.getAttribute("position");
+    const matrix = toModel.clone().multiply(mesh.matrixWorld);
+    for (let i = 0; i < position.count; i++) {
+      points.push(new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(matrix));
+    }
+  }
+  return points;
+}
+
+/** @type {WeakMap<THREE.Object3D, ReturnType<typeof trunkOf>>} by the palms' model, once */
+const trunks = new WeakMap();
+/** @type {WeakMap<THREE.Object3D, THREE.Vector2[]>} by a rock's model, measured once */
+const outlines = new WeakMap();
+
+/**
+ * What is measured for a key, kept: measured once.
+ *
+ * @template {object} K
+ * @template V
+ * @param {WeakMap<K, V>} cache
+ * @param {K} key
+ * @param {(key: K) => V} measure
+ */
+function cached(cache, key, measure) {
+  let value = cache.get(key);
+  if (value === undefined) cache.set(key, (value = measure(key)));
+  return value;
+}
+
+/**
+ * The palms and the rocks by the road as posts (createPosts), each measured where it stands when
+ * it comes up: a palm's trunk where the cars hit it, a rock as its outline stands up from the road.
+ *
+ * @param {THREE.Object3D[]} palms the nodes of their copies (scene/instances.js), as there are now
+ * @param {THREE.Object3D[]} rocks
+ * @param {THREE.Color} color the palms' shards
+ * @returns {() => Post[]}
+ */
+export function roadside(palms, rocks, color) {
+  /** @type {WeakMap<THREE.Object3D, Post>} */
+  const measured = new WeakMap();
+  /** @param {THREE.Object3D} palm */
+  const palmPost = (palm) => {
+    const { centre, radius } = cached(trunks, palm.userData.model, trunkOf); // scene/instances.js
+    palm.updateWorldMatrix(true, false);
+    const at = palm.localToWorld(centre.clone()).setY(0);
+    return { object: palm, at, radius: radius * palm.scale.x, sways: true, color };
+  };
+  /** @param {THREE.Object3D} rock */
+  const rockPost = (rock) => {
+    const bounds = boundsOf(rock);
+    const { x, z } = bounds.getCenter(new THREE.Vector3());
+    const at = new THREE.Vector3(x, bounds.min.y, z);
+    /** @type {THREE.Object3D} */
+    const model = rock.userData.model; // scene/instances.js
+    const around = cached(outlines, model, outlineOf);
+    // as the rock stands, turned and scaled, round its middle (boundsOf brought it up to date)
+    const outline = around.map((p) => {
+      const { x: px, z: pz } = rock.localToWorld(new THREE.Vector3(p.x, 0, p.y));
+      return new THREE.Vector2(px - x, pz - z);
+    });
+    const radius = Math.max(...outline.map((p) => p.length()));
+    return { object: rock, at, radius, outline, height: bounds.max.y - bounds.min.y };
+  };
+  return () => [
+    ...palms.map((palm) => cached(measured, palm, palmPost)),
+    ...rocks.map((rock) => cached(measured, rock, rockPost)),
+  ];
+}
 
 /**
  * The palms and the rocks by the road in a crash: posts that do not give, fixed where they are on

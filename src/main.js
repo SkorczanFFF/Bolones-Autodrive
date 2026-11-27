@@ -57,8 +57,7 @@ async function main() {
     scene: view.scene,
     car,
     materials,
-    palms: world.parts.scenery.palms.objects,
-    rocks: world.parts.scenery.rocks.objects,
+    ...world.roadside,
   });
 
   await loader.step("warmUp");

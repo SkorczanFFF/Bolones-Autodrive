@@ -68,18 +68,20 @@ src/
   main.js          bootstrap
   core/            renderer, wireframe bloom, main loop, tweens, asset loading, input, device
                    detection, seeded noise, random picks
-  scene/           materials, shader wireframes, car, minigame traffic (built from traced data:
-                   traffic, van, polygons), dents, spawner, height fields, mountain shapes, world
+  scene/           materials, shader wireframes, the Bolones (its model, how it moves), minigame
+                   traffic (built from traced data: traffic, sedan, van, car parts, decals;
+                   outlines, triangulation, polygons), dents, spawner, height fields, mountain
+                   shapes, world
     environment/   independent world parts: sky, lights, ground, sun, horizon range (hills),
                    side mountains (side hills), scenery, city
-  game/            state machine, minigames, game orchestration, crash physics (crash/)
+  game/            state machine, game orchestration, its camera, minigames, crash physics (crash/)
   ui/              theme, loader, HUD, scene GUI, CRT overlay, F10 stats
 public/            FBX models (Bolones, wheel, palm, rocks) and textures
 tests/             Vitest unit tests
 ```
 
 - Change colors, world dimensions, speeds or texts in `src/config.js` only; CSS gets the palette as custom properties.
-- Every world part follows `create(context) -> { update(dt, speedMultiplier) }`, so a part (e.g. the procedural mountains) can be replaced without touching the rest.
+- Every world part follows `create(context) -> { update(dt, speedMultiplier) }` and knows nothing of the others; the rest of the app sees only the world (its settings, the roadside props, regenerate), so a part (e.g. the procedural mountains) is replaced in `scene/world.js` alone.
 - Everything that moves or waits runs inside the single main loop.
 
 ---

@@ -21,8 +21,9 @@ import { createMountainParams } from "./mountains.js";
  */
 
 /**
- * Every environment part follows this shape; parts are independent and can be swapped
- * (e.g. other mountains, a different sky) without touching the rest.
+ * Every environment part follows this shape. Parts know nothing of each other, and the rest of the
+ * app knows only the world: a part (e.g. other mountains, a different sky) is swapped here alone,
+ * its factory and what of it the world hands on (settings, roadside, reshape, regenerate).
  *
  * @typedef {object} WorldPart
  * @property {(dt: number, speedMultiplier: number) => void} [update]
@@ -55,8 +56,11 @@ export function createWorld(assets) {
   const ordered = /** @type {WorldPart[]} */ (Object.values(parts));
 
   const world = {
-    /** Named parts (tests, debugging); the loop only needs update(). */
+    /** Named parts, for debugging; the loop only needs update(). */
     parts,
+
+    /** The palms' and the rocks' nodes by the road now (scene/instances.js): a crash meets them. */
+    roadside: { palms: parts.scenery.palms.objects, rocks: parts.scenery.rocks.objects },
 
     /**
      * What the scene panel edits, gathered here so the panel never reaches into a part (a part

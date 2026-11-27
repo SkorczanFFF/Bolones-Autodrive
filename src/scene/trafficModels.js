@@ -15,7 +15,7 @@
  * @property {number} height
  * @property {Point[]} plan the outer edge in the top view, [across, back from the car's end],
  *   from the centre to one end (mirrored to the other)
- * @property {number} [depth] how thick the bar is (scene/traffic.js BUMPER_DEPTH unless it says)
+ * @property {number} [depth] how thick the bar is (scene/carParts.js BUMPER_DEPTH unless it says)
  *
  * @typedef {object} Rim the wheel's face, in shares of the tyre's radius
  * @property {number} radius
@@ -37,7 +37,7 @@
  * @property {{ radius: number, width: number, axles: number[], track: number[], arches: Point[], rim: Rim }} wheel
  *   tyres; per axle (rear, front): x, track and wheel arch (half an ellipse: half its length, its
  *   height above the wheel centre)
- * @property {object} body the lower body, sides and deck (scene/traffic.js lowerBody)
+ * @property {object} body the lower body, sides and deck (scene/sedan.js lowerBody)
  * @property {Point[]} body.top deck centre line (side view), from the rear end to the front end
  * @property {Point[]} body.shoulder top edge of the sides
  * @property {Point[]} body.waist the widest line along the sides
@@ -62,7 +62,7 @@
  *   and square without
  * @property {number} [cabin.windowCorners] the side windows' corners rounded, metres
  * @property {number} [cabin.frame] how wide the frame round the windscreen and the rear window is,
- *   metres (scene/traffic.js FRAME unless it says)
+ *   metres (scene/sedan.js FRAME unless it says)
  * @property {number} [cabin.crown] how much higher the middle of the roof is than its edges
  * @property {Point[][]} windows side windows, inside the cabin outline
  * @property {{ outline: Point[], bars?: number }[]} sideMarks convex outlines on the body sides,
@@ -74,7 +74,7 @@
  * @property {{ front: Bumper, rear: Bumper }} bumpers
  * @property {Mirror} [mirrors]
  *
- * @typedef {object} Mirror outside mirrors (scene/traffic.js): a head with its corners cut, the
+ * @typedef {object} Mirror outside mirrors (scene/carParts.js): a head with its corners cut, the
  *   glass outlined at its back, on arms from the body. Points are [along, up, across] on the
  *   car's left (+x, the driver's side), mirrored to the right for a side of -1. They stand out of
  *   the car's hitbox (the physics' box), within its reach (what the Bolones must not touch);

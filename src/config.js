@@ -583,7 +583,7 @@ export const MINIGAME = {
      * farthest of its points from its middle; a wheel pushed up its spring, past how far that
      * goes), flung on along the hit at `fling` of the closing speed (and up half as fast), on its
      * own (`mass` kg, rubbing the road with `friction`), bent as far as it was when it went, a
-     * wheel rolling on, buckled (scene/crumple.js, game/crash.js); a mirror too as soon as it
+     * wheel rolling on, buckled (scene/crumple.js, game/crash/parts.js); a mirror too as soon as it
      * touches the road, the car going over onto its side. */
     parts: {
       fling: 0.2,

@@ -109,7 +109,7 @@ export function dent(meshes, move) {
     const points = /** @type {Float32Array} */ (geometry.getAttribute("position").array);
     for (let i = 0; i < points.length; i++) points[i] = shown[i] + by[i];
     flatNormals(geometry);
-    evenNormals(geometry); // decals keep their even shading (scene/traffic.js)
+    evenNormals(geometry); // decals keep their even shading (scene/sedan.js)
     /** @type {THREE.Sphere} */ (geometry.boundingSphere).radius += dents.moves.reduce(
       (sum, { reach }) => sum + reach,
       0,

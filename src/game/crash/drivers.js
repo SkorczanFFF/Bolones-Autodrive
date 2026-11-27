@@ -55,7 +55,7 @@ export function lookAhead(car, others) {
  *
  * @param {Driving} [driving]
  */
-export const hardest = (driving) => MINIGAME.crash.friction.brake * (driving?.brake ?? 1) * GRAVITY;
+const hardest = (driving) => MINIGAME.crash.friction.brake * (driving?.brake ?? 1) * GRAVITY;
 
 /**
  * How hard a car must brake to stop short of the car ahead (MINIGAME.crash.drivers gap), should
@@ -64,11 +64,27 @@ export const hardest = (driving) => MINIGAME.crash.friction.brake * (driving?.br
  * @param {Seen | undefined} seen
  * @param {number} hard how hard the car ahead can brake, units/s² (as they reckon: as they can)
  */
-export function stopping(seen, hard) {
+function stopping(seen, hard) {
   if (!seen) return 0;
   const { drivers } = MINIGAME.crash;
   const room = seen.gap - drivers.gap * METRE + Math.max(seen.leading, 0) ** 2 / (2 * hard);
   return seen.speed ** 2 / (2 * Math.max(room, 1e-3));
+}
+
+/**
+ * Whether a car coming along could stop for the cars ahead in its way, braking hard at most: else
+ * the road is jammed up to there. One who will not see them in time (driving.seen) only comes
+ * along clear of them, the gap drivers keep (MINIGAME.crash.drivers).
+ *
+ * @param {Looking} coming
+ * @param {Looking[]} others the cars as the drivers saw them last
+ * @param {Driving} [driving] how its driver reacts and brakes
+ */
+export function roomFor(coming, others, driving) {
+  const seen = lookAhead(coming, others);
+  if (driving?.seen) return !seen || seen.gap > MINIGAME.crash.drivers.gap * METRE;
+  const hard = hardest(driving);
+  return stopping(seen, hard) <= hard;
 }
 
 /**

@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+// @ts-expect-error no @types/node in this browser project; the tests run in node
+import fs from "node:fs";
+import { describe, expect, it, vi } from "vitest";
 import { LAYERS } from "../src/config.js";
 import { oklchHue } from "../src/ui/color.js";
-import { setSceneColor } from "../src/ui/theme.js";
+import { applyTheme, setSceneColor } from "../src/ui/theme.js";
 
 /** A stand-in for <html>: records the custom properties set on it. */
 function root() {
@@ -10,7 +12,7 @@ function root() {
   const style = {
     setProperty: (/** @type {string} */ n, /** @type {string} */ v) => vars.set(n, v),
   };
-  return { vars, element: /** @type {any} */ ({ style }) };
+  return { vars, element: /** @type {any} */ ({ style, dataset: {} }) };
 }
 
 describe("scene colors for CSS", () => {
@@ -28,10 +30,24 @@ describe("scene colors for CSS", () => {
     expect(Number(vars.get("--scene-terrain-wire-turn"))).toBeCloseTo(turn, 0);
   });
 
-  it("knows no turn for a color without a default", () => {
+  it("writes what style.css reads of the colors, all of it and no more", () => {
+    const css = fs.readFileSync("src/style.css", "utf8");
+    const read = [...css.matchAll(/var\((--(?:palette|scene)-[a-z0-9-]+)/g)].map(
+      ([, name]) => name,
+    );
     const { vars, element } = root();
-    setSceneColor("something", "#123456", element);
-    expect(vars.get("--scene-something")).toBe("#123456");
-    expect(vars.has("--scene-something-turn")).toBe(false);
+    vi.stubGlobal("document", { querySelector: () => null });
+    try {
+      applyTheme(element); // every scene color, at its default
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect([...vars.keys()].sort()).toEqual([...new Set(read)].sort());
+  });
+
+  it("writes nothing for a color style.css does not read", () => {
+    const { vars, element } = root();
+    setSceneColor("palmWire", "#123456", element);
+    expect(vars.size).toBe(0);
   });
 });

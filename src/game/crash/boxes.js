@@ -6,6 +6,8 @@ import { ACROSS, AHEAD, UP, rotation, vector } from "./physics.js";
  * A box in the world: its centre, axes and half sizes along them.
  *
  * @typedef {{ centre: THREE.Vector3, axes: THREE.Vector3[], half: number[] }} Box
+ * @typedef {{ normal: THREE.Vector3, depth: number }} Face a face two boxes overlap through, from
+ *   the first to the second
  * @typedef {import("@dimforge/rapier3d-compat").RigidBody} Body
  */
 
@@ -98,9 +100,10 @@ export const extent = (box, n) =>
  * @param {Box} a
  * @param {Box} b
  * @param {THREE.Vector3} n
+ * @param {THREE.Vector3} [apart] b's centre from a's, if measured already
  */
-export const penetration = (a, b, n) =>
-  extent(a, n) + extent(b, n) - Math.abs(new THREE.Vector3().subVectors(b.centre, a.centre).dot(n));
+export const penetration = (a, b, n, apart = new THREE.Vector3().subVectors(b.centre, a.centre)) =>
+  extent(a, n) + extent(b, n) - Math.abs(apart.dot(n));
 
 /**
  * Whether a car's body meets along its length (its front or its rear), not its side.
@@ -250,30 +253,35 @@ export function convexOutline(points) {
 
 /**
  * Whether two boxes overlap (separating axis test) and if so, the depth along each face normal
- * (from a to b) and the point between them: the corners of each inside the other, or the middle
- * of their nearest points.
+ * (from a to b), the face they overlap least through, and the point between them: the corners of
+ * each inside the other, or the middle of their nearest points.
  *
  * @param {Box} a
  * @param {Box} b
- * @returns {{ faces: { normal: THREE.Vector3, depth: number }[], point: THREE.Vector3 } | null}
+ * @returns {{ faces: Face[], least: Face, point: THREE.Vector3 } | null}
  */
 export function overlap(a, b) {
   const apart = new THREE.Vector3().subVectors(b.centre, a.centre);
   const reach = a.half[0] + a.half[1] + a.half[2] + b.half[0] + b.half[1] + b.half[2];
   if (apart.length() > reach) return null;
+  // the faces' normals first: boxes apart are mostly apart along one of them
+  /** @type {Face[]} */
+  const faces = [];
+  for (const axis of a.axes.concat(b.axes)) {
+    const normal = apart.dot(axis) < 0 ? axis.clone().negate() : axis.clone();
+    const depth = penetration(a, b, normal, apart);
+    if (depth < 0) return null;
+    faces.push({ normal, depth });
+  }
   for (const p of a.axes) {
     for (const q of b.axes) {
       const axis = new THREE.Vector3().crossVectors(p, q);
       const length = axis.length();
-      if (length > 1e-6 && penetration(a, b, axis.divideScalar(length)) < 0) return null;
+      if (length > 1e-6 && penetration(a, b, axis.divideScalar(length), apart) < 0) return null;
     }
   }
-  const faces = [...a.axes, ...b.axes].map((axis) => {
-    const normal = apart.dot(axis) < 0 ? axis.clone().negate() : axis.clone();
-    return { normal, depth: penetration(a, b, normal) };
-  });
-  if (faces.some(({ depth }) => depth < 0)) return null;
-  const normal = faces.reduce((best, f) => (f.depth < best.depth ? f : best)).normal;
+  const least = faces.reduce((best, f) => (f.depth < best.depth ? f : best));
+  const { normal } = least;
 
   const inside = (/** @type {Box} */ box, /** @type {THREE.Vector3} */ p) => {
     const d = new THREE.Vector3().subVectors(p, box.centre);
@@ -291,5 +299,5 @@ export function overlap(a, b) {
   const point = touching.length
     ? touching.reduce((sum, p) => sum.add(p), new THREE.Vector3()).divideScalar(touching.length)
     : support(a, normal).add(support(b, normal.clone().negate())).multiplyScalar(0.5);
-  return { faces, point };
+  return { faces, least, point };
 }

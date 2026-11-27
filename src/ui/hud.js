@@ -6,22 +6,34 @@ import { withKey } from "./labels.js";
 /** @typedef {import("../game/game.js").Mode} Mode */
 
 /**
- * Called every frame by the game, so it only touches the DOM when something changed.
+ * Hides or shows an element. Called every frame by the game, so it only touches the DOM when that
+ * changes.
+ *
+ * @param {HTMLElement} element
+ * @param {boolean} hidden
+ */
+function setHidden(element, hidden) {
+  if (element.hidden !== hidden) element.hidden = hidden;
+}
+
+/**
+ * Shows a text. Called every frame by the game, so it only touches the DOM when something changed.
  *
  * @param {HTMLElement} element
  * @param {string | null} text null hides the element
  * @returns {boolean} whether the text changed
  */
 function show(element, text) {
-  const hidden = text === null;
-  if (element.hidden !== hidden) element.hidden = hidden;
+  setHidden(element, text === null);
   if (text === null || element.textContent === text) return false;
   element.textContent = text;
   return true;
 }
 
 /**
- * Restarts a one-shot CSS animation (class "is-pop", "is-flash" or "is-tick").
+ * Restarts a one-shot CSS animation (class "is-pop" or "is-flash"), laying the page out to do so:
+ * for what changes now and then (the game over count, every frame, takes turns between two
+ * animations instead: countGameOver).
  *
  * @param {HTMLElement} element
  * @param {string} className
@@ -122,6 +134,7 @@ export function createHud(
   const menuToggle = $(".hud__toggle");
   const wreck = $("[data-wreck]");
   const wreckCount = $("[data-wreck-count]");
+  let tock = false; // which of the count's two animations lit the last number (countGameOver)
   wreck.parentElement?.setAttribute("title", withKey(TEXT.nextCar, "next"));
 
   /** The best scores: of the mode in the game and game over, of each in the menu. */
@@ -129,11 +142,14 @@ export function createHud(
     for (const element of bestValues) show(element, String(records[mode] ?? 0));
     for (const [of, value] of Object.entries(records)) {
       for (const entry of $$(`[data-record="${of}"]`)) {
-        entry.hidden = value <= 0;
+        setHidden(entry, value <= 0);
         show(/** @type {HTMLElement} */ (entry.querySelector("[data-value]")), String(value));
       }
     }
-    menuBest.hidden = Object.values(records).every((value) => value <= 0);
+    setHidden(
+      menuBest,
+      Object.values(records).every((value) => value <= 0),
+    );
   }
 
   /** @param {boolean} visible */
@@ -209,7 +225,7 @@ export function createHud(
       scoreLabel.textContent = crash ? TEXT.impact : TEXT.score;
       // what only some modes have (data-modes, index.html)
       for (const element of $$("[data-modes]")) {
-        element.hidden = !(element.dataset.modes ?? "").split(" ").includes(mode);
+        setHidden(element, !(element.dataset.modes ?? "").split(" ").includes(mode));
       }
       showBest();
     },
@@ -219,7 +235,7 @@ export function createHud(
      * @param {boolean} [pop] a count pops at every new number, a speed does not
      */
     setScore(value, pop = true) {
-      scoreboard.hidden = value === null;
+      setHidden(scoreboard, value === null);
       if (value !== null && show(score, String(value)) && pop) replay(score, "is-pop");
     },
 
@@ -242,14 +258,15 @@ export function createHud(
     /** @param {number} best the record to beat: NEW BEST! once the score counts past it */
     showGameOver(best) {
       record = best;
-      finalScore.classList.remove("is-tick", "is-final");
+      finalScore.classList.remove("is-tick", "is-tock", "is-final");
       show(finalScore, "0");
-      newBest.hidden = true;
-      finalBest.hidden = false;
+      setHidden(newBest, true);
+      setHidden(finalBest, false);
     },
 
     /**
-     * Counts the game over score up, every new number ticking; once there, it flashes and keeps
+     * Counts the game over score up, every new number ticking (each by the other of two
+     * animations, so it lights up anew without the page laid out); once there, it flashes and keeps
      * pulsing (CSS), until the score grows again (crash mode). Past the record, NEW BEST! takes
      * the record's place. Called every frame by the game once the score is in.
      *
@@ -258,16 +275,19 @@ export function createHud(
      */
     countGameOver(counted, total) {
       const shown = reducedMotion.matches ? total : Math.floor(counted);
+      const { classList } = finalScore;
       if (show(finalScore, String(shown))) {
-        finalScore.classList.remove("is-final");
-        replay(finalScore, "is-tick");
+        tock = !tock;
+        classList.remove("is-final");
+        classList.toggle("is-tick", !tock);
+        classList.toggle("is-tock", tock);
       }
-      if (shown >= total && !finalScore.classList.contains("is-final")) {
-        finalScore.classList.remove("is-tick");
-        finalScore.classList.add("is-final");
+      if (shown >= total && !classList.contains("is-final")) {
+        classList.remove("is-tick", "is-tock");
+        classList.add("is-final");
       }
-      newBest.hidden = shown <= record;
-      finalBest.hidden = shown > record; // the record is this score
+      setHidden(newBest, shown <= record);
+      setHidden(finalBest, shown > record); // the record is this score
     },
 
     /** The Bolones' speedometer, km/h. @param {number} value */
@@ -282,7 +302,7 @@ export function createHud(
      * @param {boolean} running
      */
     setDriveOn(running) {
-      driveOn.hidden = !running;
+      setHidden(driveOn, !running);
       root.toggleAttribute("data-drive-on", running);
     },
 

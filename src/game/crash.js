@@ -698,7 +698,10 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       return { energy: absorbed, cars: crashed.size, parts: torn.loose.length, posts: struck.size };
     },
 
-    /** The cars that crashed, in the order they did (the Bolones and the car it hit first). */
+    /**
+     * The cars that crashed or touched, in the order they did (the Bolones and the car it hit
+     * first).
+     */
     get wrecks() {
       return wrecks.map(({ car }) => car);
     },

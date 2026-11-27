@@ -83,14 +83,19 @@ async function main() {
     if (action === "start" || action in MINIGAME.modes) device.sideways();
   });
   input.doubleTap(view.renderer.domElement, "menu"); // hides or shows the menu, game over
+  // a record beaten is saved as the game moves on, or here as the page goes away mid game over
+  document.addEventListener("visibilitychange", () => document.hidden && game.save());
   const waiting = () =>
     device.touch &&
     device.upright.matches &&
     (game.state === "countdown" || game.state === "playing");
 
   loop.add(tweens.update);
-  loop.add((dt) => waiting() || game.update(dt)); // sets the world's speed for this frame
-  loop.add((dt) => waiting() || world.update(dt));
+  loop.add((dt) => {
+    if (waiting()) return;
+    game.update(dt); // sets the world's speed for this frame
+    world.update(dt);
+  });
   loop.add(stats.update);
 
   loader.finish();

@@ -70,8 +70,9 @@ export function dentable(root) {
  * the full dent on the mesh as shown; set() moves the points part of the way. Dents stack: a mesh
  * dented again keeps its earlier dents going.
  *
- * @param {Dentable[]} meshes
- * @param {(mesh: Dentable, point: THREE.Vector3) => void} move
+ * @template {Dentable} T
+ * @param {T[]} meshes
+ * @param {(mesh: T, point: THREE.Vector3) => void} move
  * @returns {Dent} starting at 0
  */
 export function dent(meshes, move) {
@@ -85,7 +86,9 @@ export function dent(meshes, move) {
     inverse.copy(mesh.matrixWorld).invert();
     let farthest = 0; // squared
     for (let i = 0; i < shown.length; i += 3) {
-      const [x, y, z] = [world[i], world[i + 1], world[i + 2]];
+      const x = world[i];
+      const y = world[i + 1];
+      const z = world[i + 2];
       move(entry, v.set(x, y, z));
       if (v.x === x && v.y === y && v.z === z) continue; // not moved (rounding back would)
       v.applyMatrix4(inverse);

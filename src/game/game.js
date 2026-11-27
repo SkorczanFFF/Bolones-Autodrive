@@ -77,9 +77,16 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   const best = Object.fromEntries(MODES.map((of) => [of, loadNumber(STORAGE.best[of])]));
   let own = 0; // overtake: the Bolones' own speed, km/h (MINIGAME.modes.overtake)
   let counted = 0; // how far game over has counted its score up
+  /** @type {Mode | null} the mode whose record this game beat, not saved yet (saveBest) */
+  let unsaved = null;
 
-  /** This game's score: the cars passed (dodged or overtaken), or what the crash wrecked. */
-  const scoreOf = () => (mode === "crash" ? (minigame.damage?.score ?? 0) : minigame.score);
+  /**
+   * This game's score: the cars passed (dodged or overtaken), or what the crash wrecked.
+   *
+   * @param {import("./minigame.js").Damage | null} [damage] the crash's, if read already
+   */
+  const scoreOf = (damage = minigame.damage) =>
+    mode === "crash" ? (damage?.score ?? 0) : minigame.score;
 
   /**
    * Sets the Bolones' speed, up to MINIGAME.top, and returns the traffic's: in overtake ↑ ↓ drive
@@ -109,12 +116,21 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
   /** The Bolones' speed, km/h, for the speedometer. */
   const kmh = () => Math.round(WORLD.speed * world.speedMultiplier * SPEED.kmh);
 
-  /** Keeps the mode's best score (also when leaving mid-game with ESC). */
-  function recordScore() {
-    const score = scoreOf();
+  /**
+   * Keeps the mode's best score (also when leaving mid-game with ESC); saved once the game moves
+   * on (saveBest): in crash mode it grows on every frame the wreck crashes on.
+   */
+  function recordScore(score = scoreOf()) {
     if (score <= best[mode]) return;
     best[mode] = score;
-    saveNumber(STORAGE.best[mode], score);
+    unsaved = mode;
+  }
+
+  /** Saves the record beaten, if not yet: as the game changes state, as the page is hidden. */
+  function saveBest() {
+    if (!unsaved) return;
+    saveNumber(STORAGE.best[unsaved], best[unsaved]);
+    unsaved = null;
   }
 
   function leaveMinigame() {
@@ -188,6 +204,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
         break;
     }
     hud.setBest(mode, best[mode]); // game over's record only once it is left: the count beats it
+    saveBest();
   }
 
   const machine = createStateMachine("idle", enter);
@@ -265,6 +282,9 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       return machine.state;
     },
 
+    /** Saves a record this game beat, if not yet: the page is going away (main.js). */
+    save: saveBest,
+
     /** @param {number} dt */
     update(dt) {
       stateTime += dt;
@@ -315,12 +335,12 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
           const { impact } = minigame;
           camera.followWreck(dt, minigame.wreckCentre(centre, wreckFocus), impact, stateTime);
           hud.setWreck(minigame.wrecks, wreckFocus);
-          const { damage } = minigame;
-          if (mode === "crash" && damage) hud.setDamage(damage);
-          recordScore();
+          const damage = mode === "crash" ? minigame.damage : null; // read once a frame
+          if (damage) hud.setDamage(damage);
+          const score = scoreOf(damage);
+          recordScore(score);
           if (locked()) break;
           // the score counts up once it is in, and on as the crash adds to it (crash mode)
-          const score = scoreOf();
           const { perPoint, max } = MINIGAME.scoreCount;
           counted = Math.min(score, counted + Math.max(1 / perPoint, score / max) * dt);
           hud.countGameOver(counted, score);

@@ -1076,9 +1076,14 @@ kbd {
     0 0 28px var(--pink);
 }
 
-/* counting up: every new number lights up */
-.hud__final-score.is-tick {
+/* counting up: every new number lights up, by the other of the two (ui/hud.js): it starts anew */
+.hud__final-score.is-tick,
+.hud__final-score.is-tock {
   animation: lit 0.12s steps(1);
+}
+
+.hud__final-score.is-tock {
+  animation-name: lit-anew;
 }
 
 /* counted: an arcade flash, then the score keeps blinking like a neon sign */
@@ -1091,6 +1096,13 @@ kbd {
 }
 
 @keyframes lit {
+  from {
+    color: var(--yellow);
+  }
+}
+
+/* lit as well, by another name */
+@keyframes lit-anew {
   from {
     color: var(--yellow);
   }

@@ -239,12 +239,11 @@ export function crumple(root, hit) {
     world.decompose(position, quaternion, new THREE.Vector3());
     moved.push({ node, position, quaternion });
   }
-  const nodeOf = new Map(entries.map(({ mesh, node }) => [mesh, node]));
-  const meshes = dent(entries, ({ mesh }, v) => {
-    const node = nodeOf.get(mesh);
-    if (node?.userData.part === "wheel") return; // rigid: moved whole, or torn off as it is
-    bend(v, tore.get(node)); // a bumper or a mirror bends along
-  });
+  // the wheels rigid (moved whole, or torn off as they are), a bumper or a mirror bending along
+  const meshes = dent(
+    entries.filter(({ node }) => node?.userData.part !== "wheel"),
+    ({ node }, v) => bend(v, tore.get(node)),
+  );
   const nodes = moveNodes(moved);
   return {
     set(progress) {
@@ -291,18 +290,21 @@ function reachOf({ plane, reach, tall }) {
 }
 
 /**
- * How far a world point is in from where a car was hit, how far across and how far up or down.
+ * How far a world point is in from where a car was hit, how far across and how far up or down:
+ * one object, measured anew for each point (every point of a car), read before the next.
  *
  * @param {Hit} hit
  */
 function measurer({ point, into }) {
   const offset = new THREE.Vector3();
+  const measured = { depth: 0, across: 0, up: 0 };
   return (/** @type {THREE.Vector3} */ p) => {
     offset.subVectors(p, point);
-    const depth = offset.dot(into);
-    const up = Math.abs(offset.y);
-    offset.addScaledVector(into, -depth).y = 0;
-    return { depth, across: offset.length(), up };
+    measured.depth = offset.dot(into);
+    measured.up = Math.abs(offset.y);
+    offset.addScaledVector(into, -measured.depth).y = 0;
+    measured.across = offset.length();
+    return measured;
   };
 }
 

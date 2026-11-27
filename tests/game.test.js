@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { describe, expect, it } from "vitest";
-import { MINIGAME, SCENE, CAR, SPEED, TRAFFIC, WORLD } from "../src/config.js";
+import { describe, expect, it, vi } from "vitest";
+import { MINIGAME, SCENE, CAR, SPEED, STORAGE, TRAFFIC, WORLD } from "../src/config.js";
 import { createInput } from "../src/core/input.js";
 import { createTweens } from "../src/core/tween.js";
 import { createGame } from "../src/game/game.js";
@@ -545,6 +545,39 @@ describe("crash mode", () => {
     expect(
       hudCalls.setBest.filter(([mode]) => mode === "dodge").every(([, value]) => value === 0),
     ).toBe(true);
+  });
+
+  it("saves a record once, as game over is left or the page is hidden: not every frame it grows", () => {
+    /** @type {string[][]} */
+    const saved = [];
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: (/** @type {string} */ key, /** @type {string} */ value) => saved.push([key, value]),
+    });
+    try {
+      const { game, input, minigame, run, crash } = setup();
+      const damage = { kJ: 90, parts: 1, posts: 0, others: 2, score: 220 };
+      minigame.damage = damage;
+      crash("crash");
+      run(MINIGAME.crash.lock);
+      for (const score of [250, 300, 330]) {
+        minigame.damage = { ...damage, score }; // the wreck crashes on
+        run(0.2);
+      }
+      expect(saved).toEqual([]);
+      game.save(); // the page is hidden
+      game.save();
+      expect(saved).toEqual([[STORAGE.best.crash, "330"]]);
+      minigame.damage = { ...damage, score: 400 };
+      run(0.2);
+      input.dispatch("exit");
+      expect(saved).toEqual([
+        [STORAGE.best.crash, "330"],
+        [STORAGE.best.crash, "400"],
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("leaves the Bolones in the player's hands after a crash, every minigame: ← → steer, ↑ on", () => {

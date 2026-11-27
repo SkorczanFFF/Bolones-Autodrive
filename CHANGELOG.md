@@ -93,6 +93,12 @@ lets you recolor and tweak everything.
 - Crashes stutter less: a car crumples about a quarter faster, its dent no longer copies all of
   its points every frame, and a device too slow to keep up plays the crash in slower motion
   rather than in ever longer frames (at most 1/30 s of it a frame).
+- Lighter frames and loading: the traffic is built about a third faster (on a desktop 0.6 s
+  instead of 0.9); the palms and rocks send the graphics card only the copies drawn, the side
+  hills only what moved, and the mountain sliders no longer rebuild the city. A dent skips the
+  meshes it does not touch and comes about a seventh faster. Game over saves a record once, not
+  every frame it grows, and counts the score up without laying the page out again; Randomize all
+  restyles the page with 11 colors a frame instead of 40.
 - Only the cars cast shadows, and only their bodies (the wheels', bumpers' and lamps' fell in the
   body's anyway): the palms' and rocks' were faint on the dark ground, and everything casting one
   was drawn five times more a frame. After a crash a frame takes about half the draw calls.

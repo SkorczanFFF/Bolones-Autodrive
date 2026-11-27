@@ -51,8 +51,7 @@ import {
  * @property {number} speed they close at, units/s
  * @property {number} energy the crumple zones take up, joules
  *
- * @typedef {{ normal: THREE.Vector3, depth: number }} Face a face two solids overlap through, from
- *   the first to the second
+ * @typedef {import("./boxes.js").Face} Face
  *
  * @typedef {object} Crush two solids crushing into each other
  * @property {THREE.Vector3} facing the normal they met along, in the first one's frame
@@ -341,11 +340,10 @@ export function createCrushes(world, met) {
    * @param {T} a
    * @param {T} b
    * @param {import("./boxes.js").Box[]} boxes theirs, now
-   * @param {Face[]} faces they overlap through
+   * @param {Face} top the face they overlap least through
    * @returns {boolean} whether one is on top of the other
    */
-  function onTop(a, b, [boxA, boxB], faces) {
-    const top = faces.reduce((best, f) => (f.depth < best.depth ? f : best));
+  function onTop(a, b, [boxA, boxB], top) {
     const half = Math.min(extent(boxA, UP), extent(boxB, UP));
     if (!isPost(b) && Math.abs(top.normal.y) >= TOP && top.depth < half) {
       met(a, b); // they touch: in the wreck together
@@ -490,18 +488,14 @@ export function createCrushes(world, met) {
      */
     collide(a, b, time) {
       const turn = rotation(a.body.rotation());
+      const other = isPost(b) ? undefined : rotation(b.body.rotation());
       // one rolling over meets the other's roof too: both up to their roofs as far as either is
       // over
-      const over = isPost(b)
-        ? overOf(turn)
-        : Math.max(overOf(turn), overOf(rotation(b.body.rotation())));
-      const boxes = [
-        boxOf(a, turn, over),
-        isPost(b) ? postBox(b, turn) : boxOf(b, undefined, over),
-      ];
+      const over = other ? Math.max(overOf(turn), overOf(other)) : overOf(turn);
+      const boxes = [boxOf(a, turn, over), other ? boxOf(b, other, over) : postBox(b, turn)];
       const [boxA, boxB] = boxes;
       const contact = overlap(boxA, boxB);
-      if (!contact || onTop(a, b, boxes, contact.faces)) return;
+      if (!contact || onTop(a, b, boxes, contact.least)) return;
       const k = 1 / (1 / a.stiffness + 1 / b.stiffness); // the fronts in series
       const sides = contact.faces.filter((f) => Math.abs(f.normal.y) < TOP);
       const least = sides.reduce((best, f) => (f.depth < best.depth ? f : best));

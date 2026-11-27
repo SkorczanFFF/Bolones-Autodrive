@@ -146,8 +146,8 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
    */
   const apart = ([near, far], roll) => (near + roll * (far - near)) / SPEED.traffic;
 
-  /** @type {THREE.Object3D[]} the cars spawned since the last frame */
-  const spawned = [];
+  /** @type {import("./crash.js").Car[]} after a crash, the cars come along since the last frame */
+  const joining = [];
   /** @type {WeakMap<THREE.Object3D, import("../scene/rig.js").Wheel[]>} */
   const rigs = new WeakMap();
   /** A car's wheels on their rig, found once. @param {THREE.Object3D} other */
@@ -174,9 +174,12 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     if (crash && other.userData.blind) {
       other.position.x = pick(crash.wrecks).object.getWorldPosition(new THREE.Vector3()).x;
     }
-    if (crash && !crash.room(asCar(other))) return [];
+    if (crash) {
+      const joiner = asCar(other);
+      if (!crash.room(joiner)) return [];
+      joining.push(joiner);
+    }
     other.userData.scored = false;
-    spawned.push(other);
     return [other];
   };
   // towards the Bolones, in either lane (overtake: the left one, in groups)
@@ -297,7 +300,6 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     coming = closing(world, level);
     since = 0;
     forward = 0;
-    spawned.length = 0; // the traffic there is goes in as it is
     sameWay.spawning = false; // going away from the crash
     // the physics has the traffic now: wherever it goes, it stays to be seen (and hit)
     for (const stream of streams) stream.keeping = true;
@@ -327,14 +329,13 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
     oncoming.update(dt, closing(world, level));
     const catching = WORLD.speed * world - overtake.slow / SPEED.kmh; // up on its way
     sameWay.update(dt, Math.max(0, catching) / SPEED.traffic);
-    spawned.length = 0; // the spawners move them
-    const cars = traffic();
-    for (const other of cars) {
-      const rolled = Math.abs(overRoadOf(other, level)) * dt; // the wheels roll as far as it goes
-      for (const { spin, radius } of rigOf(other)) spin.rotation.x += rolled / radius;
-      drawFar(other, other.position.z < -TRAFFIC.far);
+    for (const { objects } of streams) {
+      for (const other of objects) {
+        const rolled = Math.abs(overRoadOf(other, level)) * dt; // the wheels roll as far as it goes
+        for (const { spin, radius } of rigOf(other)) spin.rotation.x += rolled / radius;
+        drawFar(other, other.position.z < -TRAFFIC.far);
+      }
     }
-    return cars;
   }
 
   /** Removes all traffic and the crash, stops spawning and zeroes the score. */
@@ -345,7 +346,6 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       stream.clear();
       stream.spawning = false;
     }
-    spawned.length = 0;
     score = 0;
   }
 
@@ -454,25 +454,28 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
      * @returns {{ crashed: boolean, scored: boolean }}
      */
     update(dt, world, level = world) {
-      const cars = advance(dt, world, level);
-      if (cars.length === 0) return { crashed: false, scored: false };
+      advance(dt, world, level);
+      if (!oncoming.objects.length && !sameWay.objects.length)
+        return { crashed: false, scored: false };
 
       car.getBounds(carBounds);
       const carZ = car.group.position.z;
       let scored = false;
 
-      for (const obstacle of cars) {
-        obstacle.updateMatrix(); // turned round, going the Bolones' way
-        hitboxOf(obstacle, obstacleBounds, "reach").applyMatrix4(obstacle.matrix);
-        if (carBounds.intersectsBox(obstacleBounds)) {
-          hit(obstacle, world, level);
-          return { crashed: true, scored };
+      for (const { objects } of streams) {
+        for (const obstacle of objects) {
+          obstacle.updateMatrix(); // turned round, going the Bolones' way
+          hitboxOf(obstacle, obstacleBounds, "reach").applyMatrix4(obstacle.matrix);
+          if (carBounds.intersectsBox(obstacleBounds)) {
+            hit(obstacle, world, level);
+            return { crashed: true, scored };
+          }
+          if (obstacle.userData.scored || obstacle.position.z <= carZ) continue;
+          obstacle.userData.scored = true;
+          if (obstacle.userData.sameWay !== (mode === "overtake")) continue; // passed, not scoring
+          score++;
+          scored = true;
         }
-        if (obstacle.userData.scored || obstacle.position.z <= carZ) continue;
-        obstacle.userData.scored = true;
-        if (obstacle.userData.sameWay !== (mode === "overtake")) continue; // passed, not scoring
-        score++;
-        scored = true;
       }
 
       return { crashed: false, scored };
@@ -505,10 +508,13 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       oncoming.spawning = since < keepComing || forward > MOVING;
       oncoming.update(dt, 0, coming);
       sameWay.update(dt, 0);
-      for (const other of spawned.splice(0)) crash.join(asCar(other));
+      for (const joiner of joining) crash.join(joiner);
+      joining.length = 0;
       forward = crash.update(dt, which) / WORLD.speed;
-      for (const other of traffic()) {
-        drawFar(other, !other.userData.dented && other.position.distanceTo(eye) > TRAFFIC.far);
+      for (const { objects } of streams) {
+        for (const other of objects) {
+          drawFar(other, !other.userData.dented && other.position.distanceTo(eye) > TRAFFIC.far);
+        }
       }
       return forward;
     },

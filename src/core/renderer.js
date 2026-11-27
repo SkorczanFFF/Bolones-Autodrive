@@ -60,10 +60,11 @@ export function createView(container = document.body) {
     resized = false;
     const width = Math.floor(canvas.clientWidth * SCENE.renderScale);
     const height = Math.floor(canvas.clientHeight * SCENE.renderScale);
-    if (canvas.width === width && canvas.height === height) return;
-
-    renderer.setSize(width, height, false);
-    bloom.setSize(width, height);
+    // the buffer as it was (a pixel's change lost in the scale), the view's shape may still change
+    if (canvas.width !== width || canvas.height !== height) {
+      renderer.setSize(width, height, false);
+      bloom.setSize(width, height);
+    }
     camera.aspect = canvas.clientWidth / canvas.clientHeight;
     camera.fov = fitFov(camera.aspect);
     camera.updateProjectionMatrix();

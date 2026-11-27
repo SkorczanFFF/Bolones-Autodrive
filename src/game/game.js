@@ -397,7 +397,7 @@ export function createGame({ view, world, car, minigame, tweens, input, hud, men
       switch (machine.state) {
         case "countdown": {
           minigame.spawning = stateTime >= MINIGAME.trafficStartsAt;
-          minigame.update(dt, world.speedMultiplier, pace(0));
+          minigame.advance(dt, world.speedMultiplier, pace(0)); // nothing met yet
           hud.setSpeed(kmh());
           if (stateTime >= MINIGAME.countdown) {
             machine.send("timeout");

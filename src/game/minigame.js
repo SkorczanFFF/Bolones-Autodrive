@@ -344,7 +344,6 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
    * @param {number} level the traffic's speed multiplier
    */
   function hit(obstacle, world, level) {
-    crash?.dispose(); // one before, in the countdown (none so far), would go unseen
     pace = level;
     coming = closing(world, level);
     since = 0;
@@ -406,6 +405,28 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       ],
       posts,
     );
+  }
+
+  /**
+   * Moves the traffic on, meeting nothing (the countdown; update() then meets it): its cars, the
+   * wheels rolling, the far ones drawn as one.
+   *
+   * @param {number} dt
+   * @param {number} world the Bolones' speed, of WORLD.speed (the world's speed multiplier)
+   * @param {number} [level] the traffic's speed multiplier, if not the Bolones' (overtake)
+   */
+  function advance(dt, world, level = world) {
+    oncoming.update(dt, closing(world, level));
+    const catching = WORLD.speed * world - overtake.slow / SPEED.kmh; // up on its way
+    sameWay.update(dt, Math.max(0, catching) / SPEED.traffic);
+    spawned.length = 0; // the spawners move them
+    const cars = traffic();
+    for (const other of cars) {
+      const rolled = Math.abs(overRoadOf(other, level)) * dt; // the wheels roll as far as it goes
+      for (const { spin, radius } of rigOf(other)) spin.rotation.x += rolled / radius;
+      drawFar(other, other.position.z < -TRAFFIC.far);
+    }
+    return cars;
   }
 
   /** Removes all traffic and the crash, stops spawning and zeroes the score. */
@@ -513,8 +534,11 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
       return crash?.impact ?? 1;
     },
 
+    advance,
+
     /**
-     * Moves the traffic, scores the cars passed (dodged, or overtaken) and reports a crash.
+     * Moves the traffic (advance), scores the cars passed (dodged, or overtaken) and reports a
+     * crash.
      *
      * @param {number} dt
      * @param {number} world the Bolones' speed, of WORLD.speed (the world's speed multiplier)
@@ -522,16 +546,7 @@ export function createMinigame({ scene, car, materials, palms, rocks }) {
      * @returns {{ crashed: boolean, scored: boolean }}
      */
     update(dt, world, level = world) {
-      oncoming.update(dt, closing(world, level));
-      const catching = WORLD.speed * world - overtake.slow / SPEED.kmh; // up on its way
-      sameWay.update(dt, Math.max(0, catching) / SPEED.traffic);
-      spawned.length = 0; // the spawners move them
-      const cars = traffic();
-      for (const other of cars) {
-        const rolled = Math.abs(overRoadOf(other, level)) * dt; // the wheels roll as far as it goes
-        for (const { spin, radius } of rigOf(other)) spin.rotation.x += rolled / radius;
-        drawFar(other, other.position.z < -TRAFFIC.far);
-      }
+      const cars = advance(dt, world, level);
       if (cars.length === 0) return { crashed: false, scored: false };
 
       car.getBounds(carBounds);

@@ -16,7 +16,7 @@ function setup() {
     update() {},
   };
   const world = { speedMultiplier: 1 };
-  const calls = { minigameReset: 0, menuShow: 0, menuRandomize: 0, carUpdate: 0 };
+  const calls = { minigameReset: 0, menuShow: 0, menuRandomize: 0, carUpdate: 0, met: 0 };
   // the wreck: three cars 5 apart, the Bolones (moved by `at`) where the orbit is at the crash
   const state = { crashNext: false, wreckSpeed: 0.4, at: new THREE.Vector3(0, 1.8, 0) };
   const minigame = {
@@ -36,7 +36,11 @@ function setup() {
     },
     spawning: false,
     reset: () => calls.minigameReset++,
-    update: () => ({ crashed: state.crashNext, scored: false }),
+    advance() {},
+    update: () => {
+      calls.met++;
+      return { crashed: state.crashNext, scored: false };
+    },
     wreck: () => state.wreckSpeed,
     wrecks: ["Bolones", "Polakito", "Kredens"],
     wreckCentre: (/** @type {THREE.Vector3} */ target, /** @type {number} */ which) =>
@@ -122,6 +126,15 @@ function setup() {
 }
 
 describe("keys outside the state machine", () => {
+  it("moves the traffic in the countdown meeting nothing: met from the start of play on", () => {
+    const { calls, run, play } = setup();
+    play();
+    run(MINIGAME.countdown - 0.1);
+    expect(calls.met).toBe(0);
+    run(0.2);
+    expect(calls.met).toBeGreaterThan(0);
+  });
+
   it("R randomizes the scene colors through the scene GUI, in any state", () => {
     const { input, calls, run } = setup();
     input.dispatch("randomize");

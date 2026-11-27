@@ -32,9 +32,15 @@ export function createPosts(world, posts, onRoad) {
   const { palm } = MINIGAME.crash;
   /** @type {Map<THREE.Object3D, Party>} */
   const stands = new Map();
-  /** @type {Map<THREE.Object3D, { original: THREE.Quaternion, foot: THREE.Vector3, axis: THREE.Vector3, lean: number, swing: number, since: number }>} */
+  /**
+   * The palms hit: how they stood (`upright`), as they were at the last hit (`original`), leaning
+   * on from there about `axis` by `lean`, swaying `swing`, since then.
+   *
+   * @type {Map<THREE.Object3D, { upright: THREE.Quaternion, original: THREE.Quaternion, foot: THREE.Vector3, axis: THREE.Vector3, lean: number, swing: number, since: number }>}
+   */
   const sways = new Map();
   const turn = new THREE.Quaternion();
+  const up = new THREE.Vector3();
 
   return {
     /** The posts there are now: new ones stand where they are on the road, gone ones go. */
@@ -67,16 +73,21 @@ export function createPosts(world, posts, onRoad) {
           stiffness: Infinity,
           color,
           struck({ into }, speed, time) {
-            // a touch (or the dents following where a car stays in it) does not sway it, each
-            // hit starting it over
+            // a touch (or the dents following where a car stays in it) does not sway it; hit
+            // again, it leans on from as it is now (swaying, leaning), as far as `lean` in all
             if (!leans || speed / METRE < MINIGAME.crash.nudge) return undefined;
             const share = Math.min(1, speed / METRE / palm.full);
-            const was = sways.get(object);
+            const upright = sways.get(object)?.upright ?? object.quaternion.clone();
+            const leant = up
+              .copy(UP)
+              .applyQuaternion(object.quaternion)
+              .angleTo(UP.clone().applyQuaternion(upright));
             sways.set(object, {
-              original: was?.original ?? object.quaternion.clone(),
+              upright,
+              original: object.quaternion.clone(),
               foot,
               axis: UP.clone().cross(into).normalize(),
-              lean: Math.min(palm.lean, (was?.lean ?? 0) + palm.lean * share),
+              lean: Math.min(palm.lean * share, Math.max(0, palm.lean - leant)),
               swing: palm.swing * share,
               since: time,
             });

@@ -66,7 +66,7 @@ const THROWN = 2.5 * METRE;
  *
  * @typedef {import("./crash/posts.js").Post} Post
  * @typedef {import("../scene/crumple.js").Hit} Hit
- * @typedef {import("../scene/crumple.js").Dent} Dent
+ * @typedef {{ set: (progress: number) => void }} Dent how far a dent shows its crush gone in, 0..1
  *
  * @typedef {import("./crash/crush.js").Solid & {
  *   color?: THREE.Color,
@@ -290,7 +290,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       /**
        * Crumples the car where it was hit, in a frame of its own (crumpling): a crash dents two
        * cars at once, a pile-up more, and each takes a while. Till then, it shows how far its
-       * crush has gone in as soon as it is there.
+       * crush has gone in as soon as it is there. Undone when the crash is (dispose), the dents
+       * the other way round from how they came in.
        *
        * @param {Hit} hit on the road
        * @param {number} speed
@@ -310,6 +311,7 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
           crumple() {
             put(car.object, offset, at, turn);
             dent = crumple(car.object, met());
+            undo.push(dent.undo); // each dent's moves from where the one before left them
             dent.set(progress);
             for (const { node, position, quaternion } of dent.moved) {
               vehicle.skew(node, position, quaternion);
@@ -325,7 +327,6 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
             progress = value;
             dent?.set(value);
           },
-          undo: () => dent?.undo(),
         };
       },
     };
@@ -449,19 +450,26 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
     // waiting its turn: crumpling), still level
     const turned = headingOf(rotation(car.body.rotation())) - heading;
     const [by, into] = [push, along].map((v) => v.clone().applyAxisAngle(UP, turned));
-    // its middle and its size, in its own frame
-    const toNode = node.matrixWorld.clone().invert();
-    const bounds = new THREE.Box3();
-    for (const mesh of solidMeshes(node)) {
-      mesh.geometry.computeBoundingBox();
-      const box = /** @type {THREE.Box3} */ (mesh.geometry.boundingBox).clone();
-      bounds.union(box.applyMatrix4(toNode.clone().multiply(mesh.matrixWorld)));
-    }
+    /** Its meshes' bounds in a frame of it. @param {THREE.Object3D} frame */
+    const boundsIn = (frame) => {
+      const toFrame = frame.matrixWorld.clone().invert();
+      const bounds = new THREE.Box3();
+      for (const mesh of solidMeshes(node)) {
+        mesh.geometry.computeBoundingBox();
+        const box = /** @type {THREE.Box3} */ (mesh.geometry.boundingBox).clone();
+        bounds.union(box.applyMatrix4(toFrame.clone().multiply(mesh.matrixWorld)));
+      }
+      return bounds;
+    };
+    // its middle in its own frame; its size there too, but a wheel's in its spin's: as round and
+    // as wide as it is, however far it is spun and steered
+    const bounds = boundsIn(node);
+    const measured = part === "wheel" ? boundsIn(wheelsOf(node)[0].spin) : bounds;
     const [at, turn, size] = [new THREE.Vector3(), new THREE.Quaternion(), new THREE.Vector3()];
     node.matrixWorld.decompose(at, turn, size);
     const middle = bounds.getCenter(new THREE.Vector3());
     const centre = onRoad(middle.clone().applyMatrix4(node.matrixWorld).add(by)); // the crush's
-    const [x, y, z] = bounds.getSize(new THREE.Vector3()).multiply(size).toArray();
+    const [x, y, z] = measured.getSize(new THREE.Vector3()).multiply(size).toArray();
     const radius = Math.max(y, z) / 2;
     const fling = parts.fling * speed;
     const velocity = velocityAt(car.body, centre).add(
@@ -521,6 +529,8 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       node.quaternion.copy(facing);
       node.scale.copy(scaled);
     });
+    // where its hub is, in the body's frame: read before it leaves the car for the scene
+    const hub = car.vehicle.lose(node);
     scene.attach(node);
     const half = [x / 2, y / 2, z / 2];
     const offset = translation(middle.negate());
@@ -536,7 +546,6 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       size,
     });
 
-    const hub = car.vehicle.lose(node);
     if (hub) {
       const ball = RAPIER.ColliderDesc.ball(build.hub * hub.radius);
       world.createCollider(metal(ball).setTranslation(hub.at.x, hub.at.y, hub.at.z), car.body);
@@ -578,7 +587,6 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       { point, into: UP.clone(), plane: deep, reach: Infinity, tall: Infinity },
       fall,
     );
-    undo.push(dent.undo);
     dents.push({ set: dent.set, progress: 1, shown: 0 });
     // the corners beyond where the crush ends cut off there (its plane: up, in the body's frame)
     const back = turn.invert();
@@ -646,7 +654,6 @@ export function createCrash(scene, cars, posts = () => [], random = Math.random)
       const hit = crash.hits[i];
       const dent = solid.struck(hit, crash.speed, time);
       if (!dent) continue;
-      undo.push(dent.undo);
       crushed.push({ set: dent.set, progress: 0, shown: 0 });
     }
     dents.push(...crushed);

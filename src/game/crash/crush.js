@@ -194,8 +194,8 @@ export const reachOf = (solid) => {
  * @template {Solid} T
  * @param {RAPIER.World} world
  * @param {(a: T, b: T, crash?: Meeting) => ((progress: number) => void) | undefined} met two met
- *   for the first time (or again, through other faces), crashing or only touching; for a crash,
- *   what shows the crush going in (0..1)
+ *   for the first time (or again, through other faces), crashing or only touching, or one lying
+ *   on the other (each step it does); for a crash, what shows the crush going in (0..1)
  */
 export function createCrushes(world, met) {
   const { restitution, scrape, nudge, interlock } = MINIGAME.crash;
@@ -359,6 +359,7 @@ export function createCrushes(world, met) {
       const top = contact.faces.reduce((best, f) => (f.depth < best.depth ? f : best));
       const half = Math.min(extent(boxA, UP), extent(boxB, UP));
       if (!isPost(b) && Math.abs(top.normal.y) >= TOP && top.depth < half) {
+        met(a, b); // they touch: in the wreck together
         const middle = middleOf(boxA, boxB, top.normal);
         const moving = velocityAt(b.body, middle).sub(velocityAt(a.body, middle));
         const closing = -moving.dot(top.normal);

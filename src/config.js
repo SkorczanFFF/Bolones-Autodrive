@@ -441,7 +441,6 @@ export const CAR = {
 };
 
 export const SPEED = {
-  wheelSpin: -13.2, // radians/s at speedMultiplier 1
   traffic: 200 / 6, // units per second: across the 200-unit world in 6 s
   tierStep: 0.15, // speed multiplier added per tier
   /** km/h per unit/s: what the speeds shown and set in km/h are in the scene's units. */
@@ -548,7 +547,7 @@ export const MINIGAME = {
      * gently. Turned fast, its tyres tip it more than a car's (car.tip), as if they held `tip` of
      * the way down from `fast` m/s on, from car.tip at the first: a full turn held at 80 km/h and
      * more rolls it over in a second or so, ↑ held or not; slower, it only leans, low and wide. */
-    player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6, tip: 1, fast: [11, 22] },
+    player: { steer: 25, turn: 0.3, gas: 2.5, top: 12, stall: 6, tip: 1, fast: [15, 25] },
     keepComing: 2.5, // s the traffic keeps coming after a crash (and on while the camera goes on)
     /** A car meets as a box over its lower `box` of its height, its centre of mass `com` of its
      * height up: cars are heavy low down, a hit pushes them more than it tips them. On the road its

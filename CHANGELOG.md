@@ -136,8 +136,8 @@ lets you recolor and tweak everything.
   road.
 - The Bolones, the player's after a crash, rolls over in a full turn held at speed: from about
   80 km/h in a second or so, ↑ held or not (turned fast, its tyres tip it as if they gripped
-  lower than they do). At 60 km/h it leans hard, a quick turn left and right at 90 swings it from
-  side to side; slower, it only leans, as low and wide as ever.
+  lower than they do). At 70 km/h it leans hard, a quick turn left and right at 90 swings it from
+  side to side; up to 60 km/h it only leans, as low and wide as ever.
 - No dent comes out pressed smooth: what a crash crushes is wrinkled a little, finer than its
   buckles, deeper here and there and up or down (along a side, along it), never back out towards
   the other car.
@@ -156,8 +156,17 @@ lets you recolor and tweak everything.
 
 ### Fixed
 
+- A car down a wheel sits on that corner's hub: the hub was put far off the car (behind it, or as
+  far out on the road as the car had come), its corner coming down onto its floor.
+- A wheel torn off rolls on the road as round as it is: it was taken for as big as it looked
+  turned when it went, up to two fifths bigger, rolling on a hand's breadth above the road.
+- A palm hit again leans on from as it stands, swaying or not, the new way: it stood upright for a
+  moment first and forgot which way it had leant.
+- The Bolones' wheels roll as fast as it drives, as the traffic's do: they turned half as fast.
+- The Bolones' wheels always go back where they were for the next game: a wheel pushed by two
+  dents that went in the other way round from how the car was hit could stay part way askew.
 - A car rolling over into another meets it up to its roof, and one rolled up onto another lies on
-  it, held up: they went into each other roof to roof by up to half a metre, an upright car met by
+  it, held up, the two of them in the wreck (Tab goes to either): they went into each other roof to roof by up to half a metre, an upright car met by
   its lower part only, nothing holding up a car on top of another.
 - A car over on its side lies on its body, leaning onto its roof as its sides come in to it: it
   stood upright on its side on a box as wide as its doors up to its windows, the Bolones on its

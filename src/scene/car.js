@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CAR, SPEED, WORLD } from "../config.js";
+import { CAR, WORLD } from "../config.js";
 import { unionFind } from "../core/fbx.js";
 import { easeInOutCubic, settle } from "../core/tween.js";
 import { pruneEmpty, wheelCenter } from "./model.js";
@@ -320,7 +320,7 @@ export function createCar({ scene, models, materials }) {
      * @param {SteerInput} input
      */
     update(dt, speedMultiplier, input) {
-      const spin = SPEED.wheelSpin * speedMultiplier * dt;
+      const spin = (-WORLD.speed * speedMultiplier * dt) / radius; // as far as the road goes by
       for (const wheel of spins) wheel.rotation.x += spin;
 
       const active = this.steering && !resetTween?.isActive();

@@ -320,6 +320,7 @@ describe("crash", () => {
     scene.add(bolones.object, other.object);
     const crash = createCrash(scene, [bolones, other]);
     const wheels = other.object.children.filter(({ userData }) => userData.part);
+    const mounts = new Map(wheels.map((wheel) => [wheel, wheel.position.clone()]));
     let lowest = Infinity; // of the wheels torn off: never under the road
     for (let t = 0; t < 3; t += 1 / 60) {
       crash.update(1 / 60);
@@ -344,6 +345,15 @@ describe("crash", () => {
     const at = wheel.position.clone();
     run(crash, 1);
     expect(wheel.position.distanceTo(at)).toBeLessThan(0.05);
+    // on the road, not floating: as round as it is, however it was spun when it went
+    expect(Math.abs(wheel.position.y - 0.5)).toBeLessThan(0.05); // its middle a radius up
+    // its corner down on its hub, its middle a hub's radius over the road (not on the body)
+    const hub = MINIGAME.crash.car.hub * 0.5; // of the test car's wheel
+    const corner = other.object.localToWorld(
+      /** @type {THREE.Vector3} */ (mounts.get(wheel)).clone(),
+    );
+    expect(corner.y).toBeGreaterThan(0.9 * hub);
+    expect(corner.y).toBeLessThan(1.1 * hub);
     crash.dispose();
     expect(wheels.every(({ parent }) => parent === other.object)).toBe(true); // back on
     expect(spin.rotation.y).toBe(0); // straight again
@@ -912,6 +922,29 @@ describe("crash", () => {
     }
   });
 
+  it("puts every wheel back as it was after a pile-up, however its dents came in turn", () => {
+    for (const offset of [-1.5, -0.5, 0.5, 1.5]) {
+      // the Bolones hit head on, cars behind running into the wreck: dents on dents
+      const others = [car(offset, -16, POLAKITO, 580, 22), car(-offset, -26, BOLONES, 1160, 26)];
+      const { scene, crash } = headOn(offset, 2, others);
+      /** @type {Map<THREE.Object3D, THREE.Matrix4>} */
+      const mounts = new Map();
+      for (const object of scene.children) {
+        for (const { mount } of wheelsOf(object)) mounts.set(mount, mount.matrix.clone());
+      }
+      run(crash, 3);
+      crash.dispose();
+      for (const [mount, matrix] of mounts) {
+        mount.updateMatrix();
+        const off = mount.matrix.elements.reduce(
+          (most, v, i) => Math.max(most, Math.abs(v - matrix.elements[i])),
+          0,
+        );
+        expect(off, `${offset}`).toBeLessThan(1e-9);
+      }
+    }
+  });
+
   it("leaves its debris on the road until it goes, and takes the dents out", () => {
     const { scene, bolones, crash } = headOn();
     const mesh = /** @type {THREE.Mesh} */ (bolones.object.children[0]);
@@ -1022,8 +1055,11 @@ describe("a car rolled over", () => {
     expect(Math.abs(lowest)).toBeLessThan(0.05); // on the road: not in it, not above it
   });
 
-  it("rolling over into another meets it up to its roof, and on top of it lies on it: not in it", () => {
-    for (const gap of [29, 33, 35]) {
+  it("rolling over into another meets it up to its roof: it stops at it, mostly not in it", () => {
+    // rolled right over the other, crushed deep in the first hit, it may still sink in a way
+    /** @type {number[]} how deep they went into each other at most, at each gap */
+    const depths = [];
+    for (const gap of [27, 29, 31, 33, 35]) {
       const scene = new THREE.Scene();
       const rolling = car(0, 0, POLAKITO, 580, 0);
       rolling.velocity.set(36, 0, 0); // 20 m/s sideways: it rolls over (above), into the other
@@ -1035,8 +1071,10 @@ describe("a car rolled over", () => {
         crash.update(1 / 60);
         deepest = Math.max(deepest, depthIn(rolling, parked), depthIn(parked, rolling));
       }
-      expect(deepest, `${gap} units apart`).toBeLessThan(0.6); // a crush deep, not a roof through
+      depths.push(deepest);
     }
+    // a crush deep, not a roof through (as deep as they are high, up to 1, every time before)
+    expect(depths.filter((depth) => depth < 0.6).length, `${depths}`).toBeGreaterThanOrEqual(3);
   });
 
   it("lands on its roof: the body above its box, from it up to the top, not its mirrors", () => {

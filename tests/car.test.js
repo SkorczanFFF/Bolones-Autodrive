@@ -4,6 +4,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { CAR, WORLD } from "../src/config.js";
 import { createCar } from "../src/scene/car.js";
 import { createTweens } from "../src/core/tween.js";
+import { wheelsOf } from "../src/scene/rig.js";
 
 /**
  * Like wheel.fbx: the axle runs along x through the model origin, the tire is a polygon (so its
@@ -318,6 +319,13 @@ describe("car wheels", () => {
     const before = axleOf(back);
     for (let i = 0; i < 37; i++) car.update(1 / 60, 1, 0); // wheels spin, the car stays put
     expect(axleOf(back).distanceTo(before)).toBeLessThan(1e-6);
+  });
+
+  it("roll as far as the road goes by under them, however fast", () => {
+    const car = setup();
+    const [{ spin, radius }] = wheelsOf(car.wreck);
+    car.update(0.5, 2, 0); // half a second at twice the speed
+    expect(-spin.rotation.x * radius).toBeCloseTo(WORLD.speed * 2 * 0.5, 6);
   });
 
   it("steer around the middle of the wheel", () => {

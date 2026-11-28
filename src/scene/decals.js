@@ -3,10 +3,8 @@ import { densify, pieces as cut, rectangle, STATION } from "./outline.js";
 import { face, facingPositions, flatGeometry, joined, triangleFacing } from "./polygons.js";
 
 /**
- * Decals on the body of a car of the traffic (TrafficModel `decals`, scene/trafficModels.js;
- * scene/sedan.js puts them on): outlines drawn in a view, projected onto the body along it, just
- * off it, as fine as its curves need and for a crash to bend them with it; or blocks standing out
- * of it (a lamp).
+ * Decals (SedanModel `decals`): outlines drawn in a view, projected onto the body just off it, as
+ * fine as its curves need and for a crash to bend them with it; or blocks standing out (a lamp).
  *
  * @typedef {import("./trafficModels.js").Decal} Decal
  * @typedef {import("./trafficModels.js").Mark} Mark
@@ -20,7 +18,7 @@ const [DECAL_STEP, DECAL_OFFSET] = [0.03, 0.01];
 const DECAL_TOLERANCE = 0.002;
 
 /**
- * Decals (TrafficModel `decals`): each outline drawn in a view, cut into bars or columns, one
+ * Decals (SedanModel `decals`): each outline drawn in a view, cut into bars or columns, one
  * polygon each, its corners (every DECAL_STEP, inside too) projected onto the body along the view
  * and DECAL_OFFSET off it.
  *

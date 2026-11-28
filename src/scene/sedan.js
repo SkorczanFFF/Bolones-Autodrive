@@ -37,14 +37,11 @@ import {
 } from "./polygons.js";
 
 /**
- * The body of a car of the traffic with a cabin on its deck (TrafficModel,
- * scene/trafficModels.js), in metres, its origin on the ground in the middle of its length, its
- * front towards +z: the lower body lofted through sections along the car, the cabin on the deck
- * with its windows set in, the flares round the arches, the marks and the lamps' housings, the
- * ends leaned, the decals on it (scene/decals.js); and its headlamps, one geometry each. A van
- * is built by scene/van.js; the wheels, bumpers and mirrors of both by scene/carParts.js.
+ * A car with a cabin on its deck (SedanModel), in metres, its origin on the ground in the middle
+ * of its length, its front towards +z: the lower body lofted along the car, the cabin on it, the
+ * details and the decals (decals.js); the headlamps apart. Wheels, bumpers, mirrors: carParts.js.
  *
- * @typedef {import("./trafficModels.js").TrafficModel} TrafficModel
+ * @typedef {import("./trafficModels.js").SedanModel} SedanModel
  * @typedef {import("./trafficModels.js").RearWall} RearWall
  * @typedef {import("./outline.js").Point} Point
  * @typedef {import("./polygons.js").Part} Part
@@ -71,14 +68,13 @@ const CROWN = 0.035;
 const ACROSS = [-1, -FACET, 0, FACET, 1];
 /** The drip rail along each side of the roof, this far under its edge, metres. */
 const RAIL = [0.012, 0.03];
-/** A screen that neither curves nor rounds its corners (TrafficModel `cabin.screens`). */
+/** A screen that neither curves nor rounds its corners (SedanModel `cabin.screens`). */
 const FLAT_SCREEN = { bow: [0, 0], corners: [0, 0] };
 
 /**
- * A car of the traffic with a cabin on its deck, in metres, its origin on the ground in the middle
- * of its length: its body and its headlamps.
+ * Its body and its headlamps, one geometry each.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @returns {{ body: THREE.BufferGeometry, lamps: THREE.BufferGeometry[] }}
  */
 export function sedanGeometry(model) {
@@ -86,10 +82,9 @@ export function sedanGeometry(model) {
 }
 
 /**
- * Body, cabin, windows and marks of a car, in metres, its origin on the ground in the middle of
- * its length.
+ * The body: one geometry with its polygons.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @returns {THREE.BufferGeometry}
  */
 function bodyGeometry(model) {
@@ -156,7 +151,7 @@ function bodyGeometry(model) {
  * The half width of a car's lower body at (x, y): the side tucked in from the waist down to the
  * sill, between the waist and the shoulder as sideWidth().
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @param {number} x
  * @param {number} y
  */
@@ -168,10 +163,10 @@ function surfaceWidth(model, x, y) {
 }
 
 /**
- * Each wheel arch (TrafficModel `wheel.arches`) from its rear foot over to its front foot: its
+ * Each wheel arch (SedanModel `wheel.arches`) from its rear foot over to its front foot: its
  * line, its height at x (-Infinity off it) and its line grown by `grow`, a flare's outer edge.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  */
 function arches({ wheel }) {
   return wheel.arches.map((arch, i) => {
@@ -210,7 +205,7 @@ function arches({ wheel }) {
  * A flare round each wheel arch, `width` wide, standing OFFSET out of the side: a band between
  * the arch (as lowerBody() cuts it) and the arch grown by `width`, one polygon each.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @param {number} width
  * @returns {Part[]}
  */
@@ -267,7 +262,7 @@ function raised(rim, at, out, depth, cuts) {
  * Each fades out over a STATION from its end; the faces that move get their normals again.
  *
  * @param {THREE.BufferGeometry} geometry non-indexed, built from the rear (z = 0) forward
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  */
 function leanEnds(geometry, model) {
   const { nose, tail, top: deck } = model.body;
@@ -306,13 +301,13 @@ function leanEnds(geometry, model) {
   return geometry;
 }
 
-/** The body's rear and front ends (without the bumpers). @param {TrafficModel} model */
+/** The body's rear and front ends (without the bumpers). @param {SedanModel} model */
 const ends = ({ body }) => [body.top[0][0], body.top[body.top.length - 1][0]];
 
 /**
  * Half width of the body side at (x, y), between the waist and the shoulder.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @param {number} x
  * @param {number} y
  */
@@ -327,15 +322,12 @@ function sideWidth({ body }, x, y) {
 const BANDS = [0, 1, 1, 2, 2, 3, 3, 3, 3];
 
 /**
- * The lower body, lofted through cross-sections along the car: each half section runs from the
- * underside centre out to the sill (`tuck` inside the waist), up to the waist (the widest line,
- * `width` in the top view), the shoulder (`shoulderInset` inside it) and in to the deck centre;
- * the other half mirrors it. Wheel arches are cut into the underside. Underside, lower side, upper
- * side, deck and the two ends are one polygon each, so the lines run along the sill, the waist
- * (over an arch reaching above it) and the shoulder and around the ends; the door seams split
- * the sides into panels. A flat rear (TrafficModel `rear`) leaves the rear end to rearWall().
+ * The lower body, lofted through half sections (underside middle, sill, waist, shoulder, deck
+ * middle; mirrored), the arches cut into the underside. Underside, lower side, upper side, deck
+ * and each end are a polygon each, the sides split at the seams, so lines run along the sill, the
+ * waist and the shoulder. A flat rear (`rear`) leaves its end to rearWall().
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @returns {{ part: Part, rearSection: Point[] }} the half section at the rear end too
  */
 function lowerBody(model) {
@@ -479,15 +471,12 @@ function lowerBody(model) {
 }
 
 /**
- * The cabin: its side profile drawn across the car, narrowing up to the roof (`halfWidth`). The
- * roof and the screens bulge up (CROWN, from nothing at the cabin's foot to all of it at the
- * roof), rounding off at the edges, and the screens curve out in the middle (`cabin.screens`,
- * as seen from above); the windscreen, the rear window and the side windows, their corners
- * rounded, are set in (RECESS) behind their frames and the pillars, in openings with sides of
- * their own; a drip rail runs along each side of the roof. Stretches longer than STATION are
- * cut, and the sides get points inside, for a crash to bend.
+ * The cabin: its profile drawn across, narrowing up (`halfWidth`); the roof and the screens
+ * crowned (none at the foot, all of it at the roof), the screens bowed (`cabin.screens`); the
+ * windows set in behind their frames; a drip rail along the roof. Cut every STATION, the sides
+ * filled with points, for a crash to bend.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @param {(y: number) => number} halfWidth
  * @param {(x: number) => number} deckCrown how much higher the deck's middle is than its sides
  * @param {Point[]} rearSection the lower body's half section at its rear end (lowerBody())
@@ -689,11 +678,11 @@ function cabinParts(model, halfWidth, deckCrown, rearSection) {
 }
 
 /**
- * A flat rear (TrafficModel `rear`): the lower body's end and the cabin's rear face in one plane,
+ * A flat rear (SedanModel `rear`): the lower body's end and the cabin's rear face in one plane,
  * split along the belt (the cabin's foot) beside the door, the door one polygon across it, the
  * windows set in. Its outline takes the sides', the deck's and the roof's points there.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  * @param {object} shape
  * @param {Point[]} shape.rearSection the lower body's half section (lowerBody())
  * @param {number[]} shape.edge heights of the cabin's points up its rear edge
@@ -806,7 +795,7 @@ function rearWall(model, { rearSection, edge, foot, halfWidth, point }) {
 /**
  * The headlamps, one geometry each, with `userData.polygons` (its outline): lines once it is out.
  *
- * @param {TrafficModel} model
+ * @param {SedanModel} model
  */
 function lampGeometries(model) {
   const front = ends(model)[1];

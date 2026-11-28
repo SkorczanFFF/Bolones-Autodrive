@@ -22,13 +22,11 @@ import {
 } from "./polygons.js";
 
 /**
- * The parts both kinds of car of the traffic have (scene/sedan.js, scene/van.js): the wheels, the
- * bumpers (a guard on the front one) and the outside mirrors, nodes of their own on the car
- * (scene/traffic.js); the spare wheel on a car's rear. In metres
- * from the car's rear end (z = 0) forward, its front towards +z; and centred(), which moves a
- * car's geometry so built to have its origin in the middle of its length.
+ * Parts of every kind (traffic.js makes them nodes of their own): the wheels, the bumpers (the
+ * guard on the front one), the mirrors; and the spare wheel. In metres from the rear end (z = 0)
+ * forward, the front towards +z; centred() moves the origin to the middle of the length.
  *
- * @typedef {import("./trafficModels.js").TrafficModel} TrafficModel
+ * @typedef {import("./trafficModels.js").Wheel} Wheel
  * @typedef {import("./trafficModels.js").Bumper} Bumper
  * @typedef {import("./trafficModels.js").Mirror} Mirror
  * @typedef {import("./trafficModels.js").Guard} Guard
@@ -136,7 +134,7 @@ export function guardParts({ tubes, thick }) {
 /**
  * The spare wheel, a car's own, standing up on its rear end (x = 0), looking back.
  *
- * @param {{ wheel: Omit<TrafficModel["wheel"], "arches">, spare?: { y: number } }} model
+ * @param {{ wheel: Wheel, spare?: { y: number } }} model
  * @returns {Part[]}
  */
 export function spareParts({ wheel, spare }) {
@@ -152,7 +150,7 @@ export function spareParts({ wheel, spare }) {
  * A wheel: the tyre (its tread, the sidewall round the rim), the rim set RIM_DEPTH into it with
  * its holes, the hubcap. Lines draw the rings, the holes and the hubcap.
  *
- * @param {Omit<TrafficModel["wheel"], "arches">} wheel
+ * @param {Wheel} wheel
  * @param {number[]} centre
  * @param {number} side -1 left, 1 right: where the outer face looks
  * @returns {Part[]}

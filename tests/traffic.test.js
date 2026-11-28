@@ -13,8 +13,12 @@ import { testMaterials as materials } from "./helpers.js";
 
 /**
  * @typedef {[number, number]} Point
- * @typedef {import("../src/scene/trafficModels.js").TrafficModel} TrafficModel
+ * @typedef {import("../src/scene/trafficModels.js").SedanModel} SedanModel
+ * @typedef {import("../src/scene/trafficModels.js").VanModel} VanModel
  */
+
+/** A model's place in TRAFFIC_MODELS. @param {string} label */
+const indexOf = (label) => TRAFFIC_MODELS.findIndex((model) => model.label === label);
 
 /** y of a polyline sorted by x, at x. @param {Point[]} curve @param {number} x */
 const at = (curve, x) => {
@@ -71,13 +75,16 @@ describe("prism", () => {
 describe("traffic models", () => {
   const dressed = materials();
   const models = createTrafficModels(dressed);
-  const configs = Object.values(TRAFFIC_MODELS);
+  const configs = TRAFFIC_MODELS;
   /** The cars with a cabin on their deck, and their templates. */
   const sedans = configs.flatMap((config, i) =>
-    "cabin" in config ? [{ config, model: models[i] }] : [],
+    config.kind === "sedan" ? [{ config, model: models[i] }] : [],
   );
 
-  it("builds one template per model, front towards +z, on the ground", () => {
+  /** Each car's width over all as traced (body, wheels, bumpers; not its mirrors), metres. */
+  const widths = { Polakito: 1.382, Kredens: 1.63, Ramses: 1.79, Honeker: 1.83 };
+
+  it("builds one template per model, front towards +z, on the ground, as wide as traced", () => {
     expect(models).toHaveLength(configs.length);
     models.forEach((model, i) => {
       const config = configs[i];
@@ -88,8 +95,11 @@ describe("traffic models", () => {
       expect(hitbox.min.y).toBeCloseTo(0, 5); // tyres touch the ground
       expect(size.z).toBeCloseTo(config.length * TRAFFIC.scale, 5); // bumper to bumper
       expect(Math.abs(hitbox.min.z + hitbox.max.z)).toBeLessThan(1e-5); // centred along z
-      expect(size.x).toBeLessThanOrEqual(config.width * TRAFFIC.scale + 1e-5); // fits its lane
-      expect(size.x).toBeGreaterThan(0.98 * config.width * TRAFFIC.scale);
+      expect(Math.abs(hitbox.min.x + hitbox.max.x)).toBeLessThan(1e-5); // and across
+      const width = /** @type {Record<string, number>} */ (widths)[config.label];
+      expect(width, config.label).toBeDefined(); // a new car: its width here
+      expect(size.x / TRAFFIC.scale, config.label).toBeLessThanOrEqual(width + 1e-5);
+      expect(size.x / TRAFFIC.scale, config.label).toBeGreaterThan(0.98 * width);
     });
   });
 
@@ -154,7 +164,7 @@ describe("traffic models", () => {
   });
 
   it("wrap the Kredens' windscreen round into its pillars", () => {
-    const i = Object.keys(TRAFFIC_MODELS).indexOf("kredens");
+    const i = indexOf("Kredens");
     const position = /** @type {THREE.Mesh} */ (models[i].children[0]).geometry.getAttribute(
       "position",
     );
@@ -196,7 +206,7 @@ describe("traffic models", () => {
       expect([count("wheel"), count("bumper"), count("spare")]).toEqual([
         4,
         2,
-        "spare" in configs[i] && configs[i].spare ? 1 : 0,
+        configs[i].spare ? 1 : 0,
       ]);
       for (const wheel of wheels) {
         // round the axle: the node sits in the middle of the wheel, on the ground
@@ -215,8 +225,8 @@ describe("traffic models", () => {
   });
 
   it("lean the Polakito's rear face back up to its engine lid, as the drawings have it", () => {
-    const i = Object.keys(TRAFFIC_MODELS).indexOf("polakito");
-    const config = /** @type {import("../src/scene/trafficModels.js").TrafficModel} */ (configs[i]);
+    const i = indexOf("Polakito");
+    const config = /** @type {SedanModel} */ (configs[i]);
     const body = /** @type {THREE.Mesh} */ (models[i].children[0]);
     const raycaster = new THREE.Raycaster();
     /** Where the body's rear is, in the middle at a height y: metres from the car's rear end. */
@@ -268,8 +278,9 @@ describe("traffic models", () => {
       expect(widest).toBeGreaterThanOrEqual(Math.max(-min.x, max.x) - 1e-6);
       expect(widest).toBeGreaterThanOrEqual(model.userData.hitbox.max[0]);
     }
+    // the mirrors stand out further than any body
     expect(widest).toBeGreaterThan(
-      Math.max(...configs.map(({ width }) => width / 2)) * TRAFFIC.scale,
+      Math.max(...models.map(({ userData }) => userData.hitbox.max[0])),
     );
   });
 
@@ -306,7 +317,7 @@ describe("traffic models", () => {
     const clone = models[0].clone();
     expect(clone.userData.hitbox).toEqual(models[0].userData.hitbox);
     const lamps = /** @type {THREE.Mesh[]} */ (clone.getObjectsByProperty("name", "lamp"));
-    expect(lamps).toHaveLength(2 * /** @type {TrafficModel} */ (configs[0]).lamps.length);
+    expect(lamps).toHaveLength(2 * /** @type {SedanModel} */ (configs[0]).lamps.length);
     for (const lamp of lamps) {
       expect(lamp.material).toBe(dressed.headlight);
       expect(lamp.children.map(({ visible }) => visible)).toEqual([false]);
@@ -349,10 +360,9 @@ describe("traffic models", () => {
 
 describe("the Ramses, a van", () => {
   const models = createTrafficModels(materials());
-  const car = models[Object.keys(TRAFFIC_MODELS).indexOf("ramses")];
-  const { van, length } = /** @type {import("../src/scene/trafficModels.js").VanModel} */ (
-    TRAFFIC_MODELS.ramses
-  );
+  const ramses = /** @type {VanModel} */ (TRAFFIC_MODELS[indexOf("Ramses")]);
+  const car = models[indexOf("Ramses")];
+  const { van, length } = ramses;
   const body = /** @type {THREE.Mesh} */ (car.children[0]).geometry;
   const position = body.getAttribute("position");
   /** A corner in metres: across, up, along from the car's end. @param {number} i */
@@ -407,7 +417,7 @@ describe("the Ramses, a van", () => {
       return false;
     };
     for (const side of [-1, 1]) {
-      for (const axle of TRAFFIC_MODELS.ramses.wheel.axles) {
+      for (const axle of ramses.wheel.axles) {
         expect(covered(axle, van.sill + 0.1, side)).toBe(false); // the arch's opening
       }
       expect(covered(2.2, van.sill + 0.1, side)).toBe(true); // the side between the wheels
@@ -420,9 +430,7 @@ describe("the Ramses, a van", () => {
 });
 
 describe("the Ramses' build", () => {
-  const ramses = /** @type {import("../src/scene/trafficModels.js").VanModel} */ (
-    TRAFFIC_MODELS.ramses
-  );
+  const ramses = /** @type {VanModel} */ (TRAFFIC_MODELS[indexOf("Ramses")]);
 
   it("shades its lamps alike on both sides: the mirrored ones keep their smooth normals", () => {
     const { body } = vanGeometry(ramses);
@@ -462,8 +470,8 @@ describe("the Ramses' build", () => {
 });
 
 describe("the Honeker's flat rear", () => {
-  const honeker = /** @type {TrafficModel} */ (TRAFFIC_MODELS.honeker);
-  const rear = /** @type {NonNullable<TrafficModel["rear"]>} */ (honeker.rear);
+  const honeker = /** @type {SedanModel} */ (TRAFFIC_MODELS[indexOf("Honeker")]);
+  const rear = /** @type {NonNullable<SedanModel["rear"]>} */ (honeker.rear);
 
   it("refuses a window across the door's edge or below the belt instead of a broken mesh", () => {
     /** @param {import("../src/scene/trafficModels.js").Mark} window */
@@ -501,7 +509,7 @@ describe("a flare round a traced arch", () => {
 
 describe("decals", () => {
   it("keep their even shading through a dent", () => {
-    const i = Object.keys(TRAFFIC_MODELS).indexOf("kredens");
+    const i = indexOf("Kredens");
     const car = createTrafficModels(materials())[i];
     car.updateMatrixWorld(true);
     const body = /** @type {THREE.Mesh} */ (car.children[0]);

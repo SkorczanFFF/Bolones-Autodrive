@@ -69,19 +69,11 @@ const distinct = (values) =>
   [...values].sort((a, b) => a - b).filter((value, i, all) => i === 0 || value - all[i - 1] > EPS);
 
 /**
- * A van (VanModel, scene/trafficModels.js), in metres, its origin on the ground in the
- * middle of its length, its front towards +z: the body as one geometry, with `userData.polygons`
- * (its lines run round the polygons, see scene/polygons.js), and the lit lamps, one geometry each.
- *
- * Below the belt the body runs round the plan (a rectangle, its corners rounded) in bands
- * between the sill, the ribs and the belt, each band a polygon all round the rear and along each
- * side to the door edges, so a line runs round the car at each rib; the bands are cut round the
- * wheel arches, a flare round each. Above the belt the walls lean in up to the gutter, the
- * windows set in them; the tailgate leans in too. The roof rounds off from the gutter in rings
- * up to its crowned top, all one polygon: no line on it that would read as gear on the roof. The
- * cab's front: a ledge and a panel up from the front face to the windscreen, corner windows
- * wrapping round from its sides to the pillars, the corners under them sloping back down to the
- * belt.
+ * A van (VanModel) in metres, its origin on the ground in the middle of its length, its front
+ * towards +z: its body, one geometry with its polygons, and its lit lamps. Below the belt, bands
+ * round the plan between the ribs (a line at each), cut round the arches; above it the walls lean
+ * in to the gutter, the roof one polygon rounding off from it (a line on it would read as gear on
+ * the roof); the cab a ledge and a panel up to the windscreen, corner windows round to the pillars.
  *
  * @param {VanModel} model
  * @returns {{ body: THREE.BufferGeometry, lamps: THREE.BufferGeometry[] }}
@@ -541,8 +533,8 @@ function addWalls({
   // the blind panels and the louvres stand out of the walls
   const onWall = (/** @type {number} */ layer) => (/** @type {Point} */ p) =>
     wallAt(p).addScaledVector(wallNormal, OFFSET * layer);
-  for (const { x, y } of van.blanks) {
-    const inset = van.blankInset;
+  for (const { x, y } of van.blanks ?? []) {
+    const inset = van.blankInset ?? 0;
     const outer = rounded(box(x, y), van.windowCorners, 1);
     add(fineFace(outer, onWall(1), wallNormal, STATION), own("mark"));
     const inner = box([x[0] + inset, x[1] - inset], [y[0] + inset, y[1] - inset]);
@@ -551,7 +543,7 @@ function addWalls({
       own("mark"),
     );
   }
-  for (const { x, y, bars: count } of van.vents) {
+  for (const { x, y, bars: count } of van.vents ?? []) {
     for (const bar of bars(box(x, y), count)) {
       add(fineFace(bar, onWall(1), wallNormal, STATION), own("mark"));
     }
@@ -846,12 +838,13 @@ function addRoof({
 }
 
 /**
- * The details: the marks on the front and rear faces, the fog lamps, the tail lamps, the mudflaps
- * and the frame under the body.
+ * The marks on the front and rear faces, and what the van has of the fog lamps, the tail lamps,
+ * the mudflaps and the frame.
  *
  * @param {VanContext} context
  */
 function addDetails({ van, front, rear, add, own }) {
+  const { fogLamps: fog, tailLamps, mudflaps, frame } = van;
   for (const { marks, x, facing } of [
     { marks: van.frontMarks, x: front + OFFSET, facing: 1 },
     { marks: van.rearMarks, x: rear - OFFSET, facing: -1 },
@@ -866,8 +859,7 @@ function addDetails({ van, front, rear, add, own }) {
       }
     }
   }
-  const { fogLamps: fog } = van;
-  {
+  if (fog) {
     const lamp = new THREE.CylinderGeometry(fog.r, fog.r, fog.depth, ROUND_SEGMENTS)
       .rotateX(Math.PI / 2)
       .translate(fog.x, fog.y, front + fog.depth / 2);
@@ -878,9 +870,9 @@ function addDetails({ van, front, rear, add, own }) {
       own("fog"),
     );
   }
-  // the tail lamps: cut cones from the rear face back to the car's end, the lens their small end
-  {
-    const { w, y: ys, radius } = van.tailLamps;
+  // cut cones from the rear face back to the car's end, the lens their small end
+  if (tailLamps) {
+    const { w, y: ys, radius } = tailLamps;
     const [base, lens] = radius;
     for (const y of ys) {
       // CylinderGeometry along y: its top (base) turned to the front, the bottom (lens) back
@@ -894,8 +886,8 @@ function addDetails({ van, front, rear, add, own }) {
       );
     }
   }
-  {
-    const { x, w, y } = van.mudflaps;
+  if (mudflaps) {
+    const { x, w, y } = mudflaps;
     const flap = new THREE.BoxGeometry(w[1] - w[0], y[1] - y[0], 0.01).translate(
       (w[0] + w[1]) / 2,
       (y[0] + y[1]) / 2,
@@ -903,13 +895,13 @@ function addDetails({ van, front, rear, add, own }) {
     );
     add(byFaces(flap), own("mudflap"));
   }
-  {
-    const { x, half: frameHalf, y } = van.frame;
+  if (frame) {
+    const { x, half: frameHalf, y } = frame;
     // cut along it, for a crash to bend it
     const [wide, long] = [2 * frameHalf, x[1] - x[0]];
-    const frame = new THREE.BoxGeometry(wide, y[1] - y[0], long, 1, 1, Math.ceil(long / STATION));
-    frame.translate(0, (y[0] + y[1]) / 2, (x[0] + x[1]) / 2);
-    add(byFaces(frame), "frame", false);
+    const rails = new THREE.BoxGeometry(wide, y[1] - y[0], long, 1, 1, Math.ceil(long / STATION));
+    rails.translate(0, (y[0] + y[1]) / 2, (x[0] + x[1]) / 2);
+    add(byFaces(rails), "frame", false);
   }
 }
 
@@ -949,11 +941,14 @@ function assembled({ van, front, length, right, whole }) {
   const { fogLamps: fog } = van;
   const lit = (/** @type {Mark} */ mark, /** @type {number} */ x) =>
     withPolygons([face(rectangle(mark), ([w, y]) => at3(x, y, w), new THREE.Vector3(0, 0, 1))]);
+  const glass = fog ? 2 * fog.r * 0.85 : 0;
   const lamps = [
     ...mirrored(van.lamps).map((mark) => lit(mark, front + 2 * OFFSET)),
-    ...mirrored([{ x: fog.x, y: fog.y, w: 2 * fog.r * 0.85, h: 2 * fog.r * 0.85, round: 0.5 }]).map(
-      (mark) => lit(mark, front + fog.depth + OFFSET),
-    ),
+    ...(fog
+      ? mirrored([{ x: fog.x, y: fog.y, w: glass, h: glass, round: 0.5 }]).map((mark) =>
+          lit(mark, front + fog.depth + OFFSET),
+        )
+      : []),
   ];
   return {
     body: geometry.translate(0, 0, -length / 2),

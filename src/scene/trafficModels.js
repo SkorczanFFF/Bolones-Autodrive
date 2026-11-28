@@ -1,196 +1,191 @@
 /**
- * The minigames' traffic (scene/traffic.js builds it), traced from blueprints in metres.
- * Model data, not configuration, so it lives next to the code that reads it. Side views: x from
- * the car's rear end to the front, y up from the ground; front and rear views: offset from the
- * centre line (mirrored to the other side when not 0), y up.
+ * The minigames' traffic, one entry per vehicle, traced from blueprints in real metres
+ * (TRAFFIC.scale puts them beside the Bolones, a Polonez at the same scale). Nothing else to
+ * register: scene/traffic.js builds every entry, the minigames pick them at random.
+ *
+ * A new vehicle: trace its side, front and rear views; pick the `kind` whose body fits
+ * (scene/sedan.js: a cabin on a deck; scene/van.js: a cab-over box) and fill in what it reads.
+ * garage.html (npm run dev) shows the traffic as you edit; npm test checks each car stands on its
+ * wheels, is as long as it says, and can bend in a crash.
+ *
+ * Axes: side view x from the rearmost point (0) forward, y up from the ground; front and rear
+ * views across from the centre line, mirrored when not 0; 3D points [along, up, across] on the
+ * car's left (+x), mirrored to the right.
  */
 
 /**
  * @typedef {[number, number]} Point
- * @typedef {{ x: number, y: number, w: number, h: number, round?: number, bars?: number, columns?: number, depth?: number }} Mark
- *   a front or rear view rectangle: centre, size, corner cut (0.5: an ellipse), cut into bars
- *   and columns; with `depth` it stands that far out of the face (a lamp in its housing)
- * @typedef {object} Bumper
- * @property {number} y centre height
- * @property {number} height
- * @property {Point[]} plan the outer edge in the top view, [across, back from the car's end],
- *   from the centre to one end (mirrored to the other)
- * @property {number} [depth] how thick the bar is (scene/carParts.js BUMPER_DEPTH unless it says)
- * @property {Mark[]} [marks] outlines on its face, in the middle (front or rear view)
+ * @typedef {[number, number, number]} Point3 [along, up, across]
  *
- * @typedef {object} Rim the wheel's face, in shares of the tyre's radius
- * @property {number} radius
- * @property {number} hub the hubcap's radius
- * @property {{ count: number, at: number, size: Point, round: number, turn: number }} holes in a
- *   ring at `at` from the centre, [across, along the ring] big, corners cut by `round`, the first
- *   one `turn` of a step round from the front
+ * @typedef {SedanModel | VanModel} TrafficModel
+ * @typedef {Vehicle & Sedan & { kind: "sedan" }} SedanModel a cabin on a deck (scene/sedan.js)
+ * @typedef {Vehicle & { kind: "van", van: Van }} VanModel a cab-over box (scene/van.js)
  *
- * @typedef {object} Screen a windscreen's, a rear window's shape
- * @property {[number, number]} bow how far its middle curves out along the car (seen from above)
- *   at the bottom and at the top, metres: round into the pillars
- * @property {[number, number]} corners its corners rounded at the bottom and at the top, metres
- *
- * @typedef {object} TrafficModel
- * @property {string} label
- * @property {number} mass kg, against the Bolones' in a crash (game/crash.js)
- * @property {number} length overall, bumper to bumper
- * @property {number} width overall, the body traced to it
- * @property {{ radius: number, width: number, axles: number[], track: number[], arches: (Point | Point[])[], archRound?: number, rim: Rim }} wheel
- *   tyres; per axle (rear, front): x, track and wheel arch: half an ellipse (half its length, its
- *   height above the wheel centre) or traced (side view, from the rear foot over to the front
- *   foot, its corners over the wheel cut off by `archRound`)
- * @property {object} body the lower body, sides and deck (scene/sedan.js lowerBody)
- * @property {Point[]} body.top deck centre line (side view), from the rear end to the front end
- * @property {Point[]} body.shoulder top edge of the sides
- * @property {Point[]} body.waist the widest line along the sides
- * @property {Point[]} body.bottom underside; wheel arches are cut into it
- * @property {Point[]} body.width top view: [x, half width] at the waist
- * @property {number} body.shoulderInset the shoulder is this much narrower than the waist
- * @property {number} [body.flares] a flare this wide round each wheel arch
- * @property {number} body.tuck the underside is this much narrower than the waist
- * @property {{ lean: number, from: number }} [body.nose] the front leans forward above `from`
- *   (metres up), its top edge `lean` ahead of the face below (the grille and the lamps with it)
- * @property {{ lean: number, from: number }} [body.tail] the rear leans back above `from`, its
- *   top edge (where the deck has it) `lean` behind the face below (the marks and lamps with it)
- * @property {number[]} body.seams x of the door edges: lines down the sides
- * @property {object} cabin greenhouse on the deck
- * @property {Point[]} cabin.outline side view, its bottom edge on the shoulders, under the deck's
- *   crown
- * @property {number} cabin.base half width at its bottom
- * @property {number} cabin.roof half width at its top
- * @property {[Point, Point]} cabin.windscreen the windscreen's slope on the outline
- * @property {[Point, Point]} [cabin.rearWindow] the rear window's slope on the outline
- * @property {{ windscreen: Screen, rearWindow: Screen }} [cabin.screens] how they curve; flat
- *   and square without
- * @property {number} [cabin.windowCorners] the side windows' corners rounded, metres
- * @property {number} [cabin.frame] how wide the frame round the windscreen and the rear window is,
- *   metres (scene/sedan.js FRAME unless it says)
- * @property {number} [cabin.crown] how much higher the middle of the roof is than its edges
- * @property {Point[][]} windows side windows, inside the cabin outline
- * @property {{ outline: Point[], bars?: number }[]} sideMarks convex outlines on the body sides,
- *   cut into horizontal bars
- * @property {Mark[]} lamps headlamps (front view)
- * @property {Mark[]} frontMarks outlines on the front (front view)
- * @property {Mark[]} rearMarks outlines on the rear (rear view)
- * @property {Decal[]} [decals] outlines drawn in a view, projected onto the body along it
+ * @typedef {object} Vehicle what every kind has
+ * @property {string} label its name in the game
+ * @property {number} mass kg
+ * @property {number} length to the front bumper's end
+ * @property {Wheel} wheel
  * @property {{ front: Bumper, rear: Bumper }} bumpers
  * @property {Mirror} [mirrors]
- * @property {{ y: number }} [spare] a spare wheel (as the others) standing on the rear end, its
- *   centre `y` up; rigid, a crash pushes it in whole or tears it off
  * @property {Guard} [guard]
- * @property {RearWall} [rear] a flat rear instead of the cabin's rear face and the body's end
+ * @property {{ y: number }} [spare] a wheel as the others standing on the rear end, its centre `y`
+ *   up; rigid, a crash pushes it in whole or tears it off
  *
- * @typedef {object} RearWall the cabin's rear face upright down the body's end (scene/sedan.js
- *   rearWall), in the rear view: across drawn at the belt's width, leaning in with the cabin
- * @property {{ w: number, y: Point }} door in the middle, its width, its bottom and top heights:
- *   across the belt
- * @property {Mark[]} windows in the wall or in the door
- * @typedef {object} Guard tubes over the front, on the front bumper's node (scene/carParts.js)
- * @property {[number, number, number][][]} tubes each a line of points [along, up, across] on
- *   the car's left, mirrored to the right
+ * @typedef {object} Wheel
+ * @property {number} radius
+ * @property {number} width
+ * @property {number[]} axles x, rear then front
+ * @property {number[]} track per axle
+ * @property {Rim} rim
+ *
+ * @typedef {object} Rim in shares of the tyre's radius
+ * @property {number} radius
+ * @property {number} hub
+ * @property {{ count: number, at: number, size: Point, round: number, turn: number }} holes a ring
+ *   at `at`, each [across, along the ring], the first `turn` of a step round from the front
+ *
+ * @typedef {object} Mark a rectangle in the front or rear view
+ * @property {number} x centre
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ * @property {number} [round] corners cut, a share of the smaller side (0.5: an ellipse)
+ * @property {number} [bars] cut across
+ * @property {number} [columns] cut upright
+ * @property {number} [depth] stands this far out (a lamp in its housing)
+ *
+ * @typedef {object} Bumper
+ * @property {number} y centre
+ * @property {number} height
+ * @property {Point[]} plan its outer edge from above, [across, in from the car's end], from the
+ *   middle out
+ * @property {number} [depth] thickness (carParts.js BUMPER_DEPTH)
+ * @property {Mark[]} [marks] on its face
+ *
+ * @typedef {object} Mirror heads on arms; out of the hitbox (the physics' box), inside the reach
+ *   (what the Bolones must not touch); a crash tears them off
+ * @property {number[]} sides 1 the car's left, -1 its right
+ * @property {Point} head across, up
+ * @property {number} depth along
+ * @property {number} corners cut
+ * @property {Point3} centre
+ * @property {Point3[][]} arms each [from, to]
+ * @property {number} arm thickness
+ *
+ * @typedef {object} Guard tubes over the front, on the front bumper (they come off with it)
+ * @property {Point3[][]} tubes each a line of points
  * @property {number} thick
  *
- * @typedef {object} Mirror outside mirrors (scene/carParts.js): a head with its corners cut, the
- *   glass outlined at its back, on arms from the body. Points are [along, up, across] on the
- *   car's left (+x, the driver's side), mirrored to the right for a side of -1. They stand out of
- *   the car's hitbox (the physics' box), within its reach (what the Bolones must not touch);
- *   a crash tears them off
- * @property {number[]} sides 1 the car's left, -1 its right
- * @property {Point} head its size: across, up
- * @property {number} depth how deep the head is, along the car
- * @property {number} corners how far its corners are cut
- * @property {[number, number, number]} centre the head's middle
- * @property {[number, number, number][][]} arms from the body to the head, each [from, to]
- * @property {number} arm how thick the arms are
+ * @typedef {object} Sedan
+ * @property {Wheel & { arches: (Point | Point[])[], archRound?: number }} wheel each arch half an
+ *   ellipse ([half its length, its top over the wheel's centre]) or traced from its rear foot
+ *   over to its front foot, the corners over the wheel cut off by `archRound`
+ * @property {object} body the lower body, lofted along the car (sedan.js lowerBody)
+ * @property {Point[]} body.top the deck's middle, from the rear end to the front end
+ * @property {Point[]} body.shoulder the sides' top edge
+ * @property {Point[]} body.waist the widest line
+ * @property {Point[]} body.bottom the underside; the arches are cut into it
+ * @property {Point[]} body.width from above: [x, half width] at the waist
+ * @property {number} body.shoulderInset the shoulder this much in from the waist
+ * @property {number} body.tuck the underside this much in from the waist
+ * @property {number} [body.flares] a flare this wide round each arch
+ * @property {{ lean: number, from: number }} [body.nose] leans forward above `from`, its top
+ *   `lean` ahead
+ * @property {{ lean: number, from: number }} [body.tail] leans back above `from`, its top `lean`
+ *   behind
+ * @property {number[]} body.seams x of the door edges
+ * @property {object} cabin on the deck: its profile drawn across, narrowing up
+ * @property {Point[]} cabin.outline its foot on the shoulders, under the deck's crown
+ * @property {number} cabin.base half width at its foot
+ * @property {number} cabin.roof half width at its top
+ * @property {[Point, Point]} cabin.windscreen a segment of the outline
+ * @property {[Point, Point]} [cabin.rearWindow] a segment of the outline
+ * @property {{ windscreen: Screen, rearWindow: Screen }} [cabin.screens] flat and square without
+ * @property {number} [cabin.windowCorners]
+ * @property {number} [cabin.frame] round the screens (sedan.js FRAME)
+ * @property {number} [cabin.crown] the roof's middle over its edges (sedan.js CROWN)
+ * @property {Point[][]} windows on the cabin's sides
+ * @property {{ outline: Point[], bars?: number }[]} sideMarks on the lower body's sides
+ * @property {Mark[]} lamps headlamps, lit
+ * @property {Mark[]} frontMarks
+ * @property {Mark[]} rearMarks
+ * @property {Decal[]} [decals]
+ * @property {RearWall} [rear] the cabin's rear face upright down the body's end
  *
- * @typedef {object} Decal an outline in one of the views, projected onto the body
+ * @typedef {object} Screen
+ * @property {Point} bow how far its middle curves out along the car, at the bottom and the top
+ * @property {Point} corners rounded, at the bottom and the top
+ *
+ * @typedef {object} RearWall rear view, across drawn at the belt's width, leaning in with the
+ *   cabin (sedan.js rearWall)
+ * @property {{ w: number, y: Point }} door in the middle across the belt: its width, its bottom
+ *   and top
+ * @property {Mark[]} windows in the wall or the door
+ *
+ * @typedef {object} Decal an outline drawn in a view, projected onto the body (decals.js)
  * @property {"side" | "front" | "rear" | "top"} view
  * @property {Point[]} [outline] side: [along, up]; front, rear: [across, up]; top: [along,
- *   across]. All on one side of the centre line (front, rear, top): mirrored to the other; side
- *   views: on both sides
- * @property {Mark} [shape] a rectangle or an ellipse instead of the outline, in the same axes
- * @property {number} [bars] cut into bars across its second coordinate
- * @property {number} [columns] cut into bars across its first coordinate
- * @property {number} [raise] a block instead: its face flat, square to the view, this far out past
- *   the body under it (a lamp)
- * @property {1 | -1} [side] front, rear and top views: on that side only (1 the car's left)
+ *   across]; on both sides (side view) or mirrored when off the centre line
+ * @property {Mark} [shape] instead of the outline
+ * @property {number} [bars]
+ * @property {number} [columns]
+ * @property {number} [raise] a block standing this far out, its face flat
+ * @property {1 | -1} [side] front, rear, top: on that side only
  *
- * @typedef {object} VanModel a van (scene/van.js): a box with rounded corners on wheels, the cab
- *   at its front. Side views: x from the back of the tail lamps; top, front and rear views: w
- *   across, from the centre line
- * @property {string} label
- * @property {number} mass kg
- * @property {number} length overall, from the tail lamps to the front bumper
- * @property {number} width overall, the body traced to it
- * @property {Omit<TrafficModel["wheel"], "arches">} wheel tyres; per axle (rear, front): x, track
- * @property {Van} van
- * @property {{ front: Bumper, rear: Bumper }} bumpers
- * @property {Mirror} [mirrors]
- *
- * @typedef {object} Van the body. Below the belt it runs round the plan in bands, between the
- *   sill, the ribs pressed into it and the belt: a line all round at each; above the belt the
- *   walls lean in up to the gutter, where the roof rounds off
- * @property {[number, number]} ends x of the rear face and of the front face
- * @property {number} half half width of the lower body, and of the walls at the belt
- * @property {number} corner radius of the four corners, rounded in plan
- * @property {number} sill height of the underside
- * @property {number} belt height of the crease round the car where the walls begin to lean in
- * @property {number[]} ribs heights of the ribs round the lower body, from the bottom up
- * @property {{ y: number, half: number, rear: number }} gutter the walls' top edge: its height,
- *   half width and the rear face's x there (the tailgate leans in from the belt up; its corners
- *   tighten, their sides staying upright)
- * @property {{ edge: number, crown: number, rounding: Point[] }} roof the line where its rounded
- *   edge meets the top (height), how much higher the top's middle is, and the rounding: [how far
- *   in from the gutter, share of the way up to the edge]
+ * @typedef {object} Van below the belt bands round the plan between the sill, the ribs and the
+ *   belt; above it the walls lean in to the gutter, where the roof rounds off
+ * @property {Point} ends x of the rear and the front face
+ * @property {number} half half width below the belt
+ * @property {number} corner radius of the corners, from above
+ * @property {number} sill
+ * @property {number} belt
+ * @property {number[]} ribs heights, from the bottom up
+ * @property {{ y: number, half: number, rear: number }} gutter the walls' top: its height, half
+ *   width and the rear face's x there (the tailgate leans in)
+ * @property {{ edge: number, crown: number, rounding: Point[] }} roof `edge` height where the
+ *   rounding ([in from the gutter, share of the way up]) meets the crowned top
  * @property {VanCab} cab
- * @property {Point[][]} arches wheel arches (side view), from the rear foot on the sill over to
- *   the front foot, their corners rounded by `archRound`; per axle (rear, front)
+ * @property {Point[][]} arches per axle, traced from the rear foot on the sill to the front foot
  * @property {number} archRound
- * @property {number} lip width of the flare round each arch
- * @property {number[]} seams x of the door edges behind the cab's front doors: lines down the sides
- * @property {{ x: Point, y: Point }[]} windows side windows (side view), corners rounded by
- *   `windowCorners`
+ * @property {number} lip the flare round each arch
+ * @property {number[]} seams x of the door edges behind the cab
+ * @property {{ x: Point, y: Point }[]} windows each in one panel between the seams
  * @property {number} windowCorners
- * @property {{ x: Point, y: Point }[]} blanks blind panels in the shape of windows, an outline
- *   inside them `blankInset` in
- * @property {number} blankInset
- * @property {{ x: Point, y: Point, bars: number }[]} vents louvres on the sides, cut into bars
- * @property {{ half: number, y: Point, corners: number }} rearWindow in the tailgate, its corners
- *   rounded
- * @property {number} panel half width of the front face's middle panel, round the grille and
- *   the lamps, up to the belt
- * @property {Mark[]} lamps headlamps (front view): lit
- * @property {Mark[]} frontMarks outlines on the front face (front view)
- * @property {{ x: number, y: number, r: number, depth: number }} fogLamps round, standing out of
- *   the front face (front view): lit
- * @property {{ w: number, y: number[], radius: Point }} tailLamps cut cones one over another at
- *   each rear corner, from the rear face back to the car's end: across, the heights, the radius
- *   at the body and at the lens
- * @property {Mark[]} rearMarks outlines on the rear face (rear view)
- * @property {{ x: number, w: Point, y: Point }} mudflaps behind the rear wheels
- * @property {{ x: Point, half: number, y: Point }} frame the chassis under the body, between the
- *   wheels
+ * @property {{ x: Point, y: Point }[]} [blanks] panels shaped as windows, an outline `blankInset` in
+ * @property {number} [blankInset]
+ * @property {{ x: Point, y: Point, bars: number }[]} [vents]
+ * @property {{ half: number, y: Point, corners: number }} rearWindow in the tailgate
+ * @property {number} panel half width of the front's middle, round the grille and the lamps
+ * @property {Mark[]} lamps headlamps, lit
+ * @property {Mark[]} frontMarks
+ * @property {{ x: number, y: number, r: number, depth: number }} [fogLamps] lit
+ * @property {{ w: number, y: number[], radius: Point }} [tailLamps] cut cones at the rear corners,
+ *   from the rear face back to the car's end: across, heights, radius at the body and the lens
+ * @property {Mark[]} rearMarks
+ * @property {{ x: number, w: Point, y: Point }} [mudflaps]
+ * @property {{ x: Point, half: number, y: Point }} [frame] the chassis between the wheels
  *
- * @typedef {object} VanCab the cab's front above the belt: a ledge and a panel up from the front
- *   face to the windscreen, corner windows wrapping round from the windscreen's sides to pillars
- * @property {number} pillar x of the walls' front end, the front doors' front edge
- * @property {Point} ledge x and height of the ledge's top over the front face
- * @property {number} ledgeHalf its half width there
- * @property {Point} screenBottom x and height of the windscreen's bottom edge
- * @property {Point} screenTop x and height of its top edge
- * @property {number} screenHalf half width of the windscreen
- * @property {number} frame width of the frame round the windscreen and the corner windows
+ * @typedef {object} VanCab above the belt: a ledge and a panel up to the windscreen, corner
+ *   windows round to the pillars
+ * @property {number} pillar x of the walls' front end
+ * @property {Point} ledge x and height of the ledge's top
+ * @property {number} ledgeHalf
+ * @property {Point} screenBottom x and height
+ * @property {Point} screenTop x and height
+ * @property {number} screenHalf
+ * @property {number} frame round the windscreen and the corner windows
  */
 
-/** @type {Record<string, TrafficModel | VanModel>} */
-export const TRAFFIC_MODELS = {
-  polakito: {
+/** @type {TrafficModel[]} */
+export const TRAFFIC_MODELS = [
+  {
+    kind: "sedan",
     label: "Polakito",
     mass: 600,
     // traced from blueprints (side, front, rear and top views): the later one, its big plastic
     // bumpers
     length: 3.129,
-    width: 1.382,
     wheel: {
       radius: 0.259,
       width: 0.135,
@@ -429,13 +424,13 @@ export const TRAFFIC_MODELS = {
       },
     },
   },
-  kredens: {
+  {
+    kind: "sedan",
     label: "Kredens",
     mass: 1010,
     // traced from blueprints (side, front and rear views; the top view's plan from an earlier
     // one's): the later one, its tail lamps across the rear
     length: 4.226,
-    width: 1.63,
     wheel: {
       radius: 0.309,
       width: 0.165,
@@ -675,12 +670,12 @@ export const TRAFFIC_MODELS = {
       },
     },
   },
-  ramses: {
+  {
+    kind: "van",
     label: "Ramses",
     mass: 1600,
     // traced from blueprints (side, top, front and rear views), without the gear on its roof
     length: 4.39,
-    width: 1.79,
     wheel: {
       radius: 0.367,
       width: 0.17,
@@ -811,14 +806,14 @@ export const TRAFFIC_MODELS = {
       },
     },
   },
-  honeker: {
+  {
+    kind: "sedan",
     label: "Honeker",
     mass: 2100,
     // traced from blueprints (side, front and rear views) of the long one with the hardtop,
     // without the fire brigade's beacon; scaled to its 2.827 m wheelbase. x = 0: the spare wheel's
     // back
     length: 4.51,
-    width: 1.83,
     wheel: {
       radius: 0.379,
       width: 0.2,
@@ -1052,4 +1047,4 @@ export const TRAFFIC_MODELS = {
       },
     },
   },
-};
+];

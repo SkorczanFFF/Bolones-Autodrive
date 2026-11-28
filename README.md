@@ -81,6 +81,7 @@ tests/             Vitest unit tests
 ```
 
 - Change colors, world dimensions, speeds or texts in `src/config.js` only; CSS gets the palette as custom properties.
+- A new car of the traffic is one entry in `src/scene/trafficModels.js` (its header says how); `garage.html` on the dev server (`/garage.html?car=Honeker&view=side`) shows it as you trace it.
 - Every world part follows `create(context) -> { update(dt, speedMultiplier) }` and knows nothing of the others; the rest of the app sees only the world (its settings, the roadside props, regenerate), so a part (e.g. the procedural mountains) is replaced in `scene/world.js` alone.
 - Everything that moves or waits runs inside the single main loop.
 

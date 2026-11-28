@@ -1,0 +1,102 @@
+<!doctype html>
+<!-- The traffic up close while modelling it (npm run dev, then /garage.html): a car, a view. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Garage</title>
+    <style>
+      body {
+        margin: 0;
+        background: #1a1030;
+        overflow: hidden;
+        font: 14px monospace;
+      }
+      nav {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      a {
+        color: #c8b8ff;
+        background: #0008;
+        padding: 4px 8px;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <nav></nav>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { LAYERS } from "./src/config.js";
+      import { createMaterials } from "./src/scene/materials.js";
+      import { createTrafficModels } from "./src/scene/traffic.js";
+
+      const VIEWS = {
+        side: [1, 0.15, 0],
+        front: [0, 0.15, 1],
+        rear: [0, 0.15, -1],
+        three: [0.7, 0.35, 0.7],
+        back: [-0.7, 0.35, -0.7],
+        top: [0, 1, 0.001],
+      };
+      const params = new URLSearchParams(location.search);
+      const view = params.get("view") ?? "three";
+      const materials = createMaterials({ [String(LAYERS.road.wireMap)]: new THREE.Texture() }, 1);
+      const models = createTrafficModels(materials);
+      const chosen = models.filter(({ userData }) => userData.label === params.get("car"));
+      const shown = chosen.length ? chosen : models;
+
+      /** @param {Record<string, string | null>} change */
+      const link = (text, change) => {
+        const next = new URLSearchParams(params);
+        for (const [key, value] of Object.entries(change)) {
+          if (value === null) next.delete(key);
+          else next.set(key, value);
+        }
+        return Object.assign(document.createElement("a"), { textContent: text, href: `?${next}` });
+      };
+      document
+        .querySelector("nav")
+        .append(
+          link("all", { car: null }),
+          ...models.map(({ userData: { label } }) => link(label, { car: label })),
+          ...Object.keys(VIEWS).map((name) => link(name, { view: name })),
+        );
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x1a1030);
+      scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+      const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+      sun.position.set(5, 10, 7);
+      scene.add(sun);
+      shown.forEach((car, i) => {
+        car.position.x = (i - (shown.length - 1) / 2) * 4.5;
+        scene.add(car);
+      });
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(devicePixelRatio);
+      document.body.append(renderer.domElement);
+      const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 500);
+      const distance = 14 * Math.max(1, shown.length / 2);
+      camera.position.fromArray(VIEWS[view] ?? VIEWS.three).setLength(distance);
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 1.8, 0);
+      controls.update();
+      const resize = () => {
+        renderer.setSize(innerWidth, innerHeight);
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+      };
+      addEventListener("resize", resize);
+      resize();
+      renderer.setAnimationLoop(() => renderer.render(scene, camera));
+    </script>
+  </body>
+</html>

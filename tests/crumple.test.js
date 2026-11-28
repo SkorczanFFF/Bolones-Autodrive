@@ -259,6 +259,41 @@ describe("crumple", () => {
     expect(crush(1.2).torn).toBe(true); // far past its spring
   });
 
+  it("pushes a spare wheel in whole, never bent; crushed well past it, tears it off as it is", () => {
+    const spare = (/** @type {number} */ plane) => {
+      const root = car();
+      const tyre = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.35, 0.35, 0.2, 12, 2).rotateX(Math.PI / 2).toNonIndexed(),
+      );
+      const node = new THREE.Group().add(tyre);
+      node.position.set(0, 0, -2.1); // standing on the front end
+      node.userData.part = "spare";
+      root.add(node);
+      const points = () => {
+        root.updateMatrixWorld(true);
+        const position = tyre.geometry.getAttribute("position");
+        return Array.from({ length: position.count }, (_, i) =>
+          new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(tyre.matrixWorld),
+        );
+      };
+      const before = points();
+      const dent = crumple(root, { ...hit, point: new THREE.Vector3(0, 0, -2.2), plane });
+      dent.set(1);
+      const after = points();
+      const kept = after.every(
+        (p, i) => Math.abs(p.distanceTo(after[0]) - before[i].distanceTo(before[0])) < 1e-6,
+      );
+      const torn = dent.torn.find((tear) => tear.node === node);
+      return { kept, moved: after[0].z - before[0].z, by: torn?.by.z ?? 0, torn: Boolean(torn) };
+    };
+    const pushed = spare(0.1);
+    expect(pushed).toMatchObject({ kept: true, torn: false });
+    expect(pushed.moved).toBeCloseTo(0.1, 2); // its front onto the plane
+    const off = spare(0.9);
+    expect(off).toMatchObject({ kept: true, torn: true, moved: 0 });
+    expect(off.by).toBeCloseTo(0.9, 6); // the crash takes it from the plane
+  });
+
   it("tears a bumper off a front crushed well past it; crushed less, it bends", () => {
     const bumper = (/** @type {number} */ plane) => {
       const root = car();

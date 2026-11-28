@@ -24,6 +24,8 @@ const { dents: sheet } = MINIGAME.crash;
  */
 export const ENDS = MINIGAME.crash.ends.map((angle) => Math.cos(THREE.MathUtils.degToRad(angle)));
 const UP = new THREE.Vector3(0, 1, 0);
+/** The parts a crash moves whole, never bends. */
+const RIGID = ["wheel", "spare"];
 
 /**
  * Crushes a car where it was hit (MINIGAME.crash.dents): whatever is in front of the crush plane,
@@ -34,7 +36,8 @@ const UP = new THREE.Vector3(0, 1, 0);
  * comes out smooth. Behind it the sheet metal bends. The wheels (a node with `userData.part`
  * "wheel") are rigid, not crushed: pushed back as far as the crush reaches them, they turn and
  * lean (pushed up their springs, a car on its side hit underneath, they ride up into their arches
- * first, as far as their springs go). A wheel, a bumper or a mirror (a node with `userData.part`)
+ * first, as far as their springs go); a spare wheel ("spare") is pushed in whole. A wheel, a
+ * bumper, a mirror or a spare wheel (a node with `userData.part`)
  * crushed past by more than it takes (MINIGAME.crash.parts) is torn off, for the crash to take
  * away from where the crush pushes it (`by`, not into the other car): a wheel as it is, the others
  * bent as far as the crush had bent them when they went.
@@ -187,16 +190,25 @@ export function crumple(root, hit) {
   for (const [node, piece] of pieces) {
     const { centre } = piece;
     const push = Math.max(0, plane - piece.front) * reachedAt(measure(centre));
-    /** @type {"wheel" | "bumper" | "mirror" | undefined} */
+    /** @type {import("./rig.js").PartName | undefined} */
     const part = node.userData.part;
     const bent = part === "wheel" ? push - Math.min(push * sprung, node.userData.radius) : push;
     if (part && bent > MINIGAME.crash.parts[part].tear * piece.size) {
       const tear = MINIGAME.crash.parts[part].tear * piece.size;
       // a bumper or a mirror bent as far as the crush had come when it went (`tore`), the rest of
       // the way pushed whole: not into the car behind the crush plane
-      const by = part === "wheel" ? push : Math.max(0, push - tear);
+      const by = RIGID.includes(part) ? push : Math.max(0, push - tear);
       torn.push({ node, by: into.clone().multiplyScalar(by) });
       tore.set(node, piece.front + tear);
+      continue;
+    }
+    const shift = () =>
+      into
+        .clone()
+        .multiplyScalar(push)
+        .addScaledVector(side, kink(measure(centre).depth + push));
+    if (part === "spare") {
+      Object.assign(piece, { turn: new THREE.Quaternion(), shift: shift() }); // pushed in whole
       continue;
     }
     if (part !== "wheel") continue;
@@ -219,8 +231,7 @@ export function crumple(root, hit) {
         UP.clone().multiplyScalar(Math.cos(lean)).addScaledVector(out, Math.sin(lean)),
       )
       .multiply(toe);
-    const at = measure(centre).depth + push;
-    piece.shift = into.clone().multiplyScalar(push).addScaledVector(side, kink(at));
+    piece.shift = shift();
   }
 
   // the wheels move whole, as nodes (they spin and steer in them); the rest bends, but what is torn
@@ -241,7 +252,7 @@ export function crumple(root, hit) {
   }
   // the wheels rigid (moved whole, or torn off as they are), a bumper or a mirror bending along
   const meshes = dent(
-    entries.filter(({ node }) => node?.userData.part !== "wheel"),
+    entries.filter(({ node }) => !RIGID.includes(node?.userData.part)),
     ({ node }, v) => bend(v, tore.get(node)),
   );
   const nodes = moveNodes(moved);

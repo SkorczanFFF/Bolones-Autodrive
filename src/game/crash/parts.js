@@ -21,8 +21,11 @@ import {
   velocityAt,
 } from "./physics.js";
 
-/** Rapier's cylinder (along y) lying along x, as a wheel's axle. */
-const LYING = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+/** Rapier's cylinder (along y) along a wheel's axle: x, a spare wheel's z (it stands on an end). */
+const AXLES = {
+  wheel: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2),
+  spare: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2),
+};
 
 /**
  * @typedef {object} Owner a car of a crash (game/crash.js), as its parts come off it
@@ -57,8 +60,8 @@ const LYING = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1)
  */
 
 /**
- * The parts torn off in a crash (MINIGAME.crash.parts): a wheel, a bumper or a mirror crushed
- * past, a mirror too where it touches the road. Each flies on by itself, thrown along the hit
+ * The parts torn off in a crash (MINIGAME.crash.parts): a wheel, a bumper, a mirror or a spare
+ * wheel crushed past, a mirror too where it touches the road. Each flies on by itself, thrown along the hit
  * (and up), rolls (a wheel) to a stop, bounces off the cars, the palms and the other parts; a car
  * down a wheel sinks onto that corner's hub, dragging it.
  *
@@ -86,7 +89,7 @@ export function createTornParts({ world, scene, road, undo, onRoad, metal, rando
    */
   function tearOff({ car, node, by: push, into: along, heading, speed }) {
     if (node.parent === scene) return; // torn off already (a mirror crushed as it hit the road)
-    /** @type {"wheel" | "bumper" | "mirror"} */
+    /** @type {import("../../scene/rig.js").PartName} */
     const part = node.userData.part;
     // the hit turned as far as the car has turned on the road since (a wreck spinning, its dent
     // waiting its turn: crumpling), still level
@@ -112,7 +115,7 @@ export function createTornParts({ world, scene, road, undo, onRoad, metal, rando
     const middle = bounds.getCenter(new THREE.Vector3());
     const centre = onRoad(middle.clone().applyMatrix4(node.matrixWorld).add(by)); // the crush's
     const [x, y, z] = measured.getSize(new THREE.Vector3()).multiply(size).toArray();
-    const radius = Math.max(y, z) / 2;
+    const [width, radius] = part === "spare" ? [z, Math.max(x, y) / 2] : [x, Math.max(y, z) / 2];
     const fling = parts.fling * speed;
     const velocity = velocityAt(car.body, centre).add(
       new THREE.Vector3(into.x * fling, fling / 2, into.z * fling),
@@ -136,8 +139,8 @@ export function createTornParts({ world, scene, road, undo, onRoad, metal, rando
     }
     const body = world.createRigidBody(desc);
     const shape =
-      part === "wheel"
-        ? RAPIER.ColliderDesc.cylinder(x / 2, radius).setRotation(LYING)
+      part === "wheel" || part === "spare"
+        ? RAPIER.ColliderDesc.cylinder(width / 2, radius).setRotation(AXLES[part])
         : RAPIER.ColliderDesc.cuboid(x / 2, y / 2, z / 2);
     const collider = world.createCollider(
       shape

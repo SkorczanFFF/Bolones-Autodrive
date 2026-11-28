@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { bars, densify, rectangle, STATION } from "./outline.js";
+import { densify, pieces as cut, rectangle, STATION } from "./outline.js";
 import { face, facingPositions, flatGeometry, joined, triangleFacing } from "./polygons.js";
 
 /**
@@ -85,13 +85,8 @@ export function decalParts(decals, body) {
     const outline = decal.outline ?? rectangle(/** @type {Mark} */ (decal.shape));
     const across = view === "top" ? 1 : 0; // which coordinate runs across the car
     const offCentre = outline.every((p) => p[across] > 0);
-    const sides = view === "side" || offCentre ? [1, -1] : [1];
-    // transposed, cut into bars, back: columns
-    const swap = (/** @type {Point[]} */ points) =>
-      points.map(([a, b]) => /** @type {Point} */ ([b, a]));
-    const pieces = decal.columns
-      ? bars(swap(outline), decal.columns).map(swap)
-      : bars(outline, decal.bars ?? 1);
+    const sides = decal.side ? [decal.side] : view === "side" || offCentre ? [1, -1] : [1];
+    const pieces = cut(outline, decal);
     for (const side of sides) {
       /** The ray towards the body through a point of the view. @param {Point} p */
       const ray = ([a, b]) => {

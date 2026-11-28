@@ -1051,7 +1051,8 @@ describe("where two cars meet", () => {
 });
 
 describe("a car's ends", () => {
-  it("stand as high as its model: a car's bonnet and boot low, a van's flat end all of it", () => {
+  it("stand as high as its model: a car's bonnet and boot low, a flat end all of it", () => {
+    const flatRear = ["Ramses", "Honeker"]; // a van's box, the Honeker's door; every front leans
     for (const model of createTrafficModels(testMaterials())) {
       const car = model.clone();
       car.position.y = TRAFFIC.y;
@@ -1061,9 +1062,10 @@ describe("a car's ends", () => {
       const { ends, step } = facesOf(car, -TRAFFIC.y);
       const at = (/** @type {Float32Array} */ end, /** @type {number} */ metres) =>
         end[Math.min(end.length - 1, Math.floor((metres * TRAFFIC.scale) / step))] / height;
-      const fronts = ends.map((end) => at(end, 0.2)); // 20 cm in
-      if (label === "Ramses") expect(Math.max(...fronts), label).toBeGreaterThan(0.9);
-      else expect(Math.max(...fronts), label).toBeLessThan(0.7);
+      const [rear, front] = ends.map((end) => at(end, 0.2)); // 20 cm in
+      if (flatRear.includes(label)) expect(rear, label).toBeGreaterThan(0.9);
+      else expect(rear, label).toBeLessThan(0.7);
+      expect(front, label).toBeLessThan(0.7);
       for (const end of ends) expect(at(end, 2), label).toBeGreaterThan(0.9); // the roof, by then
       expect(facesOf(model.clone(), -TRAFFIC.y), label).toBe(facesOf(car, -TRAFFIC.y)); // once
     }

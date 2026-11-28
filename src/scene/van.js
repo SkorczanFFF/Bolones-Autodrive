@@ -1,10 +1,14 @@
 import * as THREE from "three";
 import {
+  archLine,
   bars,
   CORNER_STEPS,
   densify,
   fillPoints,
+  heightOn,
   mirrored,
+  offsetArch,
+  pieces,
   rectangle,
   rounded,
   SPARSE,
@@ -152,10 +156,14 @@ function vanContext(model) {
     for (const pane of recessed(rim, triangles, at, out)) add(pane, own("glass"), mirror);
   };
 
-  // below the belt: each arch's edge and its flare's outer edge, the side panels' edges
+  // below the belt: each arch's edge and its flare's outer edge, the side panels' edges; the
+  // bands under the flares end on the sill
   const archLines = van.arches.map((arch) => {
-    const inner = rounded(arch, [0, van.archRound, van.archRound, 0]);
-    return { inner, outer: offsetArch(inner, van.lip, sill) };
+    if ([arch[0], arch[arch.length - 1]].some(([, y]) => Math.abs(y - van.sill) > EPS)) {
+      throw new Error("a van's wheel arches must stand on its sill");
+    }
+    const inner = archLine(arch, van.archRound);
+    return { inner, outer: offsetArch(inner, van.lip) };
   });
   const panels = distinct([tanRear, ...van.seams, cab.pillar, tanFront]);
   const crossings = archLines.flatMap(({ outer }) => heights.flatMap((h) => crossingsOf(outer, h)));
@@ -849,7 +857,7 @@ function addDetails({ van, front, rear, add, own }) {
     { marks: van.rearMarks, x: rear - OFFSET, facing: -1 },
   ]) {
     for (const mark of mirrored(marks)) {
-      for (const bar of bars(rectangle(mark), mark.bars ?? 1)) {
+      for (const bar of pieces(rectangle(mark), mark)) {
         add(
           fineFace(bar, ([w, y]) => at3(x, y, w), new THREE.Vector3(0, 0, facing), STATION),
           own("mark"),
@@ -987,22 +995,6 @@ function cornerArc(cx, cw, radius, end) {
 }
 
 /**
- * y of a polyline running along x, at x; -Infinity off its ends.
- *
- * @param {Point[]} line
- * @param {number} x
- */
-function heightOn(line, x) {
-  if (x < line[0][0] - EPS || x > line[line.length - 1][0] + EPS) return -Infinity;
-  for (let i = 1; i < line.length; i++) {
-    const [[ax, ay], [bx, by]] = [line[i - 1], line[i]];
-    if (x <= bx + 1e-12)
-      return bx - ax < 1e-12 ? Math.max(ay, by) : ay + ((by - ay) * (x - ax)) / (bx - ax);
-  }
-  return line[line.length - 1][1];
-}
-
-/**
  * Where a polyline running along x crosses the height y.
  *
  * @param {Point[]} line
@@ -1014,39 +1006,6 @@ function crossingsOf(line, y) {
     if ((ay - y) * (by - y) >= 0 || ay === by) return [];
     return [ax + ((bx - ax) * (y - ay)) / (by - ay)];
   });
-}
-
-/**
- * The flare's outer edge round an arch: the arch moved out by `width` (away from the wheel),
- * its feet back down on the sill.
- *
- * @param {Point[]} arch from foot to foot, along x
- * @param {number} width
- * @param {number} sill
- * @returns {Point[]}
- */
-function offsetArch(arch, width, sill) {
-  const normals = arch.slice(1).map(([bx, by], i) => {
-    const [ax, ay] = arch[i];
-    const length = Math.hypot(bx - ax, by - ay);
-    return /** @type {Point} */ ([-(by - ay) / length, (bx - ax) / length]); // left: out of the arch
-  });
-  const moved = arch.map(([x, y], i) => {
-    const [n0, n1] = [normals[Math.max(0, i - 1)], normals[Math.min(normals.length - 1, i)]];
-    const [nx, ny] = [n0[0] + n1[0], n0[1] + n1[1]];
-    const scale = width / (nx * n0[0] + ny * n0[1]); // keeps the edges `width` away
-    return /** @type {Point} */ ([x + nx * scale, y + ny * scale]);
-  });
-  // the ends slide along the first and last edges back down to the sill
-  for (const [i, j] of [
-    [0, 1],
-    [moved.length - 1, moved.length - 2],
-  ]) {
-    const [[x, y], [px, py]] = [moved[i], moved[j]];
-    const t = (y - sill) / (y - py);
-    moved[i] = [x + (x - px) * -t, sill];
-  }
-  return moved;
 }
 
 /**

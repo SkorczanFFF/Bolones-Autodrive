@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { TRAFFIC } from "../config.js";
-import { bumper, centred, mirrorParts, wheelParts } from "./carParts.js";
+import { bumper, centred, guardParts, mirrorParts, spareParts, wheelParts } from "./carParts.js";
 import { withPolygons } from "./polygons.js";
 import { mountWheel } from "./rig.js";
 import { sedanGeometry } from "./sedan.js";
@@ -31,13 +31,13 @@ export function widestReach(models) {
 }
 
 /**
- * The minigames' low-poly traffic of the communist era (Polakito, Kredens, the Ramses: van.js),
- * traced from blueprints, one template per TRAFFIC_MODELS entry; the front faces +z (towards the
+ * The minigames' low-poly traffic of the communist era, traced from blueprints, one template per
+ * TRAFFIC_MODELS entry (a van by van.js, the others by sedan.js); the front faces +z (towards the
  * camera). The body is one geometry (one draw call plus its wireframe twin), with
  * `userData.polygons` like the FBX models (core/fbx.js), so its lines follow the designed
- * outlines, not every triangle. Each wheel and
- * bumper is a node of its own (`userData.part`), so a crash can move a wheel whole and tear either
- * off; each headlamp is a mesh of its own ("lamp"), so a crash can put out just the ones it
+ * outlines, not every triangle. Each wheel,
+ * bumper and the spare wheel is a node of its own (`userData.part`), so a crash can move a wheel or
+ * the spare whole and tear any off; each headlamp is a mesh of its own ("lamp"), so a crash can put out just the ones it
  * crushes.
  *
  * The local hitbox (the bounds of the body, its wheels and bumpers: the crash's box for the
@@ -56,7 +56,8 @@ export function createTrafficModels(materials) {
     const shell = new THREE.Mesh(body.scale(scale, scale, scale));
     const car = new THREE.Group().add(shell);
     /**
-     * A bumper or a mirror, a node of its own: it bends with the body, or comes off.
+     * A bumper, a mirror or the spare wheel, a node of its own: it bends with the body (not the
+     * spare), or comes off.
      *
      * @param {Loose} loose
      */
@@ -158,7 +159,7 @@ export function drawFar(car, far) {
  * @typedef {object} Loose a wheel, a bumper or a mirror of a car: a node of its own
  * @property {THREE.BufferGeometry} geometry round its middle
  * @property {THREE.Vector3} at its middle in the car, metres
- * @property {"wheel" | "bumper" | "mirror"} part
+ * @property {import("./rig.js").PartName} part
  */
 
 /**
@@ -178,8 +179,8 @@ function loose(of, part, model) {
 }
 
 /**
- * A car's bumpers and wheels, each round its middle, in metres (the car's origin on the ground in
- * the middle of its length).
+ * A car's bumpers (the guard with the front one), wheels and spare wheel, each round its middle, in metres
+ * (the car's origin on the ground in the middle of its length).
  *
  * @param {TrafficModel | import("./trafficModels.js").VanModel} model
  * @returns {Loose[]}
@@ -187,7 +188,15 @@ function loose(of, part, model) {
 function looseParts(model) {
   const { wheel } = model;
   return [
-    loose([bumper(model.bumpers.front, model.length, -1)], "bumper", model),
+    ...("spare" in model && model.spare ? [loose(spareParts(model), "spare", model)] : []),
+    loose(
+      [
+        bumper(model.bumpers.front, model.length, -1),
+        ...("guard" in model && model.guard ? guardParts(model.guard) : []),
+      ],
+      "bumper",
+      model,
+    ),
     loose([bumper(model.bumpers.rear, 0, 1)], "bumper", model),
     ...wheel.axles.flatMap((axle, i) =>
       [-1, 1].map((side) =>

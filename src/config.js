@@ -579,12 +579,12 @@ export const MINIGAME = {
     restitution: { atRest: 0.4, falloff: 10, contact: 0.2 },
     scrape: 0.5, // friction of sheet metal: crushing cars, a car's body on the road
     nudge: 1.2, // m/s (4 km/h): cars closing slower only touch (no crumple zones, no dents, no debris)
-    /** A wheel, a bumper or a mirror comes off a car crushed past it by `tear` of its size (the
-     * farthest of its points from its middle; a wheel pushed up its spring, past how far that
-     * goes), flung on along the hit at `fling` of the closing speed (and up half as fast), on its
-     * own (`mass` kg, rubbing the road with `friction`), bent as far as it was when it went, a
-     * wheel rolling on, buckled (scene/crumple.js, game/crash/parts.js); a mirror too as soon as it
-     * touches the road, the car going over onto its side. */
+    /** A wheel, a bumper, a mirror or a spare wheel comes off a car crushed past it by `tear` of
+     * its size (the farthest of its points from its middle; a wheel pushed up its spring, past how
+     * far that goes), flung on along the hit at `fling` of the closing speed (and up half as fast),
+     * on its own (`mass` kg, rubbing the road with `friction`), bent as far as it was when it went
+     * (the wheels never), a wheel rolling on, buckled (scene/crumple.js, game/crash/parts.js); a
+     * mirror too as soon as it touches the road, the car going over onto its side. */
     parts: {
       fling: 0.2,
       friction: 0.7,
@@ -592,6 +592,7 @@ export const MINIGAME = {
       wheel: { tear: 0.6, mass: 15 },
       bumper: { tear: 0.5, mass: 10 },
       mirror: { tear: 0.2, mass: 1 },
+      spare: { tear: 0.5, mass: 15 },
     },
     /**
      * How the sheet metal gives (scene/crumple.js), in units and in shares of how deep a crush

@@ -1,9 +1,11 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
 import { TRAFFIC } from "../src/config.js";
+import { offsetArch } from "../src/scene/outline.js";
 import { prism } from "../src/scene/polygons.js";
 import { dent, dentable } from "../src/scene/dents.js";
 import { createTrafficModels, drawFar, widestReach } from "../src/scene/traffic.js";
+import { sedanGeometry } from "../src/scene/sedan.js";
 import { TRAFFIC_MODELS } from "../src/scene/trafficModels.js";
 import { vanGeometry } from "../src/scene/van.js";
 import { solidMeshes, wireOf } from "../src/scene/wire.js";
@@ -123,7 +125,7 @@ describe("traffic models", () => {
         expect(y, label).toBeLessThanOrEqual(at(body.top, x) + 1e-9);
         expect(y, label).toBeGreaterThan(at(body.shoulder, x) - 0.005);
       }
-      for (const p of [...cabin.windscreen, ...cabin.rearWindow]) {
+      for (const p of [...cabin.windscreen, ...(cabin.rearWindow ?? [])]) {
         expect(onEdge(p, cabin.outline), label).toBe(true);
       }
       for (const window of windows) {
@@ -174,7 +176,7 @@ describe("traffic models", () => {
   });
 
   it("give a crash points to bend all along the body, at least every 15 cm", () => {
-    for (const model of models) {
+    models.forEach((model, i) => {
       const position = /** @type {THREE.Mesh} */ (model.children[0]).geometry.getAttribute(
         "position",
       );
@@ -182,22 +184,27 @@ describe("traffic models", () => {
       zs.sort((a, b) => a - b);
       const gaps = zs.slice(1).map((z, k) => z - zs[k]);
       expect(Math.max(...gaps) / TRAFFIC.scale).toBeLessThanOrEqual(0.15 + 1e-3);
-    }
+    });
   });
 
-  it("gives the wheels and the bumpers nodes of their own: a crash moves a wheel whole", () => {
-    for (const model of models) {
+  it("gives the wheels, the bumpers and a spare wheel nodes of their own: a crash moves a wheel whole", () => {
+    models.forEach((model, i) => {
       const parts = model.children.filter(({ userData }) => userData.part);
+      const count = (/** @type {string} */ part) =>
+        parts.filter(({ userData }) => userData.part === part).length;
       const wheels = parts.filter(({ userData }) => userData.part === "wheel");
-      const bumpers = parts.filter(({ userData }) => userData.part === "bumper");
-      expect([wheels.length, bumpers.length]).toEqual([4, 2]);
+      expect([count("wheel"), count("bumper"), count("spare")]).toEqual([
+        4,
+        2,
+        "spare" in configs[i] && configs[i].spare ? 1 : 0,
+      ]);
       for (const wheel of wheels) {
         // round the axle: the node sits in the middle of the wheel, on the ground
         const bounds = new THREE.Box3().setFromObject(wheel);
         expect(bounds.min.y).toBeCloseTo(0, 5);
         expect(bounds.getCenter(new THREE.Vector3()).distanceTo(wheel.position)).toBeLessThan(0.1);
       }
-    }
+    });
   });
 
   it("cast a shadow by the body only: its parts' fall in the body's", () => {
@@ -444,6 +451,51 @@ describe("the Ramses' build", () => {
     };
     const van = { ...ramses.van, windows: [...ramses.van.windows, across] };
     expect(() => vanGeometry({ ...ramses, van })).toThrow(/door edge/);
+  });
+
+  it("refuses an arch whose foot is off the sill, the bands under its flare ending there", () => {
+    const [arch, ...rest] = ramses.van.arches;
+    const raised = arch.map(([x, y], i) => /** @type {Point} */ ([x, i ? y : y + 0.1]));
+    const van = { ...ramses.van, arches: [raised, ...rest] };
+    expect(() => vanGeometry({ ...ramses, van })).toThrow(/sill/);
+  });
+});
+
+describe("the Honeker's flat rear", () => {
+  const honeker = /** @type {TrafficModel} */ (TRAFFIC_MODELS.honeker);
+  const rear = /** @type {NonNullable<TrafficModel["rear"]>} */ (honeker.rear);
+
+  it("refuses a window across the door's edge or below the belt instead of a broken mesh", () => {
+    /** @param {import("../src/scene/trafficModels.js").Mark} window */
+    const build = (window) =>
+      sedanGeometry({ ...honeker, rear: { ...rear, windows: [...rear.windows, window] } });
+    expect(() => build({ x: rear.door.w / 2, y: 1.7, w: 0.2, h: 0.3 })).toThrow(/rear window/);
+    expect(() => build({ x: 0.7, y: 1.3, w: 0.15, h: 0.3 })).toThrow(/rear window/); // the belt
+    expect(() => build({ x: 0, y: 2, w: 0.3, h: 0.2 })).toThrow(/rear window/); // the door's top
+  });
+
+  it("refuses a deck that does not meet the cabin's foot at the rear", () => {
+    const shoulder = honeker.body.shoulder.map(
+      ([x, y], i) => /** @type {Point} */ ([x, i ? y : y - 0.1]),
+    );
+    const body = { ...honeker.body, shoulder };
+    expect(() => sedanGeometry({ ...honeker, body })).toThrow(/deck/);
+  });
+});
+
+describe("a flare round a traced arch", () => {
+  it("drops an end with a level edge straight to its foot", () => {
+    const arch = /** @type {Point[]} */ ([
+      [0, 0.5],
+      [0.2, 0.5],
+      [0.4, 0.9],
+      [1, 0.9],
+      [1.2, 0.5],
+    ]);
+    const flare = offsetArch(arch, 0.03);
+    expect(flare.flat().every(Number.isFinite)).toBe(true);
+    expect(flare[0]).toEqual([0, 0.5]);
+    expect(flare[flare.length - 1][1]).toBeCloseTo(0.5, 9);
   });
 });
 

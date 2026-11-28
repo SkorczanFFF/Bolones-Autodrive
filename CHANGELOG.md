@@ -15,7 +15,7 @@ lets you recolor and tweak everything.
   machine (TAP TO START on touch screens).
 - **Free ride (F, or the last card of the list):** steer the Bolones with **← / →**, no obstacles.
 - **Minigames (ENTER):** a list to pick one from (← / → and ENTER, or a click). Each starts with
-  a 3-2-1 countdown, then oncoming communist-era traffic (Polakito, Kredens, the Ramses van);
+  a 3-2-1 countdown, then oncoming communist-era traffic (Polakito, Kredens, the Ramses van, the Honeker);
   the best score of each is kept in the browser. A digital speedometer sits in the bottom right
   corner, the Bolones goes 150 km/h at most, and after a crash it can still be steered and driven
   on until its engine stalls. On touch screens the keys are on screen, played sideways.
@@ -43,6 +43,14 @@ lets you recolor and tweak everything.
 
 ### Added
 
+- A Honeker (a Honker) in the minigame traffic, traced from blueprints (side, front and rear views)
+  of the long one with the hardtop: square wheel arches, their corners cut, with flares high over
+  big tyres, a long bonnet, a flat windscreen under a header up to the roof, the door's and the two
+  side windows split each, lockers low on the sides, tall mirrors on two arms and a guard of tubes
+  round each headlamp and indicator. Its rear is upright: the door with its window and handle, the
+  spare wheel on it (a crash pushes it in whole or tears it off), a narrow window each side, the
+  hardtop's joint beside the door, and the tail lamps in the bumper, five cells each. The heaviest
+  car of the traffic; its flat rear meets a crash full height.
 - The minigames on phones and tablets, with the keys on screen as in mobile driving games: ← / →
   held on the left, the gas pedal (and in Overtake the brake) on the right, the way back in the
   corner and the speedometer between them; after a crash they stay while the wreck can be driven

@@ -159,6 +159,21 @@ export function bars(outline, count) {
 }
 
 /**
+ * A convex outline cut into `bars` (horizontal), each cut into `columns` (upright).
+ *
+ * @param {Point[]} outline
+ * @param {{ bars?: number, columns?: number }} cuts
+ * @returns {Point[][]}
+ */
+export function pieces(outline, { bars: rows = 1, columns = 1 }) {
+  const swap = (/** @type {Point[]} */ points) =>
+    points.map(([a, b]) => /** @type {Point} */ ([b, a]));
+  return bars(outline, rows).flatMap((bar) =>
+    columns > 1 ? bars(swap(bar), columns).map(swap) : [bar],
+  );
+}
+
+/**
  * Marks with an offset x are mirrored to the other side.
  *
  * @template {{ x: number }} T
@@ -248,6 +263,75 @@ export function rounded(polygon, radius, steps = CORNER_STEPS) {
       ]);
     });
   });
+}
+
+/**
+ * A wheel arch traced in the side view, from its rear foot over to its front foot, its corners
+ * over the wheel rounded by `radius` (the feet stay sharp), `steps` long (one: cut off).
+ *
+ * @param {Point[]} arch
+ * @param {number} radius
+ * @param {number} [steps]
+ * @returns {Point[]}
+ */
+export function archLine(arch, radius, steps) {
+  return rounded(
+    arch,
+    arch.map((_, i) => (i && i < arch.length - 1 ? radius : 0)),
+    steps,
+  );
+}
+
+/**
+ * y of a polyline running along x, at x; -Infinity off its ends.
+ *
+ * @param {Point[]} line
+ * @param {number} x
+ */
+export function heightOn(line, x) {
+  const eps = 5e-4;
+  if (x < line[0][0] - eps || x > line[line.length - 1][0] + eps) return -Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const [[ax, ay], [bx, by]] = [line[i - 1], line[i]];
+    if (x <= bx + 1e-12)
+      return bx - ax < 1e-12 ? Math.max(ay, by) : ay + ((by - ay) * (x - ax)) / (bx - ax);
+  }
+  return line[line.length - 1][1];
+}
+
+/**
+ * A flare's outer edge round an arch: the arch moved out by `width` (away from the wheel), each
+ * end slid back along its edge to its foot's height (dropped to it, that edge level).
+ *
+ * @param {Point[]} arch from foot to foot, along x
+ * @param {number} width
+ * @returns {Point[]}
+ */
+export function offsetArch(arch, width) {
+  const normals = arch.slice(1).map(([bx, by], i) => {
+    const [ax, ay] = arch[i];
+    const length = Math.hypot(bx - ax, by - ay);
+    return /** @type {Point} */ ([-(by - ay) / length, (bx - ax) / length]); // left: out of the arch
+  });
+  const moved = arch.map(([x, y], i) => {
+    const [n0, n1] = [normals[Math.max(0, i - 1)], normals[Math.min(normals.length - 1, i)]];
+    const [nx, ny] = [n0[0] + n1[0], n0[1] + n1[1]];
+    const scale = width / (nx * n0[0] + ny * n0[1]); // keeps the edges `width` away
+    return /** @type {Point} */ ([x + nx * scale, y + ny * scale]);
+  });
+  for (const [i, j] of [
+    [0, 1],
+    [moved.length - 1, moved.length - 2],
+  ]) {
+    const [[x, y], [px, py], foot] = [moved[i], moved[j], arch[i][1]];
+    if (Math.abs(y - py) < 1e-9) {
+      moved[i] = [x, foot]; // a level first or last edge: straight down
+      continue;
+    }
+    const t = (y - foot) / (y - py);
+    moved[i] = [x + (x - px) * -t, foot];
+  }
+  return moved;
 }
 
 /**

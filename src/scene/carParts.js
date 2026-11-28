@@ -1,16 +1,37 @@
 import * as THREE from "three";
-import { densifyLine, ellipse, HOLE_SEGMENTS, rectangle, rounded, STATION } from "./outline.js";
-import { builtIn, byFaces, face, OFFSET, prism, surface } from "./polygons.js";
+import {
+  densifyLine,
+  ellipse,
+  HOLE_SEGMENTS,
+  mirrored,
+  pieces,
+  rectangle,
+  rounded,
+  sample,
+  STATION,
+} from "./outline.js";
+import {
+  builtIn,
+  byFaces,
+  face,
+  fineFace,
+  mergeParts,
+  OFFSET,
+  prism,
+  surface,
+} from "./polygons.js";
 
 /**
  * The parts both kinds of car of the traffic have (scene/sedan.js, scene/van.js): the wheels, the
- * bumpers and the outside mirrors, nodes of their own on the car (scene/traffic.js), in metres
+ * bumpers (a guard on the front one) and the outside mirrors, nodes of their own on the car
+ * (scene/traffic.js); the spare wheel on a car's rear. In metres
  * from the car's rear end (z = 0) forward, its front towards +z; and centred(), which moves a
  * car's geometry so built to have its origin in the middle of its length.
  *
  * @typedef {import("./trafficModels.js").TrafficModel} TrafficModel
  * @typedef {import("./trafficModels.js").Bumper} Bumper
  * @typedef {import("./trafficModels.js").Mirror} Mirror
+ * @typedef {import("./trafficModels.js").Guard} Guard
  * @typedef {import("./outline.js").Point} Point
  * @typedef {import("./polygons.js").Part} Part
  */
@@ -72,19 +93,59 @@ export function mirrorParts({ head, depth, corners, centre, arms, arm }, side) {
   );
   const back = x - depth / 2 - OFFSET;
   parts.push(face(glass, ([u, v]) => new THREE.Vector3(u, v, back), new THREE.Vector3(0, 0, -1)));
-  for (const [from, to] of arms) {
-    const [a, b] = [from, to].map(([px, py, pw]) => new THREE.Vector3(side * pw, py, px));
-    const rod = new THREE.BoxGeometry(arm, arm, a.distanceTo(b));
-    rod.applyQuaternion(
-      new THREE.Quaternion().setFromUnitVectors(
-        new THREE.Vector3(0, 0, 1),
-        b.clone().sub(a).normalize(),
-      ),
-    );
-    rod.translate(...a.add(b).multiplyScalar(0.5).toArray());
-    parts.push(byFaces(rod));
-  }
+  for (const [from, to] of arms) parts.push(rod(from, to, arm, side));
   return parts;
+}
+
+/**
+ * A square rod from one point to another ([along, up, across] on the car's left, mirrored to
+ * the right for a side of -1), cut every STATION for a crash to bend it.
+ *
+ * @param {number[]} from
+ * @param {number[]} to
+ * @param {number} thick
+ * @param {number} side
+ * @returns {Part}
+ */
+function rod(from, to, thick, side) {
+  const [a, b] = [from, to].map(([x, y, w]) => new THREE.Vector3(side * w, y, x));
+  const length = a.distanceTo(b);
+  const box = new THREE.BoxGeometry(thick, thick, length, 1, 1, Math.ceil(length / STATION));
+  box.applyQuaternion(
+    new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(0, 0, 1),
+      b.clone().sub(a).normalize(),
+    ),
+  );
+  box.translate(...a.add(b).multiplyScalar(0.5).toArray());
+  return byFaces(box);
+}
+
+/**
+ * A guard of tubes over the front (Guard, scene/trafficModels.js), both sides.
+ *
+ * @param {Guard} guard
+ * @returns {Part[]}
+ */
+export function guardParts({ tubes, thick }) {
+  return [-1, 1].flatMap((side) =>
+    tubes.flatMap((tube) => tube.slice(1).map((to, i) => rod(tube[i], to, thick, side))),
+  );
+}
+
+/**
+ * The spare wheel, a car's own, standing up on its rear end (x = 0), looking back.
+ *
+ * @param {{ wheel: Omit<TrafficModel["wheel"], "arches">, spare?: { y: number } }} model
+ * @returns {Part[]}
+ */
+export function spareParts({ wheel, spare }) {
+  const y = /** @type {{ y: number }} */ (spare).y;
+  // built facing +x, turned to face -z
+  return wheelParts(wheel, [0, 0, 0], 1).map(({ geometry, polygon }) => ({
+    geometry: geometry.rotateY(Math.PI / 2).translate(0, y, wheel.width / 2),
+    polygon,
+  }));
 }
 
 /**
@@ -150,15 +211,16 @@ function ladderRing(outer, inner) {
 
 /**
  * A bumper: a bar `depth` thick (BUMPER_DEPTH unless it says) and `height` tall around y, its
- * outer edge along `plan` (mirrored to the other side) from z = end into the car.
- * The bar's top and bottom are one polygon each, the faces around it one per run between creases.
+ * outer edge along `plan` (mirrored to the other side) from z = end into the car; its marks on
+ * its face, following it round. The bar's top and bottom are one polygon each, the faces around it one
+ * per run between creases.
  *
  * @param {Bumper} bumper
  * @param {number} end z of the bumper's outermost point
  * @param {number} back 1 or -1: the direction into the car
  * @returns {Part}
  */
-export function bumper({ y, height, plan, depth: thick = BUMPER_DEPTH }, end, back) {
+export function bumper({ y, height, plan, depth: thick = BUMPER_DEPTH, marks = [] }, end, back) {
   /** @type {Point[]} [across, back], from one end round to the other, a point every STATION */
   const outer = densifyLine(
     [
@@ -183,7 +245,13 @@ export function bumper({ y, height, plan, depth: thick = BUMPER_DEPTH }, end, ba
   const bar = prism(outline, () => height / 2);
   // prism: (±height / 2, across, z) -> (across, ∓height / 2, z)
   bar.geometry.rotateZ(-Math.PI / 2).translate(0, y, 0);
-  return bar;
+  const out = new THREE.Vector3(0, 0, -back);
+  const onFace = (/** @type {Point} */ [w, v]) =>
+    new THREE.Vector3(w, v, end + back * (sample(plan, Math.abs(w)) - OFFSET));
+  const faces = mirrored(marks).flatMap((mark) =>
+    pieces(rectangle(mark), mark).map((piece) => fineFace(piece, onFace, out, STATION)),
+  );
+  return faces.length ? mergeParts([bar, ...faces]) : bar;
 }
 
 /**

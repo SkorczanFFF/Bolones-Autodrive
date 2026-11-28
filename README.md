@@ -4,7 +4,7 @@
 
 A synthwave-styled Three.js "coloring book"-like animation with three minigames: dodge the oncoming communist-era traffic, crash into it for the damage, or overtake it. A built-in GUI lets you experiment with the scene's models and colors. See [CHANGELOG.md](CHANGELOG.md) for what the app does and how it got here.
 
-The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, updated in 3Ds Max 2023, and exported as `.fbx` files; those files are the source now, their lines edited by script. The minigame traffic (Polakito, Kredens, the Ramses van, traced from blueprints) and the mountains are built in code.
+The Bolones, its wheels, the palms and the rocks were modeled in 3Ds Max 2018, updated in 3Ds Max 2023, and exported as `.fbx` files; those files are the source now, their lines edited by script. The minigame traffic (Polakito, Kredens, the Ramses van, the Honeker, traced from blueprints) and the mountains are built in code.
 
 ---
 
